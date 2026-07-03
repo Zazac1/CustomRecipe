@@ -1,16 +1,18 @@
 {
-  "type": "minecraft:crafting_shapeless",
+  "type": "minecraft:crafting_shaped",
   "category": "misc",
-  "ingredients": [
-    "minecraft:glass_bottle",
-    "minecraft:lapis_lazuli",
-    "minecraft:lapis_lazuli",
-    "minecraft:lapis_lazuli",
-    "minecraft:emerald",
-    "minecraft:emerald"
+  "pattern": [
+    " L ",
+    "EBE",
+    " L "
   ],
+  "key": {
+    "L": "minecraft:lapis_lazuli",
+    "E": "minecraft:emerald",
+    "B": "minecraft:glass_bottle"
+  },
   "result": {
     "id": "minecraft:experience_bottle",
-    "count": 3
+    "count": 1
   }
 }

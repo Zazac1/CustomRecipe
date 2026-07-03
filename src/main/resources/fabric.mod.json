@@ -18,6 +18,9 @@
     "main": [
       "fr.isaac.customrecipe.CustomRecipeMod"
     ],
+    "client": [
+      "fr.isaac.customrecipe.client.ClientInit"
+    ],
     "modmenu": [
       "fr.isaac.customrecipe.client.ModMenuIntegration"
     ]

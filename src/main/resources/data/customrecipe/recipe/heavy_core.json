@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " N ",
+    "NBN",
+    " N "
+  ],
+  "key": {
+    "N": "minecraft:netherite_ingot",
+    "B": "minecraft:breeze_rod"
+  },
+  "result": {
+    "id": "minecraft:heavy_core",
+    "count": 1
+  }
+}

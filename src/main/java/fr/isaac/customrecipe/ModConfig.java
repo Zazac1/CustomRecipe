@@ -15,4 +15,7 @@ public class ModConfig {
      * User-created custom recipes.
      */
     public List<CustomRecipeEntry> custom_recipes = new ArrayList<>();
+
+    /** Vrai si l'écran de bienvenue a déjà été affiché. */
+    public boolean seen_welcome = false;
 }

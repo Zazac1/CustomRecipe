@@ -22,9 +22,9 @@ import java.util.stream.Collectors;
 @Environment(EnvType.CLIENT)
 public class RecipeBuilderScreen extends Screen {
 
-    private static final int PAD   = 8;
+    private static final int PAD   = 20;
     private static final int SLOT  = 20;  // slot size in pixels
-    private static final int MAX_S = 7;   // max autocomplete suggestions
+    private static final int MAX_S = 15;   // max autocomplete suggestions
     private static final int SUGG_H = 16; // suggestion row height
 
     private final ConfigScreen parent;
@@ -53,7 +53,7 @@ public class RecipeBuilderScreen extends Screen {
 
     // ── layout helpers ────────────────────────────────────────────────────
 
-    private int leftW()  { return Math.min(130, width / 3); }
+    private int leftW()  { return Math.min(230, width / 3); }
     private int leftX()  { return PAD; }
     private int rightX() { return leftX() + leftW() + PAD; }
 
@@ -110,9 +110,7 @@ public class RecipeBuilderScreen extends Screen {
         for (int i = 0; i < itemSugg.size(); i++) {
             String[] s = itemSugg.get(i);
             int ry = suggY() + i * SUGG_H;
-            String display = shortId(s[0]);
-            if (display.length() > 18) display = display.substring(0, 15) + "...";
-            addDrawableChild(makeLabel(leftX() + 20, ry + 4, display, 0xCCCCCC));
+            addDrawableChild(makeLabel(leftX() + 20, ry + 4, shortId(s[0]), 0xCCCCCC));
         }
 
         // ── Right panel ──────────────────────────────────────────────────
@@ -272,19 +270,16 @@ public class RecipeBuilderScreen extends Screen {
         if (itemField != null)
             drawBox(ctx, leftX(), fieldY(), leftW(), 14,
                     itemField.isFocused() ? 0xFF5577DD : 0xFF404050);
-        // Tooltip sur suggestion tronquée au survol
+        // Tooltip de l'ID complet au survol d'une suggestion
         if (!itemSugg.isEmpty()) {
             int sy = suggY();
             for (int i = 0; i < itemSugg.size(); i++) {
                 int ry = sy + i * SUGG_H;
                 if (mouseX >= leftX() && mouseX < leftX() + leftW()
                         && mouseY >= ry && mouseY < ry + SUGG_H) {
-                    String fullId = itemSugg.get(i)[0];
-                    String short_ = shortId(fullId);
-                    if (short_.length() > 18)
-                        ctx.drawOrderedTooltip(textRenderer,
-                                List.of(Text.literal(fullId).asOrderedText()),
-                                mouseX, mouseY);
+                    ctx.drawOrderedTooltip(textRenderer,
+                            List.of(Text.literal(itemSugg.get(i)[0]).asOrderedText()),
+                            mouseX, mouseY);
                     break;
                 }
             }
@@ -323,18 +318,13 @@ public class RecipeBuilderScreen extends Screen {
             return true;
         }
 
-        // Click on text field — explicit focus + refresh suggestions
+        // Click on text field — laisser super.mouseClicked gérer
+        // pour que la sélection par drag fonctionne nativement
         if (itemField != null
                 && mx >= leftX() && mx < leftX() + leftW()
                 && my >= fieldY() && my < fieldY() + 14) {
-            setFocused(itemField);
-            itemField.setFocused(true);
-            itemField.onClick(click, false);
             restoreFocus = 1;
-            // Re-déclenche les suggestions basées sur le texte actuel
-            if (itemSugg.isEmpty()) onItemTyped(itemFieldText);
-            else clearAndInit();
-            return true;
+            return super.mouseClicked(click, focused);
         }
 
         // Click on a suggestion

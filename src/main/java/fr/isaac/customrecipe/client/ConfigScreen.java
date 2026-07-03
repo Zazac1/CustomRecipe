@@ -18,6 +18,7 @@ import java.util.List;
 public class ConfigScreen extends Screen {
 
     private final Screen parent;
+    private boolean welcomeShown = false; // évite la boucle infinie si l'utilisateur revient
 
     /** Shared state — modified by sub-screens, saved on Done. */
     final List<CustomRecipeEntry> recipes;
@@ -33,6 +34,13 @@ public class ConfigScreen extends Screen {
 
     @Override
     protected void init() {
+        // Premier lancement : afficher le guide de bienvenue
+        if (!welcomeShown && !ConfigLoader.get().seen_welcome) {
+            welcomeShown = true;
+            final WelcomeScreen ws = new WelcomeScreen(this); // ConfigScreen est un Screen
+            client.execute(() -> client.setScreen(ws));
+        }
+
         int btnW = 200, btnH = 20;
         int cx = width / 2 - btnW / 2;
         int cy = height / 2 - 40;

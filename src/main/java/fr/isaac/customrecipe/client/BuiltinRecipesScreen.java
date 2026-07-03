@@ -20,52 +20,38 @@ public class BuiltinRecipesScreen extends Screen {
 
     /** { id, displayName, resultItemId } */
     private static final String[][] RECIPES = {
-            {"saddle",            "Saddle",               "minecraft:saddle"},
-            {"name_tag",          "Name Tag",             "minecraft:name_tag"},
-            {"elytra",            "Elytra",               "minecraft:elytra"},
-            {"experience_bottle", "Bottle o' Enchanting", "minecraft:experience_bottle"},
-            {"trident",           "Trident",              "minecraft:trident"},
-            {"totem_of_undying",  "Totem of Undying",     "minecraft:totem_of_undying"},
-            {"heart_of_the_sea",  "Heart of the Sea",     "minecraft:heart_of_the_sea"},
-            {"nether_star",       "Nether Star",          "minecraft:nether_star"},
+            {"totem_of_undying",       "Totem of Undying",       "minecraft:totem_of_undying"},
+            {"enchanted_golden_apple", "Enchanted Golden Apple", "minecraft:enchanted_golden_apple"},
+            {"elytra",                 "Elytra",                 "minecraft:elytra"},
+            {"experience_bottle",      "Bottle o' Enchanting",   "minecraft:experience_bottle"},
+            {"heavy_core",             "Heavy Core",             "minecraft:heavy_core"},
     };
 
     /** Ingredient grids [recipeIndex][row][col] — null = slot vide */
     private static final String[][][] GRIDS = {
-        // 0 saddle: shaped LLL/LIL/SIS  L=leather I=iron_ingot S=string
-        {{"minecraft:leather","minecraft:leather","minecraft:leather"},
-         {"minecraft:leather","minecraft:iron_ingot","minecraft:leather"},
-         {"minecraft:string","minecraft:iron_ingot","minecraft:string"}},
-        // 1 name_tag: shapeless string + paper + iron_ingot
-        {{"minecraft:string","minecraft:paper","minecraft:iron_ingot"},
-         {null,null,null},{null,null,null}},
-        // 2 elytra: shaped PPP/PSP/PPP  P=phantom_membrane S=string
-        {{"minecraft:phantom_membrane","minecraft:phantom_membrane","minecraft:phantom_membrane"},
-         {"minecraft:phantom_membrane","minecraft:string","minecraft:phantom_membrane"},
-         {"minecraft:phantom_membrane","minecraft:phantom_membrane","minecraft:phantom_membrane"}},
-        // 3 experience_bottle: shapeless glass_bottle + lapis×3 + emerald×2
-        {{"minecraft:glass_bottle","minecraft:lapis_lazuli","minecraft:lapis_lazuli"},
-         {"minecraft:lapis_lazuli","minecraft:emerald","minecraft:emerald"},
-         {null,null,null}},
-        // 4 trident: shaped SCS/_S_/_S_  S=prismarine_shard C=prismarine_crystals
-        {{"minecraft:prismarine_shard","minecraft:prismarine_crystals","minecraft:prismarine_shard"},
-         {null,"minecraft:prismarine_shard",null},
-         {null,"minecraft:prismarine_shard",null}},
-        // 5 totem_of_undying: shaped GGG/GEG/GGG  G=gold_ingot E=emerald
-        {{"minecraft:gold_ingot","minecraft:gold_ingot","minecraft:gold_ingot"},
-         {"minecraft:gold_ingot","minecraft:emerald","minecraft:gold_ingot"},
-         {"minecraft:gold_ingot","minecraft:gold_ingot","minecraft:gold_ingot"}},
-        // 6 heart_of_the_sea: shaped NNN/NCN/NNN  N=nautilus_shell C=prismarine_crystals
-        {{"minecraft:nautilus_shell","minecraft:nautilus_shell","minecraft:nautilus_shell"},
-         {"minecraft:nautilus_shell","minecraft:prismarine_crystals","minecraft:nautilus_shell"},
-         {"minecraft:nautilus_shell","minecraft:nautilus_shell","minecraft:nautilus_shell"}},
-        // 7 nether_star: shaped SWS/WDW/SWS  S=soul_sand W=wither_skeleton_skull D=diamond
-        {{"minecraft:soul_sand","minecraft:wither_skeleton_skull","minecraft:soul_sand"},
-         {"minecraft:wither_skeleton_skull","minecraft:diamond","minecraft:wither_skeleton_skull"},
-         {"minecraft:soul_sand","minecraft:wither_skeleton_skull","minecraft:soul_sand"}},
+        // 0 totem_of_undying: _E_ / GGG / _G_  E=emerald G=gold_block
+        {{null, "minecraft:emerald", null},
+         {"minecraft:gold_block", "minecraft:gold_block", "minecraft:gold_block"},
+         {null, "minecraft:gold_block", null}},
+        // 1 enchanted_golden_apple: GGG / GAG / GGG  G=gold_block A=apple
+        {{"minecraft:gold_block", "minecraft:gold_block", "minecraft:gold_block"},
+         {"minecraft:gold_block", "minecraft:apple", "minecraft:gold_block"},
+         {"minecraft:gold_block", "minecraft:gold_block", "minecraft:gold_block"}},
+        // 2 elytra: _S_ / MFM / M_M  S=string M=phantom_membrane F=feather
+        {{null, "minecraft:string", null},
+         {"minecraft:phantom_membrane", "minecraft:feather", "minecraft:phantom_membrane"},
+         {"minecraft:phantom_membrane", null, "minecraft:phantom_membrane"}},
+        // 3 experience_bottle: _L_ / EBE / _L_  L=lapis_lazuli E=emerald B=glass_bottle
+        {{null, "minecraft:lapis_lazuli", null},
+         {"minecraft:emerald", "minecraft:glass_bottle", "minecraft:emerald"},
+         {null, "minecraft:lapis_lazuli", null}},
+        // 4 heavy_core: _N_ / NBN / _N_  N=netherite_ingot B=breeze_rod
+        {{null, "minecraft:netherite_ingot", null},
+         {"minecraft:netherite_ingot", "minecraft:breeze_rod", "minecraft:netherite_ingot"},
+         {null, "minecraft:netherite_ingot", null}},
     };
 
-    private static final int[] RESULT_COUNTS = {1, 1, 1, 3, 1, 1, 1, 1};
+    private static final int[] RESULT_COUNTS = {1, 1, 1, 1, 1};
 
     private static final int PAD     = 8;
     private static final int ROW     = 22;
