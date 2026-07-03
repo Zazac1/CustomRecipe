@@ -63,5 +63,5 @@ Open **ModMenu → Custom Recipe → ⚙** (or edit `config/customrecipe.json` d
 
 ## Links
 
-- 🐛 Issues: https://github.com/stephen-kobe/CustomRecipe/issues
-- 💻 Source: https://github.com/stephen-kobe/CustomRecipe
+- 🐛 Issues: https://github.com/Zazac1/CustomRecipe/issues
+- 💻 Source: https://github.com/Zazac1/CustomRecipe
