@@ -4,26 +4,25 @@ A Fabric mod for Minecraft **1.21.11** that lets you create your own **shapeless
 
 ## Features
 
-- 🔧 **Visual Recipe Builder** — Pick ingredients slot by slot in a 3×3 grid with live item preview
-- 🔄 **Shapeless & Shaped** — Toggle the recipe mode per recipe
-- 📋 **8 Built-in Recipes** — Popular community requests, individually toggled on/off
-- ✅ **Enable / Disable** — Toggle your custom recipes without deleting them
-- 🔍 **Item Autocomplete** — Search any vanilla or modded item by name or ID
-- ⚙️ **ModMenu GUI** — Full config accessible from the Mods screen
-- 💾 **Persistent Config** — Stored in `config/customrecipe.json`, survives `/reload`
+- 🎉 **Welcome guide** — On first launch, a guide screen explains the key features and links directly to each section
+- 🔧 **Visual Recipe Builder** — Click slots in a 3×3 grid, search items by name or ID, switch shaped/shapeless, set count
+- 🔄 **Shapeless & Shaped** — Toggle the recipe mode per recipe; the grid enforces slot positions for shaped
+- 👁 **Crafting grid preview** — Click any recipe (built-in or custom) to expand a mini 3×3 preview of its ingredients
+- 📋 **5 Built-in Recipes** — Popular community requests, individually toggleable on/off
+- ✅ **Enable / Disable** — Toggle your own recipes without deleting them (green/red tint in the list)
+- 🔍 **Item Autocomplete** — Search any vanilla or modded item; full ID shown as tooltip on hover; drag-select in the field
+- ⚙️ **ModMenu GUI** — Full config accessible from the Mods screen (Website & Issues buttons linked)
+- 💾 **Persistent Config** — Stored in `config/customrecipe.json`, reloaded on every world load
 
 ## Built-in Recipes (toggleable)
 
-| Item | Ingredients | Count |
+| Item | Pattern | Ingredients |
 |---|---|---|
-| Saddle | 5 Leather + 2 Iron Ingot + 2 String (shaped) | ×1 |
-| Name Tag | String + Paper + Iron Ingot | ×1 |
-| Elytra | 8 Phantom Membrane + 1 String (shaped) | ×1 |
-| Bottle o' Enchanting | Glass Bottle + 3 Lapis + 2 Emerald | ×3 |
-| Trident | 4 Prismarine Shard + 1 Prismarine Crystals (shaped) | ×1 |
-| Totem of Undying | 8 Gold Ingot + 1 Emerald (shaped) | ×1 |
-| Heart of the Sea | 8 Nautilus Shell + 1 Prismarine Crystals (shaped) | ×1 |
-| Nether Star | 4 Soul Sand + 4 Wither Skeleton Skull + 1 Diamond (shaped) | ×1 |
+| Totem of Undying | `_E_ / GGG / _G_` | Emerald + Gold Block |
+| Enchanted Golden Apple | `GGG / GAG / GGG` | Gold Block + Apple |
+| Elytra | `_S_ / MFM / M_M` | String + Phantom Membrane + Feather |
+| Bottle o' Enchanting | `_L_ / EBE / _L_` | Lapis Lazuli + Emerald + Glass Bottle |
+| Heavy Core | `_N_ / NBN / _N_` | Netherite Ingot + Breeze Rod |
 
 ## Build & Installation
 
@@ -50,11 +49,13 @@ Dev launch:
 
 ## Usage
 
-Open **ModMenu → Custom Recipe → ⚙** (or edit `config/customrecipe.json` directly):
+A **welcome screen** appears on first launch to guide you. Afterwards, open **ModMenu → Custom Recipe** to access:
 
-- **My Recipes** — View, enable/disable, preview, or delete your custom recipes
-- **Built-in Recipes** — Toggle the 8 built-in recipes; click a recipe to preview its crafting grid
-- **Create a Recipe** — Visual builder: click a slot, search an item, toggle shaped/shapeless, set count
+- **My Recipes** — View, enable/disable, preview the crafting grid, or delete your custom recipes
+- **Built-in Recipes** — Toggle the 5 pre-made recipes on/off; click a row to expand the ingredient grid
+- **Create a Recipe** — Visual builder: click a slot → search an item → choose shaped/shapeless → set count → Add Recipe
+
+The config is saved to `.minecraft/config/customrecipe.json` and takes effect on the next world load (or `/reload` on a server).
 
 ## License & Distribution
 
