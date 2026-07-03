@@ -13,6 +13,7 @@
     "issues":   "https://github.com/Zazac1/CustomRecipe/issues"
   },
   "license": "MIT",
+  "icon": "assets/customrecipe/icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [
