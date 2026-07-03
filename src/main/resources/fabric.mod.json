@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "customrecipe",
+  "version": "${version}",
+  "name": "Custom Recipe",
+  "description": "Create your own crafting recipes (shapeless or shaped) for any vanilla or modded item. Includes popular built-in recipes that can be toggled on/off per-world.",
+  "authors": [
+    "Zazac1"
+  ],
+  "contact": {
+    "homepage": "https://github.com/stephen-kobe/CustomRecipe",
+    "sources":  "https://github.com/stephen-kobe/CustomRecipe",
+    "issues":   "https://github.com/stephen-kobe/CustomRecipe/issues"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "fr.isaac.customrecipe.CustomRecipeMod"
+    ],
+    "modmenu": [
+      "fr.isaac.customrecipe.client.ModMenuIntegration"
+    ]
+  },
+  "mixins": [
+    "customrecipe.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}

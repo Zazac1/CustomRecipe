@@ -1,0 +1,12 @@
+.gradle/
+build/
+bin/
+out/
+run/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Loom generated files
+remappedSrc/

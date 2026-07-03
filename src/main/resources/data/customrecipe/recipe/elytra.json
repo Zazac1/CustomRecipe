@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "PPP",
+    "PSP",
+    "PPP"
+  ],
+  "key": {
+    "P": "minecraft:phantom_membrane",
+    "S": "minecraft:string"
+  },
+  "result": {
+    "id": "minecraft:elytra",
+    "count": 1
+  }
+}
