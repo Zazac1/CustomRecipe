@@ -109,6 +109,10 @@ public class ConfigScreen extends Screen {
         client.setScreen(parent);
     }
 
+    boolean isServerManaged() {
+        return serverManaged;
+    }
+
     ModConfig currentConfig() {
         baseConfig.custom_recipes = new ArrayList<>(recipes);
         baseConfig.disabled_builtin = new ArrayList<>(disabled);

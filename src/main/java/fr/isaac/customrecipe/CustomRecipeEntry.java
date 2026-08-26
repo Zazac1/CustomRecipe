@@ -38,4 +38,11 @@ public class CustomRecipeEntry {
      * Boolean.FALSE = désactivée.
      */
     public Boolean enabled;
+
+    /**
+     * Server publication state. {@code null} keeps existing configurations
+     * compatible: recipes created before this field existed remain published.
+     * New ModMenu recipes start as {@code false} until an OP adds them.
+     */
+    public Boolean server_enabled;
 }

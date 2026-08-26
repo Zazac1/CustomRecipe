@@ -95,7 +95,13 @@ public abstract class ServerRecipeManagerMixin {
         // 2. Inject user custom recipes
         int idx = 0;
         for (CustomRecipeEntry entry : config.custom_recipes) {
-            if (Boolean.FALSE.equals(entry.enabled)) { idx++; continue; } // skip disabled
+            // Local ModMenu recipes are drafts until an OP explicitly adds them
+            // to the server. Null preserves recipes from configurations made
+            // before the server publication state existed.
+            if (Boolean.FALSE.equals(entry.server_enabled) || Boolean.FALSE.equals(entry.enabled)) {
+                idx++;
+                continue;
+            }
             RecipeEntry<?> built = buildCustomRecipe(entry, idx++);
             if (built != null) recipes.add(built);
         }

@@ -363,6 +363,9 @@ public class RecipeBuilderScreen extends Screen {
 
         CustomRecipeEntry entry = new CustomRecipeEntry();
         entry.id = UUID.randomUUID().toString();
+        // A ModMenu recipe is a local draft. Recipes created from the OP editor
+        // are explicitly added to that server immediately.
+        entry.server_enabled = parent.isServerManaged() ? Boolean.TRUE : Boolean.FALSE;
         entry.result = resultItemId;
         entry.count  = Math.max(1, resultCount);
 
