@@ -8,7 +8,6 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.MultilineTextWidget;
-import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
 
 @Environment(EnvType.CLIENT)
@@ -123,13 +122,13 @@ public class WelcomeScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyInput k) {
-        if (k.key() == 256) { // Escape → dismiss
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 256) { // Escape → dismiss
             dismiss();
             client.setScreen(returnTo);
             return true;
         }
-        return super.keyPressed(k);
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     private void drawBox(DrawContext ctx, int x, int y, int w, int h, int c) {

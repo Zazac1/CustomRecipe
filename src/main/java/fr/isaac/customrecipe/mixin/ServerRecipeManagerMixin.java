@@ -3,52 +3,52 @@ package fr.isaac.customrecipe.mixin;
 import fr.isaac.customrecipe.ConfigLoader;
 import fr.isaac.customrecipe.CustomRecipeEntry;
 import fr.isaac.customrecipe.CustomRecipeMod;
-import fr.isaac.customrecipe.DisabledCraftingRecipe;
 import fr.isaac.customrecipe.ModConfig;
-import fr.isaac.customrecipe.RecipeVariantRule;
-import fr.isaac.customrecipe.VariantFilteredCraftingRecipe;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.recipe.*;
 import net.minecraft.recipe.book.CraftingRecipeCategory;
 import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.collection.DefaultedList;
 import net.minecraft.util.profiler.Profiler;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-// In MC 1.21.11 the shaped-recipe pattern class is RawShapedRecipe (not ShapedRecipePattern)
+import com.google.gson.JsonElement;
+import java.util.Collection;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.HashMap;
-import java.util.HashSet;
 
-@Mixin(ServerRecipeManager.class)
+/** Applies this mod's persistent recipe configuration after 1.21.1 has loaded datapack recipes. */
+@Mixin(RecipeManager.class)
 public abstract class ServerRecipeManagerMixin {
 
-    @ModifyVariable(
-            method = "apply(Lnet/minecraft/recipe/PreparedRecipes;Lnet/minecraft/resource/ResourceManager;Lnet/minecraft/util/profiler/Profiler;)V",
-            at = @At("HEAD"),
-            argsOnly = true
+    @Shadow public abstract Collection<RecipeEntry<?>> values();
+    @Shadow public abstract void setRecipes(Iterable<RecipeEntry<?>> recipes);
+
+    @Inject(
+            method = "apply(Ljava/util/Map;Lnet/minecraft/resource/ResourceManager;Lnet/minecraft/util/profiler/Profiler;)V",
+            at = @At("TAIL")
     )
-    private PreparedRecipes customrecipe$applyConfig(PreparedRecipes original) {
+    private void customrecipe$applyConfig(Map<Identifier, JsonElement> ignored, ResourceManager resourceManager,
+                                          Profiler profiler, CallbackInfo ci) {
         ConfigLoader.invalidate();
         ModConfig config = ConfigLoader.get();
 
-        List<RecipeEntry<?>> recipes = new ArrayList<>(original.recipes());
+        List<RecipeEntry<?>> recipes = new ArrayList<>(values());
 
         // 1. Remove disabled built-in recipes (namespace = "customrecipe")
         if (!config.disabled_builtin.isEmpty()) {
             recipes.removeIf(entry -> {
-                Identifier id = entry.id().getValue();
+                Identifier id = entry.id();
                 if (!id.getNamespace().equals(CustomRecipeMod.MOD_ID)) return false;
                 for (String disabled : config.disabled_builtin) {
                     if (id.getPath().equals(disabled)) return true;
@@ -60,47 +60,29 @@ public abstract class ServerRecipeManagerMixin {
         // 1b. Non-crafting recipes can be removed. Crafting recipes stay in the manager
         // so the server browser can still show and re-enable them after a restart.
         if (!config.disabled_recipes.isEmpty()) {
-            recipes.removeIf(entry -> config.disabled_recipes.contains(entry.id().getValue().toString())
+            recipes.removeIf(entry -> config.disabled_recipes.contains(entry.id().toString())
                     && !(entry.value() instanceof CraftingRecipe));
         }
 
-        // 1c. Keep recipes available, but make selected material variants fail to match.
-        if (!config.disabled_recipe_variants.isEmpty()) {
-            Map<String, Set<String>> variantsByRecipe = new HashMap<>();
-            for (RecipeVariantRule rule : config.disabled_recipe_variants) {
-                variantsByRecipe.computeIfAbsent(rule.recipe_id, ignored -> new HashSet<>()).add(rule.material_id);
-            }
-            for (int i = 0; i < recipes.size(); i++) {
-                RecipeEntry<?> entry = recipes.get(i);
-                if (config.disabled_recipes.contains(entry.id().getValue().toString())
-                        && entry.value() instanceof CraftingRecipe recipe) {
-                    recipes.set(i, new RecipeEntry<>(entry.id(), new DisabledCraftingRecipe(recipe)));
-                    continue;
-                }
-                Set<String> blocked = variantsByRecipe.get(entry.id().getValue().toString());
-                if (blocked != null && entry.value() instanceof CraftingRecipe recipe) {
-                    recipes.set(i, new RecipeEntry<>(entry.id(), new VariantFilteredCraftingRecipe(recipe, blocked)));
-                }
-            }
-        } else if (!config.disabled_recipes.isEmpty()) {
-            for (int i = 0; i < recipes.size(); i++) {
-                RecipeEntry<?> entry = recipes.get(i);
-                if (config.disabled_recipes.contains(entry.id().getValue().toString())
-                        && entry.value() instanceof CraftingRecipe recipe) {
-                    recipes.set(i, new RecipeEntry<>(entry.id(), new DisabledCraftingRecipe(recipe)));
-                }
-            }
-        }
+        // 1c. Crafting recipes must stay as their native Minecraft classes so their
+        // packet codecs can synchronize them to clients. Their disabled state is
+        // enforced by RecipeManagerCraftingFilterMixin when crafting is attempted.
 
         // 2. Inject user custom recipes
         int idx = 0;
         for (CustomRecipeEntry entry : config.custom_recipes) {
-            if (Boolean.FALSE.equals(entry.enabled)) { idx++; continue; } // skip disabled
+            // Local ModMenu recipes are drafts until an OP explicitly adds them
+            // to the server. Null preserves recipes from configurations made
+            // before the server publication state existed.
+            if (Boolean.FALSE.equals(entry.server_enabled) || Boolean.FALSE.equals(entry.enabled)) {
+                idx++;
+                continue;
+            }
             RecipeEntry<?> built = buildCustomRecipe(entry, idx++);
             if (built != null) recipes.add(built);
         }
 
-        return PreparedRecipes.of(recipes);
+        setRecipes(recipes);
     }
 
     // ── dispatch ─────────────────────────────────────────────────────────
@@ -119,10 +101,7 @@ public abstract class ServerRecipeManagerMixin {
 
         // Stable recipe key: use result path + index
         String safeName = entry.result.replace(':', '_').replace('/', '_') + "_" + idx;
-        RegistryKey<Recipe<?>> key = RegistryKey.of(
-                RegistryKeys.RECIPE,
-                Identifier.of(CustomRecipeMod.MOD_ID, "custom/" + safeName)
-        );
+        Identifier key = Identifier.of(CustomRecipeMod.MOD_ID, "custom/" + safeName);
 
         if ("shaped".equalsIgnoreCase(entry.type)) {
             return buildShaped(entry, result, key);
@@ -134,7 +113,7 @@ public abstract class ServerRecipeManagerMixin {
     // ── shapeless ─────────────────────────────────────────────────────────
 
     private RecipeEntry<ShapelessRecipe> buildShapeless(CustomRecipeEntry entry, ItemStack result,
-                                                         RegistryKey<Recipe<?>> key) {
+                                                         Identifier key) {
         List<String> rawIngredients = entry.ingredients;
         if (rawIngredients == null || rawIngredients.isEmpty()) return null;
 
@@ -154,7 +133,7 @@ public abstract class ServerRecipeManagerMixin {
                 CustomRecipeMod.MOD_ID,
                 CraftingRecipeCategory.MISC,
                 result,
-                ingredients
+                DefaultedList.copyOf(Ingredient.EMPTY, ingredients.toArray(Ingredient[]::new))
         );
         return new RecipeEntry<>(key, recipe);
     }
@@ -162,7 +141,7 @@ public abstract class ServerRecipeManagerMixin {
     // ── shaped ────────────────────────────────────────────────────────────
 
     private RecipeEntry<ShapedRecipe> buildShaped(CustomRecipeEntry entry, ItemStack result,
-                                                    RegistryKey<Recipe<?>> key) {
+                                                    Identifier key) {
         List<String> pattern = entry.pattern;
         Map<String, String> keysMap = entry.keys;
         if (pattern == null || pattern.isEmpty()) return null;

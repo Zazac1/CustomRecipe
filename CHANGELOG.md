@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.2+1.21.1
+
+### Changed
+
+- Recipes created through ModMenu are now drafts until an OP explicitly adds them to a server.
+
+## 1.1.1+1.21.1
+
+- Ported Recipes Creator 1.1.1 to Minecraft 1.21.1 (Fabric).
+
 ## 1.1.1 - 2026-08-26
 
 ### Fixed

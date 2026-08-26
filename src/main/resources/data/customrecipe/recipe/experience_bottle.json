@@ -7,9 +7,9 @@
     " L "
   ],
   "key": {
-    "L": "minecraft:lapis_lazuli",
-    "E": "minecraft:emerald",
-    "B": "minecraft:glass_bottle"
+    "L": { "item": "minecraft:lapis_lazuli" },
+    "E": { "item": "minecraft:emerald" },
+    "B": { "item": "minecraft:glass_bottle" }
   },
   "result": {
     "id": "minecraft:experience_bottle",

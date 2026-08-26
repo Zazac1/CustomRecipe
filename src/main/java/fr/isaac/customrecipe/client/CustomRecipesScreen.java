@@ -3,7 +3,6 @@ package fr.isaac.customrecipe.client;
 import fr.isaac.customrecipe.CustomRecipeEntry;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -55,16 +54,19 @@ public class CustomRecipesScreen extends Screen {
                 int y = rowY(i);
                 if (y < listTop() || y + ROW > listTop() + listH()) continue;
                 boolean sel = selectedRecipe == i;
-                boolean on  = !Boolean.FALSE.equals(recipes.get(i).enabled);
-                ctx.fill(PAD + 1, y, width - PAD - 88, y + ROW - 2,
+                boolean on = isActiveForThisScreen(recipes.get(i));
+                ctx.fill(PAD + 1, y, width - PAD - 112, y + ROW - 2,
                         on  ? (sel ? 0x44005533 : 0x22005500)
                             : (sel ? 0x44662200 : 0x44550000));
                 // Icône de l'item résultat
+                int statusX = width - PAD - 110;
+                int iconX = statusX - 22;
+                ctx.fill(iconX, y + 1, iconX + 18, y + ROW - 3, 0xFF303030);
+                drawBox(ctx, iconX, y + 1, 18, ROW - 4, 0xFF707070);
                 String resId = recipes.get(i).result;
-                if (resId != null && !resId.isEmpty()) {
-                    var item = Registries.ITEM.get(Identifier.tryParse(resId));
-                    if (item != null && item != Items.AIR)
-                        ctx.drawItem(new ItemStack(item), width - PAD - 106, y + 2);
+                Identifier resultId = resId == null ? null : Identifier.tryParse(resId);
+                if (resultId != null && Registries.ITEM.containsId(resultId)) {
+                    ctx.drawItem(new ItemStack(Registries.ITEM.get(resultId)), iconX + 1, y + 2);
                 }
             }
             if (selectedRecipe >= 0 && selectedRecipe < recipes.size())
@@ -90,20 +92,28 @@ public class CustomRecipesScreen extends Screen {
                     Text.literal((sel ? "▸ " : "  ") + formatEntry(recipes.get(i)))
                             .withColor(sel ? 0xFFEE88 : 0xDDDDDD),
                     textRenderer);
-            lbl.setMaxWidth(width - PAD * 2 - 110); // réserve place pour l'icône (16px) + gap + boutons
+            lbl.setMaxWidth(width - PAD * 2 - 138);
             lbl.setMaxRows(1);
             addDrawableChild(lbl);
 
-            boolean en = !Boolean.FALSE.equals(recipes.get(idx).enabled);
+            CustomRecipeEntry entry = recipes.get(idx);
+            boolean addedToServer = !parent.isServerManaged() || !Boolean.FALSE.equals(entry.server_enabled);
+            boolean en = isActiveForThisScreen(entry);
             addDrawableChild(ButtonWidget.builder(
-                    en ? Text.literal("Enabled").withColor(0x55FF55)
-                       : Text.literal("Disabled").withColor(0xFF5555),
+                    !addedToServer ? Text.literal("Add to server").withColor(0xFFCC55)
+                    : en ? Text.literal("Enabled").withColor(0x55FF55)
+                         : Text.literal("Disabled").withColor(0xFF5555),
                     b -> {
                         CustomRecipeEntry r = recipes.get(idx);
-                        r.enabled = !Boolean.FALSE.equals(r.enabled) ? Boolean.FALSE : Boolean.TRUE;
+                        if (parent.isServerManaged() && Boolean.FALSE.equals(r.server_enabled)) {
+                            r.server_enabled = Boolean.TRUE;
+                            r.enabled = Boolean.TRUE;
+                        } else {
+                            r.enabled = !Boolean.FALSE.equals(r.enabled) ? Boolean.FALSE : Boolean.TRUE;
+                        }
                         clearAndInit();
                     }
-            ).dimensions(width - PAD - 86, y + 2, 64, ROW - 4).build());
+            ).dimensions(width - PAD - 110, y + 2, 88, ROW - 4).build());
 
             addDrawableChild(ButtonWidget.builder(Text.literal("✕"),
                     b -> {
@@ -235,9 +245,9 @@ public class CustomRecipesScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean focused) {
-        double mx = click.x(), my = click.y();
-        int btnStart = width - PAD - 64;
+    public boolean mouseClicked(double mx, double my, int button) {
+        // Keep recipe-preview clicks out of the full status-button hitbox.
+        int btnStart = width - PAD - 110;
         int vis = maxVisible();
         for (int i = scroll; i < Math.min(recipes.size(), scroll + vis); i++) {
             int rowTop = rowY(i);
@@ -249,7 +259,7 @@ public class CustomRecipesScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(click, focused);
+        return super.mouseClicked(mx, my, button);
     }
 
     @Override
@@ -267,6 +277,11 @@ public class CustomRecipesScreen extends Screen {
                 ? (e.keys != null ? e.keys.size() : 0)
                 : (e.ingredients != null ? e.ingredients.size() : 0);
         return mode + " " + res + count + "  —  " + ingCount + " ingredient(s)";
+    }
+
+    private boolean isActiveForThisScreen(CustomRecipeEntry entry) {
+        return (!parent.isServerManaged() || !Boolean.FALSE.equals(entry.server_enabled))
+                && !Boolean.FALSE.equals(entry.enabled);
     }
 
     private String toName(String id) {

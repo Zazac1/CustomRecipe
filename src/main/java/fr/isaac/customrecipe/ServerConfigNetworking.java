@@ -6,8 +6,6 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.command.permission.PermissionLevel;
-import net.minecraft.command.permission.Permission;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.item.ItemStack;
@@ -20,6 +18,7 @@ import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -43,13 +42,13 @@ public final class ServerConfigNetworking {
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> dispatcher.register(
                 literal("customrecipe")
-                        .requires(source -> source.getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                        .requires(source -> source.hasPermissionLevel(2))
                         .executes(context -> openEditor(context.getSource()))
         ));
 
         ServerPlayNetworking.registerGlobalReceiver(SaveServerConfigPayload.ID, (payload, context) -> {
             ServerPlayerEntity player = context.player();
-            if (!player.getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS))) {
+            if (!player.getCommandSource().hasPermissionLevel(2)) {
                 player.sendMessage(Text.literal("[Custom Recipe] Permission denied."), false);
                 return;
             }
@@ -66,11 +65,11 @@ public final class ServerConfigNetworking {
 
             ConfigLoader.saveAndInvalidate(config);
             player.sendMessage(Text.literal("[Custom Recipe] Server config saved. Reloading recipes..."), false);
-            context.server().getCommandManager().parseAndExecute(player.getCommandSource(), "reload");
+            context.server().getCommandManager().executeWithPrefix(player.getCommandSource(), "reload");
         });
 
         ServerPlayNetworking.registerGlobalReceiver(VanillaRecipeQueryPayload.ID, (payload, context) -> {
-            if (!context.player().getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS))) {
+            if (!context.player().getCommandSource().hasPermissionLevel(2)) {
                 return;
             }
             RecipeQuery query = GSON.fromJson(payload.json(), RecipeQuery.class);
@@ -83,7 +82,7 @@ public final class ServerConfigNetworking {
         });
 
         ServerPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsQueryPayload.ID, (payload, context) -> {
-            if (!context.player().getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS))) return;
+            if (!context.player().getCommandSource().hasPermissionLevel(2)) return;
             VanillaRecipeDetails details = findVanillaRecipeDetails(context.server(), payload.recipeId());
             String json = GSON.toJson(details);
             if (json.length() <= MAX_JSON_CHARS) {
@@ -122,7 +121,7 @@ public final class ServerConfigNetworking {
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
 
         for (RecipeEntry<?> entry : server.getRecipeManager().values()) {
-            if (!entry.id().getValue().getNamespace().equals("minecraft") || !(entry.value() instanceof CraftingRecipe wrappedRecipe)) continue;
+            if (!entry.id().getNamespace().equals("minecraft") || !(entry.value() instanceof CraftingRecipe wrappedRecipe)) continue;
             CraftingRecipe recipe = unwrap(wrappedRecipe);
 
             // Special recipes (for example decorated pots) require a real grid and throw on EMPTY.
@@ -132,7 +131,7 @@ public final class ServerConfigNetworking {
             } catch (RuntimeException ignored) {
                 // Their recipe ID remains searchable and they can still be disabled.
             }
-            String resultId = result.isEmpty() ? entry.id().getValue().toString()
+            String resultId = result.isEmpty() ? entry.id().toString()
                     : Registries.ITEM.getId(result.getItem()).toString();
             int gridWidth = 0;
             int gridHeight = 0;
@@ -143,11 +142,11 @@ public final class ServerConfigNetworking {
                 gridWidth = shaped.getWidth();
                 gridHeight = shaped.getHeight();
                 for (var ingredient : shaped.getIngredients()) {
-                    ingredients.add(ingredient.map(ServerConfigNetworking::firstMatchingId).orElse(""));
+                    ingredients.add(firstMatchingId(ingredient));
                 }
             } else {
                 // Shapeless recipes deliberately keep the JSON ingredient order.
-                for (Ingredient ingredient : recipe.getIngredientPlacement().getIngredients()) {
+                for (Ingredient ingredient : recipe.getIngredients()) {
                     ingredients.add(firstMatchingId(ingredient));
                 }
             }
@@ -156,7 +155,7 @@ public final class ServerConfigNetworking {
             boolean ingredientMatch = request.matchIngredients() && ingredients.stream().anyMatch(id -> id.contains(query));
             if (query.isEmpty() || outputMatch || ingredientMatch) {
                 matches.add(new VanillaRecipePage.VanillaRecipeInfo(
-                        entry.id().getValue().toString(), resultId,
+                        entry.id().toString(), resultId,
                         toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
                         gridWidth, gridHeight, shapeless));
             }
@@ -171,8 +170,8 @@ public final class ServerConfigNetworking {
     }
 
     private static String firstMatchingId(Ingredient ingredient) {
-        return ingredient.getMatchingItems()
-                .map(item -> Registries.ITEM.getId(item.value()).toString())
+        return Arrays.stream(ingredient.getMatchingStacks())
+                .map(stack -> Registries.ITEM.getId(stack.getItem()).toString())
                 .findFirst()
                 .orElse("");
     }
@@ -180,8 +179,7 @@ public final class ServerConfigNetworking {
     private static VanillaRecipeDetails findVanillaRecipeDetails(net.minecraft.server.MinecraftServer server, String rawId) {
         var identifier = net.minecraft.util.Identifier.tryParse(rawId);
         if (identifier == null) return new VanillaRecipeDetails(rawId, List.of());
-        var id = net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.RECIPE, identifier);
-        RecipeEntry<?> entry = server.getRecipeManager().get(id).orElse(null);
+        RecipeEntry<?> entry = server.getRecipeManager().get(identifier).orElse(null);
         if (entry == null || !(entry.value() instanceof CraftingRecipe wrappedRecipe)) return new VanillaRecipeDetails(rawId, List.of());
         CraftingRecipe recipe = unwrap(wrappedRecipe);
         List<List<String>> choices = new ArrayList<>(java.util.Collections.nCopies(9, List.of()));
@@ -191,16 +189,16 @@ public final class ServerConfigNetworking {
         if (recipe instanceof ShapedRecipe shaped) {
             gridWidth = shaped.getWidth();
             gridHeight = shaped.getHeight();
-            List<java.util.Optional<Ingredient>> ingredients = shaped.getIngredients();
+            List<Ingredient> ingredients = shaped.getIngredients();
             for (int row = 0; row < gridHeight && row < 3; row++) {
                 for (int column = 0; column < gridWidth && column < 3; column++) {
                     int source = row * gridWidth + column;
                     choices.set(row * 3 + column, source < ingredients.size()
-                            ? ingredientChoices(ingredients.get(source).orElse(null)) : List.of());
+                            ? ingredientChoices(ingredients.get(source)) : List.of());
                 }
             }
         } else {
-            List<Ingredient> ingredients = recipe.getIngredientPlacement().getIngredients();
+            List<Ingredient> ingredients = recipe.getIngredients();
             for (int slot = 0; slot < ingredients.size() && slot < 9; slot++) choices.set(slot, ingredientChoices(ingredients.get(slot)));
         }
 
@@ -229,7 +227,8 @@ public final class ServerConfigNetworking {
 
     private static List<String> ingredientChoices(Ingredient ingredient) {
         if (ingredient == null) return List.of();
-        return ingredient.getMatchingItems().map(item -> Registries.ITEM.getId(item.value()).toString()).sorted().toList();
+        return Arrays.stream(ingredient.getMatchingStacks())
+                .map(stack -> Registries.ITEM.getId(stack.getItem()).toString()).sorted().toList();
     }
 
     /** Always send a final 3x3 layout so no client-side axis interpretation is needed. */
