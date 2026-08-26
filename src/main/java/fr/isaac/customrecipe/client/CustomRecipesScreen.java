@@ -56,15 +56,18 @@ public class CustomRecipesScreen extends Screen {
                 if (y < listTop() || y + ROW > listTop() + listH()) continue;
                 boolean sel = selectedRecipe == i;
                 boolean on = isActiveForThisScreen(recipes.get(i));
-                ctx.fill(PAD + 1, y, width - PAD - 88, y + ROW - 2,
+                ctx.fill(PAD + 1, y, width - PAD - 112, y + ROW - 2,
                         on  ? (sel ? 0x44005533 : 0x22005500)
                             : (sel ? 0x44662200 : 0x44550000));
                 // Icône de l'item résultat
+                int statusX = width - PAD - 110;
+                int iconX = statusX - 22;
+                ctx.fill(iconX, y + 1, iconX + 18, y + ROW - 3, 0xFF303030);
+                drawBox(ctx, iconX, y + 1, 18, ROW - 4, 0xFF707070);
                 String resId = recipes.get(i).result;
-                if (resId != null && !resId.isEmpty()) {
-                    var item = Registries.ITEM.get(Identifier.tryParse(resId));
-                    if (item != null && item != Items.AIR)
-                        ctx.drawItem(new ItemStack(item), width - PAD - 106, y + 2);
+                Identifier resultId = resId == null ? null : Identifier.tryParse(resId);
+                if (resultId != null && Registries.ITEM.containsId(resultId)) {
+                    ctx.drawItem(new ItemStack(Registries.ITEM.get(resultId)), iconX + 1, y + 2);
                 }
             }
             if (selectedRecipe >= 0 && selectedRecipe < recipes.size())
@@ -90,7 +93,7 @@ public class CustomRecipesScreen extends Screen {
                     Text.literal((sel ? "▸ " : "  ") + formatEntry(recipes.get(i)))
                             .withColor(sel ? 0xFFEE88 : 0xDDDDDD),
                     textRenderer);
-            lbl.setMaxWidth(width - PAD * 2 - 110); // réserve place pour l'icône (16px) + gap + boutons
+            lbl.setMaxWidth(width - PAD * 2 - 138);
             lbl.setMaxRows(1);
             addDrawableChild(lbl);
 
