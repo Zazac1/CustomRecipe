@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "fr.isaac.customrecipe.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ServerRecipeManagerMixin",
+    "RecipeManagerCraftingFilterMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

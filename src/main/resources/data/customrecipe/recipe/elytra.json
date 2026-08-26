@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " S ",
+    "MFM",
+    "M M"
+  ],
+  "key": {
+    "S": { "item": "minecraft:string" },
+    "M": { "item": "minecraft:phantom_membrane" },
+    "F": { "item": "minecraft:feather" }
+  },
+  "result": {
+    "id": "minecraft:elytra",
+    "count": 1
+  }
+}
