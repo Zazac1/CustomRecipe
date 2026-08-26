@@ -362,6 +362,7 @@ public class RecipeBuilderScreen extends Screen {
         if (!hasIngredient) return;
 
         CustomRecipeEntry entry = new CustomRecipeEntry();
+        entry.id = UUID.randomUUID().toString();
         entry.result = resultItemId;
         entry.count  = Math.max(1, resultCount);
 

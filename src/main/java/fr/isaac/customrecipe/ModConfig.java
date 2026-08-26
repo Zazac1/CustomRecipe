@@ -12,6 +12,15 @@ public class ModConfig {
     public List<String> disabled_builtin = new ArrayList<>();
 
     /**
+     * Full recipe IDs disabled by a server administrator.
+     * Examples: ["minecraft:torch", "some_mod:machine_recipe"].
+     */
+    public List<String> disabled_recipes = new ArrayList<>();
+
+    /** Recipe/material pairs disabled without removing the entire recipe. */
+    public List<RecipeVariantRule> disabled_recipe_variants = new ArrayList<>();
+
+    /**
      * User-created custom recipes.
      */
     public List<CustomRecipeEntry> custom_recipes = new ArrayList<>();

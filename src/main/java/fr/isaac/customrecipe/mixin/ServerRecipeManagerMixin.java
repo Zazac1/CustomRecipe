@@ -4,6 +4,8 @@ import fr.isaac.customrecipe.ConfigLoader;
 import fr.isaac.customrecipe.CustomRecipeEntry;
 import fr.isaac.customrecipe.CustomRecipeMod;
 import fr.isaac.customrecipe.ModConfig;
+import fr.isaac.customrecipe.RecipeVariantRule;
+import fr.isaac.customrecipe.VariantFilteredCraftingRecipe;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.recipe.*;
@@ -24,6 +26,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashMap;
+import java.util.HashSet;
 
 @Mixin(ServerRecipeManager.class)
 public abstract class ServerRecipeManagerMixin {
@@ -49,6 +54,26 @@ public abstract class ServerRecipeManagerMixin {
                 }
                 return false;
             });
+        }
+
+        // 1b. Remove any explicitly disabled vanilla or modded recipe.
+        if (!config.disabled_recipes.isEmpty()) {
+            recipes.removeIf(entry -> config.disabled_recipes.contains(entry.id().getValue().toString()));
+        }
+
+        // 1c. Keep recipes available, but make selected material variants fail to match.
+        if (!config.disabled_recipe_variants.isEmpty()) {
+            Map<String, Set<String>> variantsByRecipe = new HashMap<>();
+            for (RecipeVariantRule rule : config.disabled_recipe_variants) {
+                variantsByRecipe.computeIfAbsent(rule.recipe_id, ignored -> new HashSet<>()).add(rule.material_id);
+            }
+            for (int i = 0; i < recipes.size(); i++) {
+                RecipeEntry<?> entry = recipes.get(i);
+                Set<String> blocked = variantsByRecipe.get(entry.id().getValue().toString());
+                if (blocked != null && entry.value() instanceof CraftingRecipe recipe) {
+                    recipes.set(i, new RecipeEntry<>(entry.id(), new VariantFilteredCraftingRecipe(recipe, blocked)));
+                }
+            }
         }
 
         // 2. Inject user custom recipes

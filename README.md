@@ -1,22 +1,89 @@
 # Custom Recipe
 
-A Fabric mod for Minecraft **1.21.11** that lets you create your own **shapeless** and **shaped** crafting recipes for any vanilla or modded item — directly in-game, no resource packs needed.
+Custom Recipe is a Fabric mod for Minecraft **1.21.11**. Create shaped or shapeless crafting recipes in game, manage built-in recipes, and let server operators control custom and vanilla crafting recipes without editing datapacks.
 
-## Features
+## Highlights
 
-- 🎉 **Welcome guide** — On first launch, a guide screen explains the key features and links directly to each section
-- 🔧 **Visual Recipe Builder** — Click slots in a 3×3 grid, search items by name or ID, switch shaped/shapeless, set count
-- 🔄 **Shapeless & Shaped** — Toggle the recipe mode per recipe; the grid enforces slot positions for shaped
-- 👁 **Crafting grid preview** — Click any recipe (built-in or custom) to expand a mini 3×3 preview of its ingredients
-- 📋 **5 Built-in Recipes** — Popular community requests, individually toggleable on/off
-- ✅ **Enable / Disable** — Toggle your own recipes without deleting them (green/red tint in the list)
-- 🔍 **Item Autocomplete** — Search any vanilla or modded item; full ID shown as tooltip on hover; drag-select in the field
-- ⚙️ **ModMenu GUI** — Full config accessible from the Mods screen (Website & Issues buttons linked)
-- 💾 **Persistent Config** — Stored in `config/customrecipe.json`, reloaded on every world load
+- Visual shaped and shapeless recipe builder for vanilla and modded items.
+- Persistent custom recipes, with stable IDs and enable/disable state.
+- Five built-in recipes that can be toggled per world.
+- Vanilla and modded crafting recipe browser: search by output, ingredient, or recipe ID; scroll through results; preview the exact 3x3 crafting layout.
+- Material variants: for recipes using tags such as planks or stone, preview each usable material and disable one material variant or the entire recipe.
+- Same vanilla recipe controls in ModMenu/local singleplayer and the OP server editor.
+- OP-only server configuration command with permission-checked client/server networking.
 
-## Built-in Recipes (toggleable)
+## Build and installation
 
-| Item | Pattern | Ingredients |
+Requirements: Java 21, Fabric Loader, Fabric API. ModMenu is optional but recommended.
+
+```powershell
+.\gradlew.bat build
+```
+
+Copy the JAR from `build\libs\` to the Fabric `mods` folder.
+
+For development:
+
+```powershell
+.\gradlew.bat runClient
+```
+
+`run-local-test.ps1` builds the project, starts a local test server and client, and stops the previous test-server process before starting a new one.
+
+## Local / ModMenu usage
+
+Open **ModMenu -> Custom Recipe**.
+
+- **My Recipes**: inspect, enable, disable, or delete custom recipes.
+- **Built-in Recipes**: toggle the included recipes.
+- **Create a Recipe**: create a shaped or shapeless recipe.
+- **Vanilla Crafting Recipes**: search vanilla crafting recipes, scroll the results, and click a name to open its preview.
+
+In a recipe preview, interchangeable ingredients appear in a compact icon grid:
+
+- Green icon: the material variant is enabled.
+- Red icon: the material variant is disabled.
+- White corners: currently selected preview material.
+- **Disable this variant** blocks crafts that use the selected interchangeable material.
+- **Disable all variants** blocks the complete recipe.
+
+Click **Save** in the main menu to store local settings in `config/customrecipe.json`.
+
+## Server administration
+
+Install the mod on the dedicated server and on the operator's client. An operator can run:
+
+```mcfunction
+/customrecipe
+```
+
+The server sends its authoritative configuration to that operator only. The editor supports custom recipes, built-ins, vanilla crafting recipes, material variants, and manual JSON editing. Click **Save** to send the full configuration back to the server; it is written to the server `config/customrecipe.json` and recipes are reloaded.
+
+The server validates operator permission and configuration size before accepting a save.
+
+### Manual Edit
+
+**Manual Edit** is an advanced JSON editor. It is useful for direct configuration edits, but invalid or incompatible JSON can remove settings. Check the JSON before applying it.
+
+Relevant configuration fields:
+
+```json
+{
+  "disabled_recipes": ["minecraft:torch"],
+  "disabled_recipe_variants": [
+    {
+      "recipe_id": "minecraft:chest",
+      "material_id": "minecraft:oak_planks"
+    }
+  ]
+}
+```
+
+`disabled_recipes` disables the full recipe. `disabled_recipe_variants` disables only the selected interchangeable material for that recipe. Several variant rules can be stored for the same recipe.
+
+## Built-in recipes
+
+| Result | Pattern | Ingredients |
 |---|---|---|
 | Totem of Undying | `_E_ / GGG / _G_` | Emerald + Gold Block |
 | Enchanted Golden Apple | `GGG / GAG / GGG` | Gold Block + Apple |
@@ -24,45 +91,18 @@ A Fabric mod for Minecraft **1.21.11** that lets you create your own **shapeless
 | Bottle o' Enchanting | `_L_ / EBE / _L_` | Lapis Lazuli + Emerald + Glass Bottle |
 | Heavy Core | `_N_ / NBN / _N_` | Netherite Ingot + Breeze Rod |
 
-## Build & Installation
-
-```powershell
-.\gradlew.bat build
-```
-
-Place the JAR from `build\libs\` into your Fabric `mods` folder.
-
-Dev launch:
-
-```powershell
-.\gradlew.bat runClient
-```
-
 ## Compatibility
 
-| | |
+| Component | Version |
 |---|---|
 | Minecraft | 1.21.11 |
-| Fabric Loader | ≥ 0.19.3 |
+| Java | 21+ |
+| Fabric Loader | 0.19.3+ |
 | Fabric API | 0.141.4+1.21.11 |
-| ModMenu | 17.0.0 *(optional)* |
+| ModMenu | 17.0.0 (optional) |
 
-## Usage
+## License and links
 
-A **welcome screen** appears on first launch to guide you. Afterwards, open **ModMenu → Custom Recipe** to access:
-
-- **My Recipes** — View, enable/disable, preview the crafting grid, or delete your custom recipes
-- **Built-in Recipes** — Toggle the 5 pre-made recipes on/off; click a row to expand the ingredient grid
-- **Create a Recipe** — Visual builder: click a slot → search an item → choose shaped/shapeless → set count → Add Recipe
-
-The config is saved to `.minecraft/config/customrecipe.json` and takes effect on the next world load (or `/reload` on a server).
-
-## License & Distribution
-
-- Code: MIT (see `LICENSE` file)
-- Inclusion in modpacks is allowed — please credit Zazac1
-
-## Links
-
-- 🐛 Issues: https://github.com/Zazac1/CustomRecipe/issues
-- 💻 Source: https://github.com/Zazac1/CustomRecipe
+- License: MIT. See [LICENSE](LICENSE).
+- Issues: https://github.com/Zazac1/CustomRecipe/issues
+- Source: https://github.com/Zazac1/CustomRecipe

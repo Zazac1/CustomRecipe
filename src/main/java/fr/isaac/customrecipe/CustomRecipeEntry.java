@@ -11,6 +11,9 @@ import java.util.Map;
  */
 public class CustomRecipeEntry {
 
+    /** Stable identity shared by the local editor and the server. */
+    public String id = "";
+
     /** "shapeless" or "shaped" */
     public String type = "shapeless";
 

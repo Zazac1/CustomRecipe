@@ -11,6 +11,7 @@ public class CustomRecipeMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        ServerConfigNetworking.initialize();
         LOGGER.info("[CustomRecipe] Initialized.");
     }
 }

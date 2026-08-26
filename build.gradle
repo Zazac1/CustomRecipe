@@ -28,6 +28,15 @@ loom {
             sourceSet sourceSets.main
         }
     }
+
+    runs {
+        client {
+            runDir = "run-client"
+        }
+        server {
+            runDir = "run-server"
+        }
+    }
 }
 
 dependencies {

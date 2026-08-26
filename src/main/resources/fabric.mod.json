@@ -3,7 +3,7 @@
   "id": "customrecipe",
   "version": "${version}",
   "name": "Custom Recipe",
-  "description": "Create your own crafting recipes (shapeless or shaped) for any vanilla or modded item. Includes popular built-in recipes that can be toggled on/off per-world.",
+  "description": "Create and manage shaped or shapeless recipes in game. Includes built-ins, vanilla recipe controls, material variants, and OP server configuration.",
   "authors": [
     "Zazac1"
   ],
