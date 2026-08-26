@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1 - 2026-08-26
+
+### Fixed
+
+- Disabled crafting recipes remain visible in the server recipe browser after a restart, so they can be enabled again.
+
 ## 1.1.0 - 2026-08-26
 
 ### Added

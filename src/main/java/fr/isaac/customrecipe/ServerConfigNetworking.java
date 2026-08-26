@@ -216,7 +216,15 @@ public final class ServerConfigNetworking {
     }
 
     private static CraftingRecipe unwrap(CraftingRecipe recipe) {
-        return recipe instanceof VariantFilteredCraftingRecipe filtered ? filtered.delegate() : recipe;
+        while (true) {
+            if (recipe instanceof VariantFilteredCraftingRecipe filtered) {
+                recipe = filtered.delegate();
+            } else if (recipe instanceof DisabledCraftingRecipe disabled) {
+                recipe = disabled.delegate();
+            } else {
+                return recipe;
+            }
+        }
     }
 
     private static List<String> ingredientChoices(Ingredient ingredient) {

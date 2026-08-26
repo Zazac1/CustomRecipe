@@ -3,6 +3,7 @@ package fr.isaac.customrecipe.mixin;
 import fr.isaac.customrecipe.ConfigLoader;
 import fr.isaac.customrecipe.CustomRecipeEntry;
 import fr.isaac.customrecipe.CustomRecipeMod;
+import fr.isaac.customrecipe.DisabledCraftingRecipe;
 import fr.isaac.customrecipe.ModConfig;
 import fr.isaac.customrecipe.RecipeVariantRule;
 import fr.isaac.customrecipe.VariantFilteredCraftingRecipe;
@@ -56,9 +57,11 @@ public abstract class ServerRecipeManagerMixin {
             });
         }
 
-        // 1b. Remove any explicitly disabled vanilla or modded recipe.
+        // 1b. Non-crafting recipes can be removed. Crafting recipes stay in the manager
+        // so the server browser can still show and re-enable them after a restart.
         if (!config.disabled_recipes.isEmpty()) {
-            recipes.removeIf(entry -> config.disabled_recipes.contains(entry.id().getValue().toString()));
+            recipes.removeIf(entry -> config.disabled_recipes.contains(entry.id().getValue().toString())
+                    && !(entry.value() instanceof CraftingRecipe));
         }
 
         // 1c. Keep recipes available, but make selected material variants fail to match.
@@ -69,9 +72,22 @@ public abstract class ServerRecipeManagerMixin {
             }
             for (int i = 0; i < recipes.size(); i++) {
                 RecipeEntry<?> entry = recipes.get(i);
+                if (config.disabled_recipes.contains(entry.id().getValue().toString())
+                        && entry.value() instanceof CraftingRecipe recipe) {
+                    recipes.set(i, new RecipeEntry<>(entry.id(), new DisabledCraftingRecipe(recipe)));
+                    continue;
+                }
                 Set<String> blocked = variantsByRecipe.get(entry.id().getValue().toString());
                 if (blocked != null && entry.value() instanceof CraftingRecipe recipe) {
                     recipes.set(i, new RecipeEntry<>(entry.id(), new VariantFilteredCraftingRecipe(recipe, blocked)));
+                }
+            }
+        } else if (!config.disabled_recipes.isEmpty()) {
+            for (int i = 0; i < recipes.size(); i++) {
+                RecipeEntry<?> entry = recipes.get(i);
+                if (config.disabled_recipes.contains(entry.id().getValue().toString())
+                        && entry.value() instanceof CraftingRecipe recipe) {
+                    recipes.set(i, new RecipeEntry<>(entry.id(), new DisabledCraftingRecipe(recipe)));
                 }
             }
         }
