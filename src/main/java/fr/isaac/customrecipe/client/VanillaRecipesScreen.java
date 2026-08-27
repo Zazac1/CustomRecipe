@@ -156,7 +156,7 @@ public class VanillaRecipesScreen extends Screen {
 
         // At the title screen ModMenu has not mounted server-data resources yet.
         // Vanilla recipes are still available in Minecraft's own JAR, so use it as a fallback.
-        if (matches.isEmpty() && resources.isEmpty()) loadBundledVanillaRecipes(matches, loweredQuery);
+        if (matches.isEmpty()) loadBundledVanillaRecipes(matches, loweredQuery);
 
         matches.sort(java.util.Comparator.comparing(VanillaRecipePage.VanillaRecipeInfo::id));
         return new VanillaRecipePage(matches, 0, matches.size());
@@ -238,6 +238,11 @@ public class VanillaRecipesScreen extends Screen {
 
     private void collectIngredientIds(JsonElement element, List<String> ingredients) {
         if (element == null || element.isJsonNull()) return;
+        if (element.isJsonPrimitive()) {
+            String raw = element.getAsString();
+            if (!raw.isBlank()) ingredients.add(raw);
+            return;
+        }
         if (element.isJsonArray()) {
             for (JsonElement child : element.getAsJsonArray()) collectIngredientIds(child, ingredients);
             return;
@@ -365,6 +370,16 @@ public class VanillaRecipesScreen extends Screen {
 
     private void collectLocalIngredientChoices(JsonElement element, Set<String> choices) {
         if (element == null || element.isJsonNull()) return;
+        if (element.isJsonPrimitive()) {
+            String raw = element.getAsString();
+            if (raw.startsWith("#")) {
+                Identifier tagId = Identifier.tryParse(raw.substring(1));
+                if (tagId != null) collectLocalTagItems(tagId, choices, new HashSet<>());
+            } else if (!raw.isBlank()) {
+                choices.add(raw);
+            }
+            return;
+        }
         if (element.isJsonArray()) {
             for (JsonElement child : element.getAsJsonArray()) collectLocalIngredientChoices(child, choices);
             return;
@@ -377,9 +392,32 @@ public class VanillaRecipesScreen extends Screen {
         }
         if (object.has("tag")) {
             Identifier tagId = Identifier.tryParse(object.get("tag").getAsString());
-            if (tagId == null) return;
-            TagKey<net.minecraft.item.Item> tag = TagKey.of(RegistryKeys.ITEM, tagId);
-            for (var entry : Registries.ITEM.iterateEntries(tag)) choices.add(Registries.ITEM.getId(entry.value()).toString());
+            if (tagId != null) collectLocalTagItems(tagId, choices, new HashSet<>());
+        }
+    }
+
+    /** Reads tag JSON too, so variants are available from ModMenu before joining a world. */
+    private void collectLocalTagItems(Identifier tagId, Set<String> choices, Set<Identifier> visited) {
+        if (!visited.add(tagId)) return;
+        Identifier tagResource = Identifier.of(tagId.getNamespace(), "tags/item/" + tagId.getPath() + ".json");
+        Optional<String> json = readLocalRecipeJson(tagResource);
+        if (json.isEmpty()) return;
+        try {
+            JsonObject root = JsonParser.parseString(json.get()).getAsJsonObject();
+            if (!root.has("values") || !root.get("values").isJsonArray()) return;
+            for (JsonElement value : root.getAsJsonArray("values")) {
+                String raw = value.isJsonPrimitive() ? value.getAsString()
+                        : value.isJsonObject() && value.getAsJsonObject().has("id")
+                        ? value.getAsJsonObject().get("id").getAsString() : "";
+                if (raw.startsWith("#")) {
+                    Identifier nested = Identifier.tryParse(raw.substring(1));
+                    if (nested != null) collectLocalTagItems(nested, choices, visited);
+                } else if (!raw.isBlank()) {
+                    choices.add(raw);
+                }
+            }
+        } catch (Exception ignored) {
+            // An optional malformed tag must not prevent the recipe preview from opening.
         }
     }
 
