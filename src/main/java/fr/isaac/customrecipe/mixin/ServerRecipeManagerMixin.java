@@ -17,6 +17,8 @@ import net.minecraft.registry.RegistryKeys;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.profiler.Profiler;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.loader.api.FabricLoader;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -94,24 +96,32 @@ public abstract class ServerRecipeManagerMixin {
 
         // 2. Inject user custom recipes
         int idx = 0;
+        List<RecipeEntry<?>> customRecipes = new ArrayList<>();
         for (CustomRecipeEntry entry : config.custom_recipes) {
             // Local ModMenu recipes are drafts until an OP explicitly adds them
             // to the server. Null preserves recipes from configurations made
             // before the server publication state existed.
-            if (Boolean.FALSE.equals(entry.server_enabled) || Boolean.FALSE.equals(entry.enabled)) {
+            boolean dedicatedServer = FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER;
+            if (Boolean.FALSE.equals(entry.enabled)
+                    || (dedicatedServer && Boolean.FALSE.equals(entry.server_enabled))) {
                 idx++;
                 continue;
             }
-            RecipeEntry<?> built = buildCustomRecipe(entry, idx++);
-            if (built != null) recipes.add(built);
+            RecipeEntry<?> built = buildCustomRecipe(entry, idx++, recipeBookGroup(entry));
+            if (built != null) customRecipes.add(built);
         }
+
+        // The recipe manager uses the first matching entry. Vanilla entries
+        // stay first, so a custom recipe only takes effect after the matching
+        // vanilla recipe has been disabled. Custom recipes still share groups.
+        recipes.addAll(customRecipes);
 
         return PreparedRecipes.of(recipes);
     }
 
     // ── dispatch ─────────────────────────────────────────────────────────
 
-    private RecipeEntry<?> buildCustomRecipe(CustomRecipeEntry entry, int idx) {
+    private RecipeEntry<?> buildCustomRecipe(CustomRecipeEntry entry, int idx, String recipeGroup) {
         if (entry == null) return null;
         if (entry.result == null || entry.result.isBlank()) return null;
 
@@ -123,24 +133,36 @@ public abstract class ServerRecipeManagerMixin {
 
         ItemStack result = new ItemStack(Registries.ITEM.get(resultId), Math.max(1, entry.count));
 
-        // Stable recipe key: use result path + index
-        String safeName = entry.result.replace(':', '_').replace('/', '_') + "_" + idx;
         RegistryKey<Recipe<?>> key = RegistryKey.of(
                 RegistryKeys.RECIPE,
-                Identifier.of(CustomRecipeMod.MOD_ID, "custom/" + safeName)
+                entry.serverRecipeId()
         );
 
         if ("shaped".equalsIgnoreCase(entry.type)) {
-            return buildShaped(entry, result, key);
+            return buildShaped(entry, result, key, recipeGroup);
         } else {
-            return buildShapeless(entry, result, key);
+            return buildShapeless(entry, result, key, recipeGroup);
         }
+    }
+
+    /** Gives recipes with the same custom input one green-book entry. */
+    private String recipeBookGroup(CustomRecipeEntry entry) {
+        return "customrecipe_" + Integer.toUnsignedString(recipeInputSignature(entry).hashCode(), 36);
+    }
+
+    private String recipeInputSignature(CustomRecipeEntry entry) {
+        if ("shaped".equalsIgnoreCase(entry.type)) {
+            return "shaped:" + entry.pattern + ":" + entry.keys;
+        }
+        List<String> ingredients = entry.ingredients == null ? List.of() : new ArrayList<>(entry.ingredients);
+        java.util.Collections.sort(ingredients);
+        return "shapeless:" + ingredients;
     }
 
     // ── shapeless ─────────────────────────────────────────────────────────
 
     private RecipeEntry<ShapelessRecipe> buildShapeless(CustomRecipeEntry entry, ItemStack result,
-                                                         RegistryKey<Recipe<?>> key) {
+                                                         RegistryKey<Recipe<?>> key, String recipeGroup) {
         List<String> rawIngredients = entry.ingredients;
         if (rawIngredients == null || rawIngredients.isEmpty()) return null;
 
@@ -157,7 +179,7 @@ public abstract class ServerRecipeManagerMixin {
         if (ingredients.isEmpty()) return null;
 
         ShapelessRecipe recipe = new ShapelessRecipe(
-                CustomRecipeMod.MOD_ID,
+                recipeGroup,
                 CraftingRecipeCategory.MISC,
                 result,
                 ingredients
@@ -168,7 +190,7 @@ public abstract class ServerRecipeManagerMixin {
     // ── shaped ────────────────────────────────────────────────────────────
 
     private RecipeEntry<ShapedRecipe> buildShaped(CustomRecipeEntry entry, ItemStack result,
-                                                    RegistryKey<Recipe<?>> key) {
+                                                    RegistryKey<Recipe<?>> key, String recipeGroup) {
         List<String> pattern = entry.pattern;
         Map<String, String> keysMap = entry.keys;
         if (pattern == null || pattern.isEmpty()) return null;
@@ -197,7 +219,7 @@ public abstract class ServerRecipeManagerMixin {
         if (rawRecipe == null) return null;
 
         ShapedRecipe recipe = new ShapedRecipe(
-                CustomRecipeMod.MOD_ID,
+                recipeGroup,
                 CraftingRecipeCategory.MISC,
                 rawRecipe,
                 result

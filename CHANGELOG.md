@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.3+1.21.11
+
+### Added
+
+- Added a **Known by default** option for custom recipes in the ModMenu/local editor and OP server editor.
+- Recipes marked **Known by default** are added quietly to every player's recipe book.
+- Custom recipes with identical inputs now share a green-book recipe group, so players can choose an output.
+
+### Changed
+
+- Vanilla recipes now take priority when they use the same inputs as a custom recipe. Disabling the Vanilla recipe allows the custom recipe to be crafted.
+
+### Fixed
+
+- Shift-crafting keeps the custom recipe selected from the green recipe book.
+
 ## 1.1.2+1.21.11
 
 ### Changed

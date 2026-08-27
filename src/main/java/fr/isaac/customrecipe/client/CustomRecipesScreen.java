@@ -168,6 +168,18 @@ public class CustomRecipesScreen extends Screen {
             arrow.setMaxWidth(12);
             arrow.setMaxRows(1);
             addDrawableChild(arrow);
+
+            final int selected = selectedRecipe;
+            boolean known = Boolean.TRUE.equals(e.known_by_default);
+            addDrawableChild(ButtonWidget.builder(
+                    known ? Text.literal("Known by default: ON").withColor(0x55FF55)
+                          : Text.literal("Known by default: OFF").withColor(0xFFCC55),
+                    b -> {
+                        CustomRecipeEntry recipe = recipes.get(selected);
+                        recipe.known_by_default = !Boolean.TRUE.equals(recipe.known_by_default);
+                        clearAndInit();
+                    }
+            ).dimensions(width - PAD - 142, detailY() + 30, 138, 18).build());
         }
 
         // ── Boutons du bas ────────────────────────────────────────────────

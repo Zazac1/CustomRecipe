@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.util.Identifier;
 
 /**
  * Represents a single user-created custom crafting recipe.
@@ -45,4 +46,15 @@ public class CustomRecipeEntry {
      * New ModMenu recipes start as {@code false} until an OP adds them.
      */
     public Boolean server_enabled;
+
+    /** Whether every player learns this recipe automatically. */
+    public Boolean known_by_default;
+
+    /** Stable server key used for recipe loading and automatic recipe-book unlocks. */
+    public Identifier serverRecipeId() {
+        String source = id == null || id.isBlank() ? result : id;
+        String safeId = source == null ? "recipe"
+                : source.replaceAll("[^a-zA-Z0-9_./-]", "_").toLowerCase(java.util.Locale.ROOT);
+        return Identifier.of(CustomRecipeMod.MOD_ID, "custom/" + safeId);
+    }
 }
