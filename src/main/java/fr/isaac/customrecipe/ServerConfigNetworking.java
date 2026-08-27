@@ -6,25 +6,28 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.command.permission.PermissionLevel;
-import net.minecraft.command.permission.Permission;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.recipe.CraftingRecipe;
-import net.minecraft.recipe.Ingredient;
-import net.minecraft.recipe.RecipeEntry;
-import net.minecraft.recipe.ShapedRecipe;
-import net.minecraft.recipe.input.CraftingRecipeInput;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.Text;
-
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.ShapedRecipe;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-import static net.minecraft.server.command.CommandManager.literal;
+import static net.minecraft.commands.Commands.literal;
 
 /** Server-side command and permission-checked config synchronization. */
 public final class ServerConfigNetworking {
@@ -34,43 +37,50 @@ public final class ServerConfigNetworking {
     private static final Gson GSON = new Gson();
 
     public static void initialize() {
-        PayloadTypeRegistry.playS2C().register(ServerConfigPayload.ID, ServerConfigPayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(SaveServerConfigPayload.ID, SaveServerConfigPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(VanillaRecipePagePayload.ID, VanillaRecipePagePayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(VanillaRecipeQueryPayload.ID, VanillaRecipeQueryPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(VanillaRecipeDetailsPayload.ID, VanillaRecipeDetailsPayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(VanillaRecipeDetailsQueryPayload.ID, VanillaRecipeDetailsQueryPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ServerConfigPayload.ID, ServerConfigPayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(SaveServerConfigPayload.ID, SaveServerConfigPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(VanillaRecipePagePayload.ID, VanillaRecipePagePayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(VanillaRecipeQueryPayload.ID, VanillaRecipeQueryPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(VanillaRecipeDetailsPayload.ID, VanillaRecipeDetailsPayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(VanillaRecipeDetailsQueryPayload.ID, VanillaRecipeDetailsQueryPayload.CODEC);
+
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> awardDefaultRecipes(handler.player, server));
+        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
+            if (success) {
+                for (ServerPlayer player : server.getPlayerList().getPlayers()) awardDefaultRecipes(player, server);
+            }
+        });
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> dispatcher.register(
                 literal("customrecipe")
-                        .requires(source -> source.getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                        .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)))
                         .executes(context -> openEditor(context.getSource()))
         ));
 
         ServerPlayNetworking.registerGlobalReceiver(SaveServerConfigPayload.ID, (payload, context) -> {
-            ServerPlayerEntity player = context.player();
-            if (!player.getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS))) {
-                player.sendMessage(Text.literal("[Custom Recipe] Permission denied."), false);
+            ServerPlayer player = context.player();
+            if (!player.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))) {
+                player.sendSystemMessage(Component.literal("[Custom Recipe] Permission denied."));
                 return;
             }
             if (payload.json().length() > MAX_JSON_CHARS) {
-                player.sendMessage(Text.literal("[Custom Recipe] Server config is too large."), false);
+                player.sendSystemMessage(Component.literal("[Custom Recipe] Server config is too large."));
                 return;
             }
 
             ModConfig config = ConfigLoader.fromJson(payload.json());
             if (config == null) {
-                player.sendMessage(Text.literal("[Custom Recipe] Invalid JSON; nothing was changed."), false);
+                player.sendSystemMessage(Component.literal("[Custom Recipe] Invalid JSON; nothing was changed."));
                 return;
             }
 
             ConfigLoader.saveAndInvalidate(config);
-            player.sendMessage(Text.literal("[Custom Recipe] Server config saved. Reloading recipes..."), false);
-            context.server().getCommandManager().parseAndExecute(player.getCommandSource(), "reload");
+            player.sendSystemMessage(Component.literal("[Custom Recipe] Server config saved. Reloading recipes..."));
+            context.server().getCommands().performPrefixedCommand(player.createCommandSourceStack(), "reload");
         });
 
         ServerPlayNetworking.registerGlobalReceiver(VanillaRecipeQueryPayload.ID, (payload, context) -> {
-            if (!context.player().getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS))) {
+            if (!context.player().permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))) {
                 return;
             }
             RecipeQuery query = GSON.fromJson(payload.json(), RecipeQuery.class);
@@ -83,7 +93,7 @@ public final class ServerConfigNetworking {
         });
 
         ServerPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsQueryPayload.ID, (payload, context) -> {
-            if (!context.player().getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS))) return;
+            if (!context.player().permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))) return;
             VanillaRecipeDetails details = findVanillaRecipeDetails(context.server(), payload.recipeId());
             String json = GSON.toJson(details);
             if (json.length() <= MAX_JSON_CHARS) {
@@ -93,25 +103,46 @@ public final class ServerConfigNetworking {
 
     }
 
-    private static int openEditor(ServerCommandSource source) throws CommandSyntaxException {
-        ServerPlayerEntity player = source.getPlayerOrThrow();
+    /** Grants only enabled custom recipes explicitly marked as known by default. */
+    private static void awardDefaultRecipes(ServerPlayer player, net.minecraft.server.MinecraftServer server) {
+        List<RecipeHolder<?>> recipes = new ArrayList<>();
+        for (CustomRecipeEntry entry : ConfigLoader.get().custom_recipes) {
+            if (!Boolean.TRUE.equals(entry.known_by_default)) continue;
+            server.getRecipeManager().byKey(ResourceKey.create(Registries.RECIPE, entry.serverRecipeId()))
+                    .ifPresent(recipes::add);
+        }
+        // awardRecipes intentionally highlights entries and shows the vanilla
+        // toast. Defaults should quietly exist in the recipe book instead.
+        boolean changed = false;
+        var book = player.getRecipeBook();
+        for (RecipeHolder<?> recipe : recipes) {
+            if (!book.contains(recipe.id())) {
+                book.add(recipe.id());
+                changed = true;
+            }
+        }
+        if (changed) book.sendInitialRecipeBook(player);
+    }
+
+    private static int openEditor(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
         if (!ServerPlayNetworking.canSend(player, ServerConfigPayload.ID)) {
-            source.sendError(Text.literal("[Custom Recipe] This client needs the Custom Recipe mod to open the editor."));
+            source.sendFailure(Component.literal("[Custom Recipe] This client needs the Custom Recipe mod to open the editor."));
             return 0;
         }
 
         sendEditor(player);
-        source.sendFeedback(() -> Text.literal("[Custom Recipe] Opening the server recipe editor."), false);
+        source.sendSuccess(() -> Component.literal("[Custom Recipe] Opening the server recipe editor."), false);
         return Command.SINGLE_SUCCESS;
     }
 
-    private static void sendEditor(ServerPlayerEntity player) {
+    private static void sendEditor(ServerPlayer player) {
         if (!ServerPlayNetworking.canSend(player, ServerConfigPayload.ID)) return;
         // The config can have changed through the local editor since the last reload.
         ConfigLoader.invalidate();
         String json = ConfigLoader.toJson(ConfigLoader.get());
         if (json.length() > MAX_JSON_CHARS) {
-            player.sendMessage(Text.literal("[Custom Recipe] The server config is too large to send to the editor."), false);
+            player.sendSystemMessage(Component.literal("[Custom Recipe] The server config is too large to send to the editor."));
             return;
         }
         ServerPlayNetworking.send(player, new ServerConfigPayload(json));
@@ -121,19 +152,19 @@ public final class ServerConfigNetworking {
         String query = request.query() == null ? "" : request.query().trim().toLowerCase(Locale.ROOT);
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
 
-        for (RecipeEntry<?> entry : server.getRecipeManager().values()) {
-            if (!entry.id().getValue().getNamespace().equals("minecraft") || !(entry.value() instanceof CraftingRecipe wrappedRecipe)) continue;
+        for (RecipeHolder<?> entry : server.getRecipeManager().getRecipes()) {
+            if (!entry.id().identifier().getNamespace().equals("minecraft") || !(entry.value() instanceof CraftingRecipe wrappedRecipe)) continue;
             CraftingRecipe recipe = unwrap(wrappedRecipe);
 
             // Special recipes (for example decorated pots) require a real grid and throw on EMPTY.
             ItemStack result = ItemStack.EMPTY;
             try {
-                result = recipe.craft(CraftingRecipeInput.EMPTY, server.getRegistryManager());
+                result = recipe.assemble(CraftingInput.EMPTY);
             } catch (RuntimeException ignored) {
                 // Their recipe ID remains searchable and they can still be disabled.
             }
-            String resultId = result.isEmpty() ? entry.id().getValue().toString()
-                    : Registries.ITEM.getId(result.getItem()).toString();
+            String resultId = result.isEmpty() ? entry.id().identifier().toString()
+                    : BuiltInRegistries.ITEM.getKey(result.getItem()).toString();
             int gridWidth = 0;
             int gridHeight = 0;
             boolean shapeless = !(recipe instanceof ShapedRecipe);
@@ -147,7 +178,7 @@ public final class ServerConfigNetworking {
                 }
             } else {
                 // Shapeless recipes deliberately keep the JSON ingredient order.
-                for (Ingredient ingredient : recipe.getIngredientPlacement().getIngredients()) {
+                for (Ingredient ingredient : recipe.placementInfo().ingredients()) {
                     ingredients.add(firstMatchingId(ingredient));
                 }
             }
@@ -156,7 +187,7 @@ public final class ServerConfigNetworking {
             boolean ingredientMatch = request.matchIngredients() && ingredients.stream().anyMatch(id -> id.contains(query));
             if (query.isEmpty() || outputMatch || ingredientMatch) {
                 matches.add(new VanillaRecipePage.VanillaRecipeInfo(
-                        entry.id().getValue().toString(), resultId,
+                        entry.id().identifier().toString(), resultId,
                         toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
                         gridWidth, gridHeight, shapeless));
             }
@@ -171,17 +202,17 @@ public final class ServerConfigNetworking {
     }
 
     private static String firstMatchingId(Ingredient ingredient) {
-        return ingredient.getMatchingItems()
-                .map(item -> Registries.ITEM.getId(item.value()).toString())
+        return ingredient.items()
+                .map(item -> BuiltInRegistries.ITEM.getKey(item.value()).toString())
                 .findFirst()
                 .orElse("");
     }
 
     private static VanillaRecipeDetails findVanillaRecipeDetails(net.minecraft.server.MinecraftServer server, String rawId) {
-        var identifier = net.minecraft.util.Identifier.tryParse(rawId);
+        var identifier = net.minecraft.resources.Identifier.tryParse(rawId);
         if (identifier == null) return new VanillaRecipeDetails(rawId, List.of());
-        var id = net.minecraft.registry.RegistryKey.of(net.minecraft.registry.RegistryKeys.RECIPE, identifier);
-        RecipeEntry<?> entry = server.getRecipeManager().get(id).orElse(null);
+        var id = net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.RECIPE, identifier);
+        RecipeHolder<?> entry = server.getRecipeManager().byKey(id).orElse(null);
         if (entry == null || !(entry.value() instanceof CraftingRecipe wrappedRecipe)) return new VanillaRecipeDetails(rawId, List.of());
         CraftingRecipe recipe = unwrap(wrappedRecipe);
         List<List<String>> choices = new ArrayList<>(java.util.Collections.nCopies(9, List.of()));
@@ -200,7 +231,7 @@ public final class ServerConfigNetworking {
                 }
             }
         } else {
-            List<Ingredient> ingredients = recipe.getIngredientPlacement().getIngredients();
+            List<Ingredient> ingredients = recipe.placementInfo().ingredients();
             for (int slot = 0; slot < ingredients.size() && slot < 9; slot++) choices.set(slot, ingredientChoices(ingredients.get(slot)));
         }
 
@@ -229,7 +260,7 @@ public final class ServerConfigNetworking {
 
     private static List<String> ingredientChoices(Ingredient ingredient) {
         if (ingredient == null) return List.of();
-        return ingredient.getMatchingItems().map(item -> Registries.ITEM.getId(item.value()).toString()).sorted().toList();
+        return ingredient.items().map(item -> BuiltInRegistries.ITEM.getKey(item.value()).toString()).sorted().toList();
     }
 
     /** Always send a final 3x3 layout so no client-side axis interpretation is needed. */

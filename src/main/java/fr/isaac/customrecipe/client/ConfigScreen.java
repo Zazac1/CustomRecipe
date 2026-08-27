@@ -6,12 +6,11 @@ import fr.isaac.customrecipe.ModConfig;
 import fr.isaac.customrecipe.RecipeVariantRule;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.MultilineTextWidget;
-import net.minecraft.text.Text;
-
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.MultiLineTextWidget;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -38,7 +37,7 @@ public class ConfigScreen extends Screen {
     /** Creates the OP-only editor using a config received from a server. */
     public ConfigScreen(Screen parent, ModConfig config, String screenTitle,
                         boolean serverManaged, Consumer<ModConfig> saveAction) {
-        super(Text.literal(screenTitle));
+        super(Component.literal(screenTitle));
         this.parent = parent;
         this.baseConfig = config;
         this.saveAction = saveAction;
@@ -55,7 +54,7 @@ public class ConfigScreen extends Screen {
         if (!serverManaged && !welcomeShown && !ConfigLoader.get().seen_welcome) {
             welcomeShown = true;
             final WelcomeScreen ws = new WelcomeScreen(this); // ConfigScreen est un Screen
-            client.execute(() -> client.setScreen(ws));
+            minecraft.execute(() -> minecraft.gui.setScreen(ws));
         }
 
         int btnW = 200, btnH = 20;
@@ -63,50 +62,51 @@ public class ConfigScreen extends Screen {
         int cy = height / 2 - 40;
 
         // Title
-        int titleX = Math.max(8, (width - textRenderer.getWidth(title.getString())) / 2);
-        addDrawableChild(new MultilineTextWidget(titleX, cy - 26, title, textRenderer));
+        int titleX = Math.max(8, (width - font.width(title.getString())) / 2);
+        addRenderableWidget(new MultiLineTextWidget(titleX, cy - 26, title, font));
 
-        addDrawableChild(ButtonWidget.builder(
-                Text.literal("My Recipes"),
-                b -> client.setScreen(new CustomRecipesScreen(this))
-        ).dimensions(cx, cy, btnW, btnH).build());
+        addRenderableWidget(Button.builder(
+                Component.literal("My Recipes"),
+                b -> minecraft.gui.setScreen(new CustomRecipesScreen(this))
+        ).bounds(cx, cy, btnW, btnH).build());
 
-        addDrawableChild(ButtonWidget.builder(
-                Text.literal("Built-in Recipes"),
-                b -> client.setScreen(new BuiltinRecipesScreen(this))
-        ).dimensions(cx, cy + 24, btnW, btnH).build());
+        addRenderableWidget(Button.builder(
+                Component.literal("Built-in Recipes"),
+                b -> minecraft.gui.setScreen(new BuiltinRecipesScreen(this))
+        ).bounds(cx, cy + 24, btnW, btnH).build());
 
-        addDrawableChild(ButtonWidget.builder(
-                Text.literal("Create a Recipe"),
-                b -> client.setScreen(new RecipeBuilderScreen(this))
-        ).dimensions(cx, cy + 48, btnW, btnH).build());
+        addRenderableWidget(Button.builder(
+                Component.literal("Create a Recipe"),
+                b -> minecraft.gui.setScreen(new RecipeBuilderScreen(this))
+        ).bounds(cx, cy + 48, btnW, btnH).build());
 
         if (serverManaged) {
-            addDrawableChild(ButtonWidget.builder(
-                    Text.literal("Vanilla Crafting Recipes"),
-                    b -> client.setScreen(new VanillaRecipesScreen(this))
-            ).dimensions(cx, cy + 72, btnW, btnH).build());
+            addRenderableWidget(Button.builder(
+                    Component.literal("Vanilla Crafting Recipes"),
+                    b -> minecraft.gui.setScreen(new VanillaRecipesScreen(this))
+            ).bounds(cx, cy + 72, btnW, btnH).build());
 
-            addDrawableChild(ButtonWidget.builder(
-                    Text.literal("Manual Edit"),
-                    b -> client.setScreen(new ServerJsonScreen(this, currentConfig()))
-            ).dimensions(cx, cy + 96, btnW, btnH).build());
+            addRenderableWidget(Button.builder(
+                    Component.literal("Manual Edit"),
+                    b -> minecraft.gui.setScreen(new ServerJsonScreen(this, currentConfig()))
+            ).bounds(cx, cy + 96, btnW, btnH).build());
         } else {
-            addDrawableChild(ButtonWidget.builder(
-                    Text.literal("Vanilla Crafting Recipes"),
-                    b -> client.setScreen(new VanillaRecipesScreen(this, true))
-            ).dimensions(cx, cy + 72, btnW, btnH).build());
+            addRenderableWidget(Button.builder(
+                    Component.literal("Vanilla Crafting Recipes"),
+                    b -> minecraft.gui.setScreen(new VanillaRecipesScreen(this, true))
+            ).bounds(cx, cy + 72, btnW, btnH).build());
         }
 
-        addDrawableChild(ButtonWidget.builder(
-                Text.literal("Save"),
+        addRenderableWidget(Button.builder(
+                Component.literal("Save"),
                 b -> save()
-        ).dimensions(cx, cy + (serverManaged ? 128 : 104), btnW, btnH).build());
+        ).bounds(cx, cy + (serverManaged ? 128 : 104), btnW, btnH).build());
     }
 
     void save() {
         saveAction.accept(currentConfig());
-        client.setScreen(parent);
+        if (!serverManaged) LocalRecipeReload.afterSave(minecraft);
+        minecraft.gui.setScreen(parent);
     }
 
     boolean isServerManaged() {
@@ -133,11 +133,11 @@ public class ConfigScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
-        super.render(ctx, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
     }
 
     @Override
-    public boolean shouldPause() { return false; }
+    public boolean isPauseScreen() { return false; }
 }

@@ -1,11 +1,13 @@
 # Custom Recipe
 
-Custom Recipe is a Fabric mod for Minecraft **1.21.11**. Create shaped or shapeless crafting recipes in game, manage built-in recipes, and let server operators control custom and vanilla crafting recipes without editing datapacks.
+Custom Recipe is a Fabric mod for Minecraft **26.2**. Create shaped or shapeless crafting recipes in game, manage built-in recipes, and let server operators control custom and vanilla crafting recipes without editing datapacks.
 
 ## Highlights
 
 - Visual shaped and shapeless recipe builder for vanilla and modded items.
 - Persistent custom recipes, with stable IDs and enable/disable state.
+- Optionally mark a custom recipe as **Known by default** so every player receives it silently in the recipe book.
+- Custom recipes sharing the same ingredients are grouped in the recipe book, where players can choose the output.
 - Five built-in recipes that can be toggled per world.
 - Vanilla and modded crafting recipe browser: search by output, ingredient, or recipe ID; scroll through results; preview the exact 3x3 crafting layout.
 - Material variants: for recipes using tags such as planks or stone, preview each usable material and disable one material variant or the entire recipe.
@@ -14,7 +16,7 @@ Custom Recipe is a Fabric mod for Minecraft **1.21.11**. Create shaped or shapel
 
 ## Build and installation
 
-Requirements: Java 21, Fabric Loader, Fabric API. ModMenu is optional but recommended.
+Requirements: Java 25, Fabric Loader, Fabric API. ModMenu is optional but recommended.
 
 ```powershell
 .\gradlew.bat build
@@ -37,6 +39,7 @@ Open **ModMenu -> Custom Recipe**.
 - **My Recipes**: inspect, enable, disable, or delete custom recipes.
 - **Built-in Recipes**: toggle the included recipes.
 - **Create a Recipe**: create a shaped or shapeless recipe.
+- **Known by default**: make the new recipe available in every player’s recipe book without an unlock popup.
 - **Vanilla Crafting Recipes**: search vanilla crafting recipes, scroll the results, and click a name to open its preview.
 
 In a recipe preview, interchangeable ingredients appear in a compact icon grid:
@@ -95,11 +98,11 @@ Relevant configuration fields:
 
 | Component | Version |
 |---|---|
-| Minecraft | 1.21.11 |
-| Java | 21+ |
+| Minecraft | 26.2 |
+| Java | 25+ |
 | Fabric Loader | 0.19.3+ |
-| Fabric API | 0.141.4+1.21.11 |
-| ModMenu | 17.0.0 (optional) |
+| Fabric API | 0.158.0+26.2 |
+| ModMenu | 20.0.1 (optional) |
 
 ## License and links
 

@@ -1,16 +1,16 @@
 package fr.isaac.customrecipe;
 
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.codec.PacketCodecs;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 
 /** One small server-filtered page of vanilla crafting recipes. */
-public record VanillaRecipePagePayload(String json) implements CustomPayload {
-    public static final Id<VanillaRecipePagePayload> ID = new Id<>(Identifier.of(CustomRecipeMod.MOD_ID, "vanilla_recipe_page"));
-    public static final PacketCodec<RegistryByteBuf, VanillaRecipePagePayload> CODEC =
-            PacketCodec.tuple(PacketCodecs.STRING, VanillaRecipePagePayload::json, VanillaRecipePagePayload::new);
+public record VanillaRecipePagePayload(String json) implements CustomPacketPayload {
+    public static final Type<VanillaRecipePagePayload> ID = new Type<>(Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "vanilla_recipe_page"));
+    public static final StreamCodec<RegistryFriendlyByteBuf, VanillaRecipePagePayload> CODEC =
+            StreamCodec.composite(ByteBufCodecs.STRING_UTF8, VanillaRecipePagePayload::json, VanillaRecipePagePayload::new);
 
-    @Override public Id<? extends CustomPayload> getId() { return ID; }
+    @Override public Type<? extends CustomPacketPayload> type() { return ID; }
 }

@@ -2,17 +2,16 @@ package fr.isaac.customrecipe.client;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.MultilineTextWidget;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.MultiLineTextWidget;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import java.util.List;
 
 @Environment(EnvType.CLIENT)
@@ -64,7 +63,7 @@ public class BuiltinRecipesScreen extends Screen {
     private int selectedRecipe = -1;
 
     public BuiltinRecipesScreen(ConfigScreen parent) {
-        super(Text.literal("Built-in Recipes"));
+        super(Component.literal("Built-in Recipes"));
         this.parent   = parent;
         this.disabled = parent.disabled;
     }
@@ -82,7 +81,7 @@ public class BuiltinRecipesScreen extends Screen {
     @Override
     protected void init() {
         // ── Fills + icônes + mini-grille ─────────────────────────────────
-        addDrawable((ctx, mx, my, d) -> {
+        addRenderableOnly((ctx, mx, my, d) -> {
             // Liste background
             ctx.fill(PAD, listTop(), width - PAD, listTop() + listH(), 0x88101010);
             drawBox(ctx, PAD, listTop(), width - PAD * 2, listH(), 0xFF505050);
@@ -97,9 +96,9 @@ public class BuiltinRecipesScreen extends Screen {
                         dis ? (sel ? 0x44662200 : 0x44550000)
                             : (sel ? 0x44005533 : 0x22005500));
                 // Icône résultat
-                var item = Registries.ITEM.get(Identifier.tryParse(RECIPES[i][2]));
+                var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(RECIPES[i][2]));
                 if (item != null && item != Items.AIR)
-                    ctx.drawItem(new ItemStack(item), width - PAD - 78 - 18, y + 3);
+                    ctx.item(ClientItemStacks.fromItem(item), width - PAD - 78 - 18, y + 3);
             }
 
             // Panneau de détail
@@ -117,9 +116,9 @@ public class BuiltinRecipesScreen extends Screen {
                         drawBox(ctx, sx, sy, MINI, MINI, 0xFF555555);
                         String id = grid[r][c];
                         if (id != null) {
-                            var it = Registries.ITEM.get(Identifier.tryParse(id));
+                            var it = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(id));
                             if (it != null && it != Items.AIR)
-                                ctx.drawItem(new ItemStack(it), sx + 1, sy + 1);
+                                ctx.item(ClientItemStacks.fromItem(it), sx + 1, sy + 1);
                         }
                     }
                 }
@@ -128,17 +127,17 @@ public class BuiltinRecipesScreen extends Screen {
                 int resultY = gy + MINI;
                 ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
                 drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
-                var ri = Registries.ITEM.get(Identifier.tryParse(RECIPES[selectedRecipe][2]));
+                var ri = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(RECIPES[selectedRecipe][2]));
                 if (ri != null && ri != Items.AIR)
-                    ctx.drawItem(new ItemStack(ri), resultX + 1, resultY + 1);
+                    ctx.item(ClientItemStacks.fromItem(ri), resultX + 1, resultY + 1);
             }
         });
 
         // ── Titre ────────────────────────────────────────────────────────
-        MultilineTextWidget titleW = new MultilineTextWidget(PAD, 10, title, textRenderer);
+        MultiLineTextWidget titleW = new MultiLineTextWidget(PAD, 10, title, font);
         titleW.setMaxWidth(width - 20);
         titleW.setCentered(true);
-        addDrawableChild(titleW);
+        addRenderableWidget(titleW);
 
         // ── Lignes de recettes ────────────────────────────────────────────
         int vis = maxVisible();
@@ -150,75 +149,75 @@ public class BuiltinRecipesScreen extends Screen {
             boolean dis = disabled.contains(id);
             boolean sel = selectedRecipe == i;
 
-            MultilineTextWidget lbl = new MultilineTextWidget(
+            MultiLineTextWidget lbl = new MultiLineTextWidget(
                     PAD + 4, y + (ROW - 8) / 2,
-                    Text.literal((sel ? "▸ " : "  ") + RECIPES[i][1])
+                    Component.literal((sel ? "▸ " : "  ") + RECIPES[i][1])
                             .withColor(dis ? (sel ? 0xBBAAAA : 0x888888)
                                            : (sel ? 0xFFEE88 : 0xE0E0E0)),
-                    textRenderer);
+                    font);
             lbl.setMaxWidth(width - PAD * 2 - 90);
             lbl.setMaxRows(1);
-            addDrawableChild(lbl);
+            addRenderableWidget(lbl);
 
-            addDrawableChild(ButtonWidget.builder(
-                    dis ? Text.literal("Disabled").withColor(0xFF5555)
-                        : Text.literal("Enabled").withColor(0x55FF55),
+            addRenderableWidget(Button.builder(
+                    dis ? Component.literal("Disabled").withColor(0xFF5555)
+                        : Component.literal("Enabled").withColor(0x55FF55),
                     b -> toggle(id)
-            ).dimensions(width - PAD - 76, y + 3, 76, ROW - 6).build());
+            ).bounds(width - PAD - 76, y + 3, 76, ROW - 6).build());
         }
 
         // ── Indicateur de scroll ──────────────────────────────────────────
         if (RECIPES.length > maxVisible()) {
             int from = scroll + 1, to = Math.min(scroll + maxVisible(), RECIPES.length);
-            MultilineTextWidget hint = new MultilineTextWidget(
+            MultiLineTextWidget hint = new MultiLineTextWidget(
                     PAD, listTop() + listH() - 10,
-                    Text.literal("↕ " + from + "-" + to + "/" + RECIPES.length).withColor(0x666666),
-                    textRenderer);
+                    Component.literal("↕ " + from + "-" + to + "/" + RECIPES.length).withColor(0x666666),
+                    font);
             hint.setMaxWidth(70);
             hint.setMaxRows(1);
-            addDrawableChild(hint);
+            addRenderableWidget(hint);
         }
 
         // ── Panneau de détail (widgets texte) ─────────────────────────────
         if (selectedRecipe >= 0) {
             int cnt = RESULT_COUNTS[selectedRecipe];
             String label = RECIPES[selectedRecipe][1] + (cnt > 1 ? "  ×" + cnt : "");
-            MultilineTextWidget nameW = new MultilineTextWidget(
+            MultiLineTextWidget nameW = new MultiLineTextWidget(
                     PAD + 4, detailY() + 4,
-                    Text.literal(label).withColor(0xFFEE77), textRenderer);
+                    Component.literal(label).withColor(0xFFEE77), font);
             nameW.setMaxWidth(width - PAD * 2 - 8);
             nameW.setMaxRows(1);
-            addDrawableChild(nameW);
+            addRenderableWidget(nameW);
 
             // Flèche →
             int gx = detailGridX(), gy = detailGridY();
-            MultilineTextWidget arrow = new MultilineTextWidget(
+            MultiLineTextWidget arrow = new MultiLineTextWidget(
                     gx + 3 * MINI + 3, gy + MINI + (MINI - 8) / 2,
-                    Text.literal("→"), textRenderer);
+                    Component.literal("→"), font);
             arrow.setMaxWidth(12);
             arrow.setMaxRows(1);
-            addDrawableChild(arrow);
+            addRenderableWidget(arrow);
         }
 
         // ── Bouton Retour ─────────────────────────────────────────────────
-        addDrawableChild(ButtonWidget.builder(Text.literal("Back"),
-                b -> client.setScreen(parent)
-        ).dimensions(width / 2 - 50, height - 24, 100, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Back"),
+                b -> minecraft.gui.setScreen(parent)
+        ).bounds(width / 2 - 50, height - 24, 100, 18).build());
     }
 
     private void toggle(String id) {
         if (!disabled.remove(id)) disabled.add(id);
-        clearAndInit();
+        rebuildWidgets();
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
-        super.render(ctx, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean focused) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
         double mx = click.x(), my = click.y();
         int toggleStart = width - PAD - 76;
         int vis = maxVisible();
@@ -230,7 +229,7 @@ public class BuiltinRecipesScreen extends Screen {
                 selectedRecipe = (selectedRecipe == i) ? -1 : i;
                 // Reclamper le scroll si la liste rétrécit
                 scroll = Math.max(0, Math.min(scroll, Math.max(0, RECIPES.length - maxVisible())));
-                clearAndInit();
+                rebuildWidgets();
                 return true;
             }
         }
@@ -241,16 +240,16 @@ public class BuiltinRecipesScreen extends Screen {
     public boolean mouseScrolled(double mx, double my, double h, double v) {
         scroll = Math.max(0, Math.min(scroll - (int) v,
                 Math.max(0, RECIPES.length - maxVisible())));
-        clearAndInit();
+        rebuildWidgets();
         return true;
     }
 
-    private void drawBox(DrawContext ctx, int x, int y, int w, int h, int c) {
-        ctx.drawHorizontalLine(x, x + w - 1, y, c);
-        ctx.drawHorizontalLine(x, x + w - 1, y + h - 1, c);
-        ctx.drawVerticalLine(x, y, y + h - 1, c);
-        ctx.drawVerticalLine(x + w - 1, y, y + h - 1, c);
+    private void drawBox(GuiGraphicsExtractor ctx, int x, int y, int w, int h, int c) {
+        ctx.horizontalLine(x, x + w - 1, y, c);
+        ctx.horizontalLine(x, x + w - 1, y + h - 1, c);
+        ctx.verticalLine(x, y, y + h - 1, c);
+        ctx.verticalLine(x + w - 1, y, y + h - 1, c);
     }
 
-    @Override public boolean shouldPause() { return false; }
+    @Override public boolean isPauseScreen() { return false; }
 }

@@ -3,17 +3,16 @@ package fr.isaac.customrecipe.client;
 import fr.isaac.customrecipe.CustomRecipeEntry;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.MultilineTextWidget;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.MultiLineTextWidget;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import java.util.List;
 import java.util.Map;
 
@@ -31,7 +30,7 @@ public class CustomRecipesScreen extends Screen {
     private int selectedRecipe = -1;
 
     public CustomRecipesScreen(ConfigScreen parent) {
-        super(Text.literal("My Recipes"));
+        super(Component.literal("My Recipes"));
         this.parent  = parent;
         this.recipes = parent.recipes;
     }
@@ -47,7 +46,7 @@ public class CustomRecipesScreen extends Screen {
     @Override
     protected void init() {
         // ── Fills ────────────────────────────────────────────────────────
-        addDrawable((ctx, mx, my, d) -> {
+        addRenderableOnly((ctx, mx, my, d) -> {
             ctx.fill(PAD, listTop(), width - PAD, listTop() + listH(), 0x88101010);
             drawBox(ctx, PAD, listTop(), width - PAD * 2, listH(), 0xFF505050);
             int vis = maxVisible();
@@ -66,8 +65,8 @@ public class CustomRecipesScreen extends Screen {
                 drawBox(ctx, iconX, y + 1, 18, ROW - 4, 0xFF707070);
                 String resId = recipes.get(i).result;
                 Identifier resultId = resId == null ? null : Identifier.tryParse(resId);
-                if (resultId != null && Registries.ITEM.containsId(resultId)) {
-                    ctx.drawItem(new ItemStack(Registries.ITEM.get(resultId)), iconX + 1, y + 2);
+                if (resultId != null && BuiltInRegistries.ITEM.containsKey(resultId)) {
+                    ctx.item(ClientItemStacks.fromId(resultId), iconX + 1, y + 2);
                 }
             }
             if (selectedRecipe >= 0 && selectedRecipe < recipes.size())
@@ -75,10 +74,10 @@ public class CustomRecipesScreen extends Screen {
         });
 
         // ── Titre ─────────────────────────────────────────────────────────
-        MultilineTextWidget titleW = new MultilineTextWidget(PAD + 5, 10, title, textRenderer);
+        MultiLineTextWidget titleW = new MultiLineTextWidget(PAD + 5, 10, title, font);
         titleW.setMaxWidth(width - 20);
         titleW.setCentered(true);
-        addDrawableChild(titleW);
+        addRenderableWidget(titleW);
 
         // ── Lignes de recettes ────────────────────────────────────────────
         int vis = maxVisible();
@@ -88,22 +87,22 @@ public class CustomRecipesScreen extends Screen {
             if (y < listTop() || y + ROW > listTop() + listH()) continue;
             boolean sel = selectedRecipe == idx;
 
-            MultilineTextWidget lbl = new MultilineTextWidget(
+            MultiLineTextWidget lbl = new MultiLineTextWidget(
                     PAD + 4, y + (ROW - 8) / 2,
-                    Text.literal((sel ? "▸ " : "  ") + formatEntry(recipes.get(i)))
+                    Component.literal((sel ? "▸ " : "  ") + formatEntry(recipes.get(i)))
                             .withColor(sel ? 0xFFEE88 : 0xDDDDDD),
-                    textRenderer);
+                    font);
             lbl.setMaxWidth(width - PAD * 2 - 138);
             lbl.setMaxRows(1);
-            addDrawableChild(lbl);
+            addRenderableWidget(lbl);
 
             CustomRecipeEntry entry = recipes.get(idx);
             boolean addedToServer = !parent.isServerManaged() || !Boolean.FALSE.equals(entry.server_enabled);
             boolean en = isActiveForThisScreen(entry);
-            addDrawableChild(ButtonWidget.builder(
-                    !addedToServer ? Text.literal("Add to server").withColor(0xFFCC55)
-                    : en ? Text.literal("Enabled").withColor(0x55FF55)
-                         : Text.literal("Disabled").withColor(0xFF5555),
+            addRenderableWidget(Button.builder(
+                    !addedToServer ? Component.literal("Add to server").withColor(0xFFCC55)
+                    : en ? Component.literal("Enabled").withColor(0x55FF55)
+                         : Component.literal("Disabled").withColor(0xFF5555),
                     b -> {
                         CustomRecipeEntry r = recipes.get(idx);
                         if (parent.isServerManaged() && Boolean.FALSE.equals(r.server_enabled)) {
@@ -112,41 +111,41 @@ public class CustomRecipesScreen extends Screen {
                         } else {
                             r.enabled = !Boolean.FALSE.equals(r.enabled) ? Boolean.FALSE : Boolean.TRUE;
                         }
-                        clearAndInit();
+                        rebuildWidgets();
                     }
-            ).dimensions(width - PAD - 110, y + 2, 88, ROW - 4).build());
+            ).bounds(width - PAD - 110, y + 2, 88, ROW - 4).build());
 
-            addDrawableChild(ButtonWidget.builder(Text.literal("✕"),
+            addRenderableWidget(Button.builder(Component.literal("✕"),
                     b -> {
                         if (selectedRecipe == idx) selectedRecipe = -1;
                         else if (selectedRecipe > idx) selectedRecipe--;
                         recipes.remove(idx);
-                        clearAndInit();
+                        rebuildWidgets();
                     }
-            ).dimensions(width - PAD - 18, y + 2, 18, ROW - 4).build());
+            ).bounds(width - PAD - 18, y + 2, 18, ROW - 4).build());
         }
 
         // ── Message vide ──────────────────────────────────────────────────
         if (recipes.isEmpty()) {
-            MultilineTextWidget empty = new MultilineTextWidget(
+            MultiLineTextWidget empty = new MultiLineTextWidget(
                     PAD + 5, listTop() + 10,
-                    Text.literal("No custom recipes yet. Use \"Create a Recipe\".").withColor(0x999999),
-                    textRenderer);
+                    Component.literal("No custom recipes yet. Use \"Create a Recipe\".").withColor(0x999999),
+                    font);
             empty.setMaxWidth(width - PAD * 2);
             empty.setCentered(true);
-            addDrawableChild(empty);
+            addRenderableWidget(empty);
         }
 
         // ── Scroll hint ───────────────────────────────────────────────────
         if (recipes.size() > maxVisible()) {
             int from = scroll + 1, to = Math.min(scroll + maxVisible(), recipes.size());
-            MultilineTextWidget hint = new MultilineTextWidget(
+            MultiLineTextWidget hint = new MultiLineTextWidget(
                     PAD, listTop() + listH() - 10,
-                    Text.literal("↕ " + from + "-" + to + "/" + recipes.size()).withColor(0x777777),
-                    textRenderer);
+                    Component.literal("↕ " + from + "-" + to + "/" + recipes.size()).withColor(0x777777),
+                    font);
             hint.setMaxWidth(70);
             hint.setMaxRows(1);
-            addDrawableChild(hint);
+            addRenderableWidget(hint);
         }
 
         // ── Panneau de détail (widgets texte) ─────────────────────────────
@@ -154,33 +153,45 @@ public class CustomRecipesScreen extends Screen {
             CustomRecipeEntry e = recipes.get(selectedRecipe);
             String mode  = "shaped".equalsIgnoreCase(e.type) ? "[Shaped]" : "[Shapeless]";
             String label = mode + "  " + toName(e.result) + (e.count > 1 ? " ×" + e.count : "");
-            MultilineTextWidget nameW = new MultilineTextWidget(
+            MultiLineTextWidget nameW = new MultiLineTextWidget(
                     PAD + 4, detailY() + 4,
-                    Text.literal(label).withColor(0xFFEE77), textRenderer);
+                    Component.literal(label).withColor(0xFFEE77), font);
             nameW.setMaxWidth(width - PAD * 2 - 8);
             nameW.setMaxRows(1);
-            addDrawableChild(nameW);
+            addRenderableWidget(nameW);
 
             // Flèche →
-            MultilineTextWidget arrow = new MultilineTextWidget(
+            MultiLineTextWidget arrow = new MultiLineTextWidget(
                     detailGridX() + 3 * MINI + 3, detailGridY() + MINI + (MINI - 8) / 2,
-                    Text.literal("→"), textRenderer);
+                    Component.literal("→"), font);
             arrow.setMaxWidth(12);
             arrow.setMaxRows(1);
-            addDrawableChild(arrow);
+            addRenderableWidget(arrow);
+
+            final int selected = selectedRecipe;
+            boolean known = Boolean.TRUE.equals(e.known_by_default);
+            addRenderableWidget(Button.builder(
+                    known ? Component.literal("Known by default: ON").withColor(0x55FF55)
+                          : Component.literal("Known by default: OFF").withColor(0xFFCC55),
+                    b -> {
+                        CustomRecipeEntry recipe = recipes.get(selected);
+                        recipe.known_by_default = !Boolean.TRUE.equals(recipe.known_by_default);
+                        rebuildWidgets();
+                    }
+            ).bounds(width - PAD - 142, detailY() + 30, 138, 18).build());
         }
 
         // ── Boutons du bas ────────────────────────────────────────────────
-        addDrawableChild(ButtonWidget.builder(Text.literal("+ Add Recipe"),
-                b -> client.setScreen(new RecipeBuilderScreen(parent))
-        ).dimensions(width / 2 - 100, height - 44, 200, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("+ Add Recipe"),
+                b -> minecraft.gui.setScreen(new RecipeBuilderScreen(parent))
+        ).bounds(width / 2 - 100, height - 44, 200, 18).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("Back"),
-                b -> client.setScreen(parent)
-        ).dimensions(width / 2 - 50, height - 22, 100, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Back"),
+                b -> minecraft.gui.setScreen(parent)
+        ).bounds(width / 2 - 50, height - 22, 100, 18).build());
     }
 
-    private void renderDetailFills(DrawContext ctx, CustomRecipeEntry e) {
+    private void renderDetailFills(GuiGraphicsExtractor ctx, CustomRecipeEntry e) {
         int dy = detailY();
         ctx.fill(PAD, dy, width - PAD, dy + DETAIL_H, 0x88101010);
         drawBox(ctx, PAD, dy, width - PAD * 2, DETAIL_H, 0xFF506070);
@@ -195,9 +206,9 @@ public class CustomRecipesScreen extends Screen {
                 drawBox(ctx, sx, sy, MINI, MINI, 0xFF555555);
                 String id = grid[r][c];
                 if (id != null && !id.isEmpty()) {
-                    var item = Registries.ITEM.get(Identifier.tryParse(id));
+                    var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(id));
                     if (item != null && item != Items.AIR)
-                        ctx.drawItem(new ItemStack(item), sx + 1, sy + 1);
+                        ctx.item(ClientItemStacks.fromItem(item), sx + 1, sy + 1);
                 }
             }
         }
@@ -208,9 +219,9 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
         drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
         if (e.result != null && !e.result.isEmpty()) {
-            var ri = Registries.ITEM.get(Identifier.tryParse(e.result));
+            var ri = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(e.result));
             if (ri != null && ri != Items.AIR)
-                ctx.drawItem(new ItemStack(ri), resultX + 1, resultY + 1);
+                ctx.item(ClientItemStacks.fromItem(ri), resultX + 1, resultY + 1);
         }
     }
 
@@ -240,13 +251,13 @@ public class CustomRecipesScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
-        super.render(ctx, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean focused) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
         double mx = click.x(), my = click.y();
         // Keep recipe-preview clicks out of the full status-button hitbox.
         int btnStart = width - PAD - 110;
@@ -257,7 +268,7 @@ public class CustomRecipesScreen extends Screen {
             if (my >= rowTop && my < rowTop + ROW && mx >= PAD && mx < btnStart) {
                 selectedRecipe = (selectedRecipe == i) ? -1 : i;
                 scroll = Math.max(0, Math.min(scroll, Math.max(0, recipes.size() - maxVisible())));
-                clearAndInit();
+                rebuildWidgets();
                 return true;
             }
         }
@@ -267,7 +278,7 @@ public class CustomRecipesScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mx, double my, double h, double v) {
         scroll = Math.max(0, Math.min(scroll - (int) v, Math.max(0, recipes.size() - maxVisible())));
-        clearAndInit();
+        rebuildWidgets();
         return true;
     }
 
@@ -296,12 +307,12 @@ public class CustomRecipesScreen extends Screen {
         return sb.toString().trim();
     }
 
-    private void drawBox(DrawContext ctx, int x, int y, int w, int h, int c) {
-        ctx.drawHorizontalLine(x, x + w - 1, y, c);
-        ctx.drawHorizontalLine(x, x + w - 1, y + h - 1, c);
-        ctx.drawVerticalLine(x, y, y + h - 1, c);
-        ctx.drawVerticalLine(x + w - 1, y, y + h - 1, c);
+    private void drawBox(GuiGraphicsExtractor ctx, int x, int y, int w, int h, int c) {
+        ctx.horizontalLine(x, x + w - 1, y, c);
+        ctx.horizontalLine(x, x + w - 1, y + h - 1, c);
+        ctx.verticalLine(x, y, y + h - 1, c);
+        ctx.verticalLine(x + w - 1, y, y + h - 1, c);
     }
 
-    @Override public boolean shouldPause() { return false; }
+    @Override public boolean isPauseScreen() { return false; }
 }

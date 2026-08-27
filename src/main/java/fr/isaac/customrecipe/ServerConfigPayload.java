@@ -1,19 +1,19 @@
 package fr.isaac.customrecipe;
 
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.codec.PacketCodecs;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 
 /** The authoritative server config sent to an OP client. */
-public record ServerConfigPayload(String json) implements CustomPayload {
-    public static final Id<ServerConfigPayload> ID = new Id<>(Identifier.of(CustomRecipeMod.MOD_ID, "server_config"));
-    public static final PacketCodec<RegistryByteBuf, ServerConfigPayload> CODEC =
-            PacketCodec.tuple(PacketCodecs.STRING, ServerConfigPayload::json, ServerConfigPayload::new);
+public record ServerConfigPayload(String json) implements CustomPacketPayload {
+    public static final Type<ServerConfigPayload> ID = new Type<>(Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "server_config"));
+    public static final StreamCodec<RegistryFriendlyByteBuf, ServerConfigPayload> CODEC =
+            StreamCodec.composite(ByteBufCodecs.STRING_UTF8, ServerConfigPayload::json, ServerConfigPayload::new);
 
     @Override
-    public Id<? extends CustomPayload> getId() {
+    public Type<? extends CustomPacketPayload> type() {
         return ID;
     }
 }

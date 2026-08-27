@@ -4,12 +4,12 @@ import fr.isaac.customrecipe.ConfigLoader;
 import fr.isaac.customrecipe.ModConfig;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.MultilineTextWidget;
-import net.minecraft.client.input.KeyInput;
-import net.minecraft.text.Text;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.MultiLineTextWidget;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.network.chat.Component;
 
 @Environment(EnvType.CLIENT)
 public class WelcomeScreen extends Screen {
@@ -21,7 +21,7 @@ public class WelcomeScreen extends Screen {
     private final Screen returnTo;
 
     public WelcomeScreen(Screen returnTo) {
-        super(Text.literal("Welcome to Custom Recipe!"));
+        super(Component.literal("Welcome to Custom Recipe!"));
         this.returnTo = returnTo;
     }
 
@@ -41,10 +41,10 @@ public class WelcomeScreen extends Screen {
         int btnX  = cx - btnW / 2;
 
         // ── Titre en haut à gauche du panel ─────────────────────────────
-        MultilineTextWidget titleW = new MultilineTextWidget(lx, py + 8, title, textRenderer);
+        MultiLineTextWidget titleW = new MultiLineTextWidget(lx, py + 8, title, font);
         titleW.setMaxWidth(inner);
         titleW.setMaxRows(1);
-        addDrawableChild(titleW);
+        addRenderableWidget(titleW);
 
         // ── Description ──────────────────────────────────────────────────
         addLine(lx, py + 28, inner,
@@ -60,29 +60,29 @@ public class WelcomeScreen extends Screen {
                 0xFFEE88);
 
         // ── Boutons de navigation ────────────────────────────────────────
-        addDrawableChild(ButtonWidget.builder(
-                Text.literal("\u25b8  Built-in Recipes"),
+        addRenderableWidget(Button.builder(
+                Component.literal("\u25b8  Built-in Recipes"),
                 b -> {
                     dismiss();
                     ConfigScreen cs = configScreen();
-                    client.setScreen(new BuiltinRecipesScreen(cs));
+                    minecraft.gui.setScreen(new BuiltinRecipesScreen(cs));
                 }
-        ).dimensions(btnX, py + 100, btnW, 20).build());
+        ).bounds(btnX, py + 100, btnW, 20).build());
 
-        addDrawableChild(ButtonWidget.builder(
-                Text.literal("\u25b8  Create a Recipe"),
+        addRenderableWidget(Button.builder(
+                Component.literal("\u25b8  Create a Recipe"),
                 b -> {
                     dismiss();
                     ConfigScreen cs = configScreen();
-                    client.setScreen(new RecipeBuilderScreen(cs));
+                    minecraft.gui.setScreen(new RecipeBuilderScreen(cs));
                 }
-        ).dimensions(btnX, py + 124, btnW, 20).build());
+        ).bounds(btnX, py + 124, btnW, 20).build());
 
         // ── Dismiss ──────────────────────────────────────────────────────
-        addDrawableChild(ButtonWidget.builder(
-                Text.literal("\u2713  Got it, don't show again"),
-                b -> { dismiss(); client.setScreen(returnTo); }
-        ).dimensions(btnX, py + 152, btnW, 20).build());
+        addRenderableWidget(Button.builder(
+                Component.literal("\u2713  Got it, don't show again"),
+                b -> { dismiss(); minecraft.gui.setScreen(returnTo); }
+        ).bounds(btnX, py + 152, btnW, 20).build());
     }
 
     /** Retourne ou crée un ConfigScreen pour la navigation. */
@@ -93,11 +93,11 @@ public class WelcomeScreen extends Screen {
 
     /** Ajoute un bloc de texte left-aligné avec maxWidth. */
     private void addLine(int x, int y, int maxW, String text, int color) {
-        MultilineTextWidget w = new MultilineTextWidget(x, y,
-                Text.literal(text).withColor(color), textRenderer);
+        MultiLineTextWidget w = new MultiLineTextWidget(x, y,
+                Component.literal(text).withColor(color), font);
         w.setMaxWidth(maxW);
         w.setMaxRows(2);
-        addDrawableChild(w);
+        addRenderableWidget(w);
     }
 
     /** Sauvegarde seen_welcome = true pour ne plus afficher cet écran. */
@@ -108,7 +108,7 @@ public class WelcomeScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
         // Fond bleuté distinctif
         ctx.fillGradient(0, 0, width, height, 0xD0101828, 0xE0101828);
 
@@ -119,25 +119,25 @@ public class WelcomeScreen extends Screen {
         // Séparateur sous le titre
         ctx.fill(px + 8, py + 21, px + pw - 8, py + 22, 0x554466CC);
 
-        super.render(ctx, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
     }
 
     @Override
-    public boolean keyPressed(KeyInput k) {
+    public boolean keyPressed(KeyEvent k) {
         if (k.key() == 256) { // Escape → dismiss
             dismiss();
-            client.setScreen(returnTo);
+            minecraft.gui.setScreen(returnTo);
             return true;
         }
         return super.keyPressed(k);
     }
 
-    private void drawBox(DrawContext ctx, int x, int y, int w, int h, int c) {
-        ctx.drawHorizontalLine(x, x + w - 1, y, c);
-        ctx.drawHorizontalLine(x, x + w - 1, y + h - 1, c);
-        ctx.drawVerticalLine(x, y, y + h - 1, c);
-        ctx.drawVerticalLine(x + w - 1, y, y + h - 1, c);
+    private void drawBox(GuiGraphicsExtractor ctx, int x, int y, int w, int h, int c) {
+        ctx.horizontalLine(x, x + w - 1, y, c);
+        ctx.horizontalLine(x, x + w - 1, y + h - 1, c);
+        ctx.verticalLine(x, y, y + h - 1, c);
+        ctx.verticalLine(x + w - 1, y, y + h - 1, c);
     }
 
-    @Override public boolean shouldPause() { return false; }
+    @Override public boolean isPauseScreen() { return false; }
 }

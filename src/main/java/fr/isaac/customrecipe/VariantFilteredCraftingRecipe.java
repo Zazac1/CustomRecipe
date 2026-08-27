@@ -1,19 +1,16 @@
 package fr.isaac.customrecipe;
 
-import net.minecraft.item.ItemStack;
-import net.minecraft.recipe.CraftingRecipe;
-import net.minecraft.recipe.IngredientPlacement;
-import net.minecraft.recipe.RecipeSerializer;
-import net.minecraft.recipe.book.CraftingRecipeCategory;
-import net.minecraft.recipe.display.RecipeDisplay;
-import net.minecraft.recipe.input.CraftingRecipeInput;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
-
 import java.util.List;
 import java.util.Set;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CraftingBookCategory;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.PlacementInfo;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.item.crafting.display.RecipeDisplay;
+import net.minecraft.world.level.Level;
 
 /** Keeps the original recipe but rejects configured material variants at craft time. */
 public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
@@ -28,19 +25,19 @@ public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
     public CraftingRecipe delegate() { return delegate; }
 
     @Override
-    public boolean matches(CraftingRecipeInput input, World world) {
+    public boolean matches(CraftingInput input, Level world) {
         if (!delegate.matches(input, world)) return false;
-        return input.getStacks().stream()
+        return input.items().stream()
                 .filter(stack -> !stack.isEmpty())
-                .map(stack -> Registries.ITEM.getId(stack.getItem()).toString())
+                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
                 .noneMatch(blockedMaterials::contains);
     }
 
-    @Override public ItemStack craft(CraftingRecipeInput input, RegistryWrapper.WrapperLookup registries) { return delegate.craft(input, registries); }
+    @Override public ItemStack assemble(CraftingInput input) { return delegate.assemble(input); }
     @Override public RecipeSerializer<? extends CraftingRecipe> getSerializer() { return delegate.getSerializer(); }
-    @Override public CraftingRecipeCategory getCategory() { return delegate.getCategory(); }
-    @Override public IngredientPlacement getIngredientPlacement() { return delegate.getIngredientPlacement(); }
-    @Override public String getGroup() { return delegate.getGroup(); }
+    @Override public CraftingBookCategory category() { return delegate.category(); }
+    @Override public PlacementInfo placementInfo() { return delegate.placementInfo(); }
+    @Override public String group() { return delegate.group(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }
-    @Override public List<RecipeDisplay> getDisplays() { return delegate.getDisplays(); }
+    @Override public List<RecipeDisplay> display() { return delegate.display(); }
 }

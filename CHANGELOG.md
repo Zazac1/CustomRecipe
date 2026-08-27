@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.3+26.2
+
+### Added
+
+- Fabric support for Minecraft 26.2.
+- **Known by default** option for custom recipes, which adds them silently to every player's recipe book.
+- Recipe-book grouping for custom recipes that use the same crafting grid.
+
+### Improved
+
+- Updated the vanilla recipe browser for 26.2 recipe formats, item components, and material tags.
+- Custom recipes now reload immediately in singleplayer after saving.
+
+### Fixed
+
+- Restored custom recipe loading during 26.2 server startup.
+- Fixed recipe previews for recent vanilla crafting formats.
+- Restored item-search suggestions when clicking back into the creation field.
+
 ## 1.1.2+1.21.11
 
 ### Changed

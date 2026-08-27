@@ -3,19 +3,18 @@ package fr.isaac.customrecipe.client;
 import fr.isaac.customrecipe.CustomRecipeEntry;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.MultilineTextWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.input.KeyInput;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.MultiLineTextWidget;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -34,6 +33,7 @@ public class RecipeBuilderScreen extends Screen {
     private String resultItemId   = "";
     private int    resultCount    = 1;
     private boolean shaped        = false;
+    private boolean knownByDefault = false;
     /** -2 = nothing selected, -1 = result slot, 0-8 = grid slot */
     private int selectedSlot      = -2;
 
@@ -43,10 +43,10 @@ public class RecipeBuilderScreen extends Screen {
     private int            restoreFocus  = 0; // 1 = itemField
 
     // rebuilt each init
-    private TextFieldWidget itemField;
+    private EditBox itemField;
 
     public RecipeBuilderScreen(ConfigScreen parent) {
-        super(Text.literal("Create a Recipe"));
+        super(Component.literal("Create a Recipe"));
         this.parent = parent;
         Arrays.fill(slotItems, "");
     }
@@ -76,7 +76,7 @@ public class RecipeBuilderScreen extends Screen {
     @Override
     protected void init() {
         // Background fills + grid + result slot drawn via addDrawable
-        addDrawable((ctx, mx, my, d) -> renderFills(ctx, mx, my));
+        addRenderableOnly((ctx, mx, my, d) -> renderFills(ctx, mx, my));
 
         // ── Left panel ───────────────────────────────────────────────────
 
@@ -86,23 +86,23 @@ public class RecipeBuilderScreen extends Screen {
             case -1 -> "Result item:";
             default -> "Slot " + (selectedSlot + 1) + ":";
         };
-        addDrawableChild(makeLabel(leftX(), slotLabelY(), slotLabel, 0xCCCCCC));
+        addRenderableWidget(makeLabel(leftX(), slotLabelY(), slotLabel, 0xCCCCCC));
 
         // Item search field
-        itemField = addDrawableChild(new TextFieldWidget(
-                textRenderer, leftX(), fieldY(), leftW(), 14, Text.literal("item")));
-        itemField.setPlaceholder(Text.literal("Search item…"));
+        itemField = addRenderableWidget(new EditBox(
+                font, leftX(), fieldY(), leftW(), 14, Component.literal("item")));
+        itemField.setHint(Component.literal("Search item…"));
         itemField.setMaxLength(100);
-        itemField.setText(itemFieldText);
-        itemField.setChangedListener(s -> { itemFieldText = s; restoreFocus = 1; onItemTyped(s); });
+        itemField.setValue(itemFieldText);
+        itemField.setResponder(s -> { itemFieldText = s; restoreFocus = 1; onItemTyped(s); });
 
         // Clear-slot button (shown when selected slot has an item)
         if (selectedSlot != -2) {
             String cur = selectedSlot == -1 ? resultItemId : slotItems[selectedSlot];
             if (cur != null && !cur.isEmpty()) {
-                addDrawableChild(ButtonWidget.builder(Text.literal("✕"),
+                addRenderableWidget(Button.builder(Component.literal("✕"),
                         b -> clearSelected()
-                ).dimensions(leftX() + leftW() - 14, fieldY(), 14, 14).build());
+                ).bounds(leftX() + leftW() - 14, fieldY(), 14, 14).build());
             }
         }
 
@@ -110,47 +110,53 @@ public class RecipeBuilderScreen extends Screen {
         for (int i = 0; i < itemSugg.size(); i++) {
             String[] s = itemSugg.get(i);
             int ry = suggY() + i * SUGG_H;
-            addDrawableChild(makeLabel(leftX() + 20, ry + 4, shortId(s[0]), 0xCCCCCC));
+            addRenderableWidget(makeLabel(leftX() + 20, ry + 4, shortId(s[0]), 0xCCCCCC));
         }
 
         // ── Right panel ──────────────────────────────────────────────────
 
         // Arrow between grid and result
-        MultilineTextWidget arrow = new MultilineTextWidget(
+        MultiLineTextWidget arrow = new MultiLineTextWidget(
                 gridX() + 3 * SLOT + 2, gridY() + SLOT + (SLOT - 8) / 2,
-                Text.literal("→"), textRenderer);
+                Component.literal("→"), font);
         arrow.setMaxWidth(10);
         arrow.setMaxRows(1);
-        addDrawableChild(arrow);
+        addRenderableWidget(arrow);
 
         // Result count label + controls
         int countY = gridY() + 3 * SLOT + 10;
-        addDrawableChild(makeRightLabel(rightX(), countY, "Result ×" + resultCount + ":", 0xCCCCCC));
+        addRenderableWidget(makeRightLabel(rightX(), countY, "Result ×" + resultCount + ":", 0xCCCCCC));
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("−"),
-                b -> { if (resultCount > 1) { resultCount--; clearAndInit(); } }
-        ).dimensions(rightX() + 78, countY - 1, 14, 14).build());
+        addRenderableWidget(Button.builder(Component.literal("−"),
+                b -> { if (resultCount > 1) { resultCount--; rebuildWidgets(); } }
+        ).bounds(rightX() + 78, countY - 1, 14, 14).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("+"),
-                b -> { if (resultCount < 64) { resultCount++; clearAndInit(); } }
-        ).dimensions(rightX() + 94, countY - 1, 14, 14).build());
+        addRenderableWidget(Button.builder(Component.literal("+"),
+                b -> { if (resultCount < 64) { resultCount++; rebuildWidgets(); } }
+        ).bounds(rightX() + 94, countY - 1, 14, 14).build());
 
         // Shaped / Shapeless toggle
         int modeY = countY + 18;
-        addDrawableChild(ButtonWidget.builder(
-                shaped ? Text.literal("Mode: Shaped").withColor(0xFFD700)
-                       : Text.literal("Mode: Shapeless").withColor(0x88FFFF),
-                b -> { shaped = !shaped; clearAndInit(); }
-        ).dimensions(rightX(), modeY, 110, 14).build());
+        addRenderableWidget(Button.builder(
+                shaped ? Component.literal("Mode: Shaped").withColor(0xFFD700)
+                       : Component.literal("Mode: Shapeless").withColor(0x88FFFF),
+                b -> { shaped = !shaped; rebuildWidgets(); }
+        ).bounds(rightX(), modeY, 110, 14).build());
+
+        addRenderableWidget(Button.builder(
+                knownByDefault ? Component.literal("Known by default: ON").withColor(0x55FF55)
+                               : Component.literal("Known by default: OFF").withColor(0xFFCC55),
+                b -> { knownByDefault = !knownByDefault; rebuildWidgets(); }
+        ).bounds(rightX(), modeY + 18, 140, 14).build());
 
         // ── Bottom buttons ────────────────────────────────────────────────
-        addDrawableChild(ButtonWidget.builder(Text.literal("Cancel"),
-                b -> client.setScreen(parent)
-        ).dimensions(width / 2 - 102, height - 22, 98, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Cancel"),
+                b -> minecraft.gui.setScreen(parent)
+        ).bounds(width / 2 - 102, height - 22, 98, 18).build());
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("✓ Add Recipe"),
+        addRenderableWidget(Button.builder(Component.literal("✓ Add Recipe"),
                 b -> confirm()
-        ).dimensions(width / 2 + 4, height - 22, 98, 18).build());
+        ).bounds(width / 2 + 4, height - 22, 98, 18).build());
 
         // Restore focus after clearAndInit
         if (restoreFocus == 1 && itemField != null) {
@@ -163,11 +169,11 @@ public class RecipeBuilderScreen extends Screen {
 
     private void onItemTyped(String q) {
         if (q.isBlank()) {
-            itemSugg = Registries.ITEM.getEntrySet().stream()
+            itemSugg = BuiltInRegistries.ITEM.entrySet().stream()
                     .filter(e -> e.getValue() != Items.AIR)
                     .map(e -> new String[]{
-                            e.getKey().getValue().toString(),
-                            toDisplayName(e.getKey().getValue().toString())
+                            e.getKey().identifier().toString(),
+                            toDisplayName(e.getKey().identifier().toString())
                     })
                     .sorted(Comparator.comparing(s -> s[1]))
                     .limit(MAX_S)
@@ -175,17 +181,17 @@ public class RecipeBuilderScreen extends Screen {
         } else {
             String ql = q.toLowerCase(Locale.ROOT);
             itemSugg = new ArrayList<>();
-            for (var entry : Registries.ITEM.getEntrySet()) {
+            for (var entry : BuiltInRegistries.ITEM.entrySet()) {
                 if (entry.getValue() == Items.AIR) continue;
-                String id = entry.getKey().getValue().toString();
-                String path = entry.getKey().getValue().getPath();
+                String id = entry.getKey().identifier().toString();
+                String path = entry.getKey().identifier().getPath();
                 if (id.contains(ql) || path.contains(ql)) {
                     itemSugg.add(new String[]{id, toDisplayName(id)});
                     if (itemSugg.size() >= MAX_S) break;
                 }
             }
         }
-        clearAndInit();
+        rebuildWidgets();
     }
 
     private void selectItem(String[] s) {
@@ -196,7 +202,7 @@ public class RecipeBuilderScreen extends Screen {
         }
         itemFieldText = s[1].toLowerCase(Locale.ROOT).replace(' ', '_');
         itemSugg      = new ArrayList<>();
-        clearAndInit();
+        rebuildWidgets();
     }
 
     private void clearSelected() {
@@ -207,12 +213,12 @@ public class RecipeBuilderScreen extends Screen {
         }
         itemFieldText = "";
         itemSugg      = new ArrayList<>();
-        clearAndInit();
+        rebuildWidgets();
     }
 
     // ── rendering ─────────────────────────────────────────────────────────
 
-    private void renderFills(DrawContext ctx, int mx, int my) {
+    private void renderFills(GuiGraphicsExtractor ctx, int mx, int my) {
         int gx = gridX(), gy = gridY();
 
         // 3×3 grid slots
@@ -227,9 +233,9 @@ public class RecipeBuilderScreen extends Screen {
                         sel ? 0xFF4488FF : 0xFF555555);
                 String itemId = slotItems[slot];
                 if (itemId != null && !itemId.isEmpty()) {
-                    var item = Registries.ITEM.get(Identifier.tryParse(itemId));
+                    var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemId));
                     if (item != null && item != Items.AIR)
-                        ctx.drawItem(new ItemStack(item), sx + 2, sy + 2);
+                        ctx.item(ClientItemStacks.fromItem(item), sx + 2, sy + 2);
                 }
             }
         }
@@ -242,9 +248,9 @@ public class RecipeBuilderScreen extends Screen {
         drawBox(ctx, rx, ry, SLOT, SLOT,
                 resSel ? 0xFF44BB44 : 0xFF908830);
         if (!resultItemId.isEmpty()) {
-            var item = Registries.ITEM.get(Identifier.tryParse(resultItemId));
+            var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(resultItemId));
             if (item != null && item != Items.AIR)
-                ctx.drawItem(new ItemStack(item), rx + 2, ry + 2);
+                ctx.item(ClientItemStacks.fromItem(item), rx + 2, ry + 2);
         }
 
         // Suggestion list background + icons
@@ -256,17 +262,17 @@ public class RecipeBuilderScreen extends Screen {
                 int ry2 = sy + i * SUGG_H;
                 if (mx >= leftX() && mx < leftX() + leftW() && my >= ry2 && my < ry2 + SUGG_H)
                     ctx.fill(leftX() + 1, ry2, leftX() + leftW() - 1, ry2 + SUGG_H, 0x553355BB);
-                var item2 = Registries.ITEM.get(Identifier.tryParse(itemSugg.get(i)[0]));
+                var item2 = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemSugg.get(i)[0]));
                 if (item2 != null && item2 != Items.AIR)
-                    ctx.drawItem(new ItemStack(item2), leftX() + 2, ry2);
+                    ctx.item(ClientItemStacks.fromItem(item2), leftX() + 2, ry2);
             }
         }
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
-        super.render(ctx, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
         if (itemField != null)
             drawBox(ctx, leftX(), fieldY(), leftW(), 14,
                     itemField.isFocused() ? 0xFF5577DD : 0xFF404050);
@@ -277,8 +283,8 @@ public class RecipeBuilderScreen extends Screen {
                 int ry = sy + i * SUGG_H;
                 if (mouseX >= leftX() && mouseX < leftX() + leftW()
                         && mouseY >= ry && mouseY < ry + SUGG_H) {
-                    ctx.drawOrderedTooltip(textRenderer,
-                            List.of(Text.literal(itemSugg.get(i)[0]).asOrderedText()),
+                    ctx.setTooltipForNextFrame(font,
+                            List.of(Component.literal(itemSugg.get(i)[0]).getVisualOrderText()),
                             mouseX, mouseY);
                     break;
                 }
@@ -289,7 +295,7 @@ public class RecipeBuilderScreen extends Screen {
     // ── mouse events ──────────────────────────────────────────────────────
 
     @Override
-    public boolean mouseClicked(Click click, boolean focused) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
         double mx = click.x(), my = click.y();
         int gx = gridX(), gy = gridY();
 
@@ -302,7 +308,7 @@ public class RecipeBuilderScreen extends Screen {
                     selectedSlot = slot;
                     // Conserver itemFieldText et itemSugg — l'utilisateur n'a pas à reécrire
                     restoreFocus = 1;
-                    clearAndInit();
+                    rebuildWidgets();
                     return true;
                 }
             }
@@ -314,7 +320,7 @@ public class RecipeBuilderScreen extends Screen {
             selectedSlot = -1;
             // Conserver itemFieldText et itemSugg
             restoreFocus = 1;
-            clearAndInit();
+            rebuildWidgets();
             return true;
         }
 
@@ -323,6 +329,13 @@ public class RecipeBuilderScreen extends Screen {
         if (itemField != null
                 && mx >= leftX() && mx < leftX() + leftW()
                 && my >= fieldY() && my < fieldY() + 14) {
+            // Reopen the autocomplete even when no character was typed after
+            // changing slots. Other versions already keep this search flow.
+            if (itemSugg.isEmpty() && !itemFieldText.isBlank()) {
+                restoreFocus = 1;
+                onItemTyped(itemFieldText);
+                return true;
+            }
             restoreFocus = 1;
             return super.mouseClicked(click, focused);
         }
@@ -344,9 +357,9 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyInput k) {
+    public boolean keyPressed(KeyEvent k) {
         if (k.key() == 256) { // Escape
-            client.setScreen(parent);
+            minecraft.gui.setScreen(parent);
             return true;
         }
         return super.keyPressed(k);
@@ -366,6 +379,7 @@ public class RecipeBuilderScreen extends Screen {
         // A ModMenu recipe is a local draft. Recipes created from the OP editor
         // are explicitly added to that server immediately.
         entry.server_enabled = parent.isServerManaged() ? Boolean.TRUE : Boolean.FALSE;
+        entry.known_by_default = knownByDefault;
         entry.result = resultItemId;
         entry.count  = Math.max(1, resultCount);
 
@@ -398,7 +412,7 @@ public class RecipeBuilderScreen extends Screen {
         }
 
         parent.recipes.add(entry);
-        client.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────
@@ -420,26 +434,26 @@ public class RecipeBuilderScreen extends Screen {
         return id.startsWith("minecraft:") ? id.substring(10) : id;
     }
 
-    private MultilineTextWidget makeLabel(int x, int y, String text, int color) {
-        MultilineTextWidget w = new MultilineTextWidget(x, y, Text.literal(text).withColor(color), textRenderer);
+    private MultiLineTextWidget makeLabel(int x, int y, String text, int color) {
+        MultiLineTextWidget w = new MultiLineTextWidget(x, y, Component.literal(text).withColor(color), font);
         w.setMaxWidth(leftW());
         w.setMaxRows(1);
         return w;
     }
 
-    private MultilineTextWidget makeRightLabel(int x, int y, String text, int color) {
-        MultilineTextWidget w = new MultilineTextWidget(x, y, Text.literal(text).withColor(color), textRenderer);
+    private MultiLineTextWidget makeRightLabel(int x, int y, String text, int color) {
+        MultiLineTextWidget w = new MultiLineTextWidget(x, y, Component.literal(text).withColor(color), font);
         w.setMaxWidth(width - x - PAD);
         w.setMaxRows(1);
         return w;
     }
 
-    private void drawBox(DrawContext ctx, int x, int y, int w, int h, int c) {
-        ctx.drawHorizontalLine(x, x + w - 1, y, c);
-        ctx.drawHorizontalLine(x, x + w - 1, y + h - 1, c);
-        ctx.drawVerticalLine(x, y, y + h - 1, c);
-        ctx.drawVerticalLine(x + w - 1, y, y + h - 1, c);
+    private void drawBox(GuiGraphicsExtractor ctx, int x, int y, int w, int h, int c) {
+        ctx.horizontalLine(x, x + w - 1, y, c);
+        ctx.horizontalLine(x, x + w - 1, y + h - 1, c);
+        ctx.verticalLine(x, y, y + h - 1, c);
+        ctx.verticalLine(x + w - 1, y, y + h - 1, c);
     }
 
-    @Override public boolean shouldPause() { return false; }
+    @Override public boolean isPauseScreen() { return false; }
 }

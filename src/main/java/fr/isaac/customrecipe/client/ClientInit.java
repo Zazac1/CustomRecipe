@@ -12,8 +12,8 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.minecraft.client.gui.screens.TitleScreen;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.gui.screen.TitleScreen;
 
 @Environment(EnvType.CLIENT)
 public class ClientInit implements ClientModInitializer {
@@ -27,33 +27,33 @@ public class ClientInit implements ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(ServerConfigPayload.ID, (payload, context) -> {
             var config = ConfigLoader.fromJson(payload.json());
             if (config == null) {
-                context.player().sendMessage(net.minecraft.text.Text.literal("[Custom Recipe] Invalid server config received."), false);
+                context.player().sendSystemMessage(net.minecraft.network.chat.Component.literal("[Custom Recipe] Invalid server config received."));
                 return;
             }
             int imported = mergeLocalRecipes(config);
             if (imported > 0) {
-                context.player().sendMessage(net.minecraft.text.Text.literal(
-                        "[Custom Recipe] " + imported + " local recipe(s) ready to add to the server."), false);
+                context.player().sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                        "[Custom Recipe] " + imported + " local recipe(s) ready to add to the server."));
             }
-            context.client().setScreen(new ConfigScreen(context.client().currentScreen, config,
+            context.client().gui.setScreen(new ConfigScreen(context.client().gui.screen(), config,
                     "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipePagePayload.ID, (payload, context) -> {
             VanillaRecipePage page = GSON.fromJson(payload.json(), VanillaRecipePage.class);
-            if (page != null && context.client().currentScreen instanceof VanillaRecipesScreen screen) {
+            if (page != null && context.client().gui.screen() instanceof VanillaRecipesScreen screen) {
                 screen.applyResult(page);
             }
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsPayload.ID, (payload, context) -> {
             VanillaRecipeDetails details = GSON.fromJson(payload.json(), VanillaRecipeDetails.class);
-            if (details != null && context.client().currentScreen instanceof VanillaRecipeDetailsScreen screen) {
+            if (details != null && context.client().gui.screen() instanceof VanillaRecipeDetailsScreen screen) {
                 screen.applyDetails(details);
             }
         });
         ScreenEvents.AFTER_INIT.register((client, screen, sw, sh) -> {
             if (!shown && screen instanceof TitleScreen && !ConfigLoader.get().seen_welcome) {
                 shown = true;
-                client.execute(() -> client.setScreen(new WelcomeScreen(screen)));
+                client.execute(() -> client.gui.setScreen(new WelcomeScreen(screen)));
             }
         });
     }
@@ -97,6 +97,7 @@ public class ClientInit implements ClientModInitializer {
         copy.count = source.count;
         copy.enabled = source.enabled;
         copy.server_enabled = Boolean.FALSE;
+        copy.known_by_default = source.known_by_default;
         return copy;
     }
 }
