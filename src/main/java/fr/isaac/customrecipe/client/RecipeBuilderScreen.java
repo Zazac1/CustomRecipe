@@ -32,6 +32,7 @@ public class RecipeBuilderScreen extends Screen {
     private String resultItemId   = "";
     private int    resultCount    = 1;
     private boolean shaped        = false;
+    private boolean knownByDefault = false;
     /** -2 = nothing selected, -1 = result slot, 0-8 = grid slot */
     private int selectedSlot      = -2;
 
@@ -52,11 +53,6 @@ public class RecipeBuilderScreen extends Screen {
     // ── layout helpers ────────────────────────────────────────────────────
 
     private int leftW()  { return Math.min(230, width / 3); }
-    private boolean hasSelectedItem() {
-        if (selectedSlot == -1) return !resultItemId.isEmpty();
-        return selectedSlot >= 0 && selectedSlot < 9 && !slotItems[selectedSlot].isEmpty();
-    }
-    private int fieldW() { return hasSelectedItem() ? leftW() - 16 : leftW(); }
     private int leftX()  { return PAD; }
     private int rightX() { return leftX() + leftW() + PAD; }
 
@@ -93,18 +89,11 @@ public class RecipeBuilderScreen extends Screen {
 
         // Item search field
         itemField = addDrawableChild(new TextFieldWidget(
-                textRenderer, leftX(), fieldY(), fieldW(), 14, Text.literal("item")));
+                textRenderer, leftX(), fieldY(), leftW(), 14, Text.literal("item")));
         itemField.setPlaceholder(Text.literal("Search item…"));
         itemField.setMaxLength(100);
         itemField.setText(itemFieldText);
         itemField.setChangedListener(s -> { itemFieldText = s; restoreFocus = 1; onItemTyped(s); });
-
-        // Clear-slot button (shown when selected slot has an item)
-        if (hasSelectedItem()) {
-                addDrawableChild(ButtonWidget.builder(Text.literal("✕"),
-                        b -> clearSelected()
-                ).dimensions(leftX() + leftW() - 14, fieldY(), 14, 14).build());
-        }
 
         // Autocomplete suggestions (label widgets)
         for (int i = 0; i < itemSugg.size(); i++) {
@@ -142,6 +131,12 @@ public class RecipeBuilderScreen extends Screen {
                        : Text.literal("Mode: Shapeless").styled(s -> s.withColor(0x88FFFF)),
                 b -> { shaped = !shaped; clearAndInit(); }
         ).dimensions(rightX(), modeY, 110, 14).build());
+
+        addDrawableChild(ButtonWidget.builder(
+                knownByDefault ? Text.literal("Known by default: ON").styled(s -> s.withColor(0x55FF55))
+                               : Text.literal("Known by default: OFF").styled(s -> s.withColor(0xFFCC55)),
+                b -> { knownByDefault = !knownByDefault; clearAndInit(); }
+        ).dimensions(rightX(), modeY + 18, 140, 14).build());
 
         // ── Bottom buttons ────────────────────────────────────────────────
         addDrawableChild(ButtonWidget.builder(Text.literal("Cancel"),
@@ -195,17 +190,6 @@ public class RecipeBuilderScreen extends Screen {
             slotItems[selectedSlot] = s[0];
         }
         itemFieldText = s[1].toLowerCase(Locale.ROOT).replace(' ', '_');
-        itemSugg      = new ArrayList<>();
-        clearAndInit();
-    }
-
-    private void clearSelected() {
-        if (selectedSlot == -1) {
-            resultItemId = "";
-        } else if (selectedSlot >= 0 && selectedSlot < 9) {
-            slotItems[selectedSlot] = "";
-        }
-        itemFieldText = "";
         itemSugg      = new ArrayList<>();
         clearAndInit();
     }
@@ -268,7 +252,7 @@ public class RecipeBuilderScreen extends Screen {
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
         super.render(ctx, mouseX, mouseY, delta);
         if (itemField != null)
-            drawBox(ctx, leftX(), fieldY(), fieldW(), 14,
+            drawBox(ctx, leftX(), fieldY(), leftW(), 14,
                     itemField.isFocused() ? 0xFF5577DD : 0xFF404050);
         // Tooltip de l'ID complet au survol d'une suggestion
         if (!itemSugg.isEmpty()) {
@@ -320,7 +304,7 @@ public class RecipeBuilderScreen extends Screen {
         // Click on text field — laisser super.mouseClicked gérer
         // pour que la sélection par drag fonctionne nativement
         if (itemField != null
-            && mx >= leftX() && mx < leftX() + fieldW()
+            && mx >= leftX() && mx < leftX() + leftW()
                 && my >= fieldY() && my < fieldY() + 14) {
             restoreFocus = 1;
             return super.mouseClicked(mx, my, button);
@@ -365,6 +349,7 @@ public class RecipeBuilderScreen extends Screen {
         // A ModMenu recipe is a local draft. Recipes created from the OP editor
         // are explicitly added to that server immediately.
         entry.server_enabled = parent.isServerManaged() ? Boolean.TRUE : null;
+        entry.known_by_default = knownByDefault;
         entry.result = resultItemId;
         entry.count  = Math.max(1, resultCount);
 

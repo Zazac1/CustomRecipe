@@ -104,6 +104,7 @@ public class ClientInit implements ClientModInitializer {
         copy.count = source.count;
         copy.enabled = source.enabled;
         copy.server_enabled = Boolean.FALSE;
+        copy.known_by_default = source.known_by_default;
         return copy;
     }
 }

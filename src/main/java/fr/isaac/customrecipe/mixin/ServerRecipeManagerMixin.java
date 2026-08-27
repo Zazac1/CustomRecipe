@@ -32,23 +32,23 @@ public abstract class ServerRecipeManagerMixin {
         int index = 0;
         for (CustomRecipeEntry entry : config.custom_recipes) {
             if (!Boolean.FALSE.equals(entry.server_enabled) && !Boolean.FALSE.equals(entry.enabled)) {
-                Recipe<?> recipe = build(entry, index); if (recipe != null) recipes.add(recipe);
+                Recipe<?> recipe = build(entry, recipeBookGroup(entry)); if (recipe != null) recipes.add(recipe);
             }
             index++;
         }
         setRecipes(recipes);
     }
 
-    private Recipe<?> build(CustomRecipeEntry entry, int index) {
+    private Recipe<?> build(CustomRecipeEntry entry, String recipeGroup) {
         if (entry == null || entry.result == null) return null;
         Identifier resultId = Identifier.tryParse(entry.result);
         if (resultId == null || !Registries.ITEM.containsId(resultId)) return null;
-        Identifier id = new Identifier(CustomRecipeMod.MOD_ID, "custom/" + entry.result.replace(':','_').replace('/','_') + "_" + index);
+        Identifier id = entry.serverRecipeId();
         ItemStack result = new ItemStack(Registries.ITEM.get(resultId), Math.max(1, entry.count));
         if (!"shaped".equalsIgnoreCase(entry.type)) {
             List<Ingredient> list = new ArrayList<>();
             for (String raw : entry.ingredients) { Identifier item = Identifier.tryParse(raw); if (item == null || !Registries.ITEM.containsId(item)) return null; list.add(Ingredient.ofItems(Registries.ITEM.get(item))); }
-            return list.isEmpty() ? null : new ShapelessRecipe(id, CustomRecipeMod.MOD_ID, CraftingRecipeCategory.MISC, result, DefaultedList.copyOf(Ingredient.EMPTY, list.toArray(new Ingredient[0])));
+            return list.isEmpty() ? null : new ShapelessRecipe(id, recipeGroup, CraftingRecipeCategory.MISC, result, DefaultedList.copyOf(Ingredient.EMPTY, list.toArray(new Ingredient[0])));
         }
         if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
         int width = entry.pattern.stream().mapToInt(String::length).max().orElse(0), height = entry.pattern.size();
@@ -61,6 +61,19 @@ public abstract class ServerRecipeManagerMixin {
             if (item == null || !Registries.ITEM.containsId(item)) return null;
             input.set(y * width + x, Ingredient.ofItems(Registries.ITEM.get(item)));
         }
-        return new ShapedRecipe(id, CustomRecipeMod.MOD_ID, CraftingRecipeCategory.MISC, width, height, input, result);
+        return new ShapedRecipe(id, recipeGroup, CraftingRecipeCategory.MISC, width, height, input, result);
+    }
+
+    private String recipeBookGroup(CustomRecipeEntry entry) {
+        String signature;
+        if ("shaped".equalsIgnoreCase(entry.type)) {
+            signature = "shaped:" + String.join("/", entry.pattern == null ? List.of() : entry.pattern)
+                    + ":" + (entry.keys == null ? Map.of() : new TreeMap<>(entry.keys));
+        } else {
+            List<String> ingredients = new ArrayList<>(entry.ingredients == null ? List.of() : entry.ingredients);
+            ingredients.sort(String::compareTo);
+            signature = "shapeless:" + String.join(",", ingredients);
+        }
+        return "customrecipe_" + Integer.toUnsignedString(signature.hashCode(), 36);
     }
 }

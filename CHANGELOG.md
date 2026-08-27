@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.3+1.20.1
+
+### Recipe book improvements
+
+- Added the **Known by default** option to custom recipe creation and editing.
+- Recipes marked as known are added silently to the recipe book.
+- Custom recipes with the same inputs are grouped in the green recipe book.
+- Selecting a custom output from a mixed Vanilla/custom group now changes the crafting result immediately.
+- The selected custom output remains active while Shift-crafting.
+
+### Recipe priority and fixes
+
+- Vanilla recipes keep priority when they use the same inputs as a custom recipe.
+- Disabling the Vanilla recipe allows the custom recipe to be crafted.
+- Fixed the 1.20.1 client and dedicated-server startup crash introduced by the recipe-book controls.
+
 ## 1.1.2+1.20.1
 
 ### Added
