@@ -3,7 +3,8 @@
   "package": "fr.isaac.customrecipe.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
-    "ServerRecipeManagerMixin"
+    "ServerRecipeManagerMixin",
+    "CraftingMenuMixin"
   ],
   "injectors": {
     "defaultRequire": 1

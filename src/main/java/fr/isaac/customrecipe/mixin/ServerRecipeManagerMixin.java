@@ -120,10 +120,10 @@ public abstract class ServerRecipeManagerMixin {
             if (built != null) customRecipes.add(built);
         }
 
-        // RecipeManager normally returns the first matching recipe.  Put user
-        // recipes first so a custom recipe is not silently hidden by vanilla.
-        // Their recipe-book group still lets the player pick any alternative.
-        recipes.addAll(0, customRecipes);
+        // RecipeManager normally returns the first matching recipe. Vanilla
+        // recipes remain first, so custom recipes apply only when that vanilla
+        // recipe is disabled. Their custom groups stay available in the book.
+        recipes.addAll(customRecipes);
 
         return RecipeMap.create(recipes);
     }

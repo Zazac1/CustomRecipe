@@ -12,12 +12,14 @@
 
 - Updated the vanilla recipe browser for 26.2 recipe formats, item components, and material tags.
 - Custom recipes now reload immediately in singleplayer after saving.
+- Vanilla recipes keep priority when they use the same inputs as a custom recipe.
 
 ### Fixed
 
 - Restored custom recipe loading during 26.2 server startup.
 - Fixed recipe previews for recent vanilla crafting formats.
 - Restored item-search suggestions when clicking back into the creation field.
+- Fixed Shift-crafting after choosing a custom recipe from the recipe book.
 
 ## 1.1.2+1.21.11
 
