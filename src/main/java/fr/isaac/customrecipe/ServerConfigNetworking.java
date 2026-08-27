@@ -6,6 +6,8 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.item.ItemStack;
@@ -39,6 +41,15 @@ public final class ServerConfigNetworking {
         PayloadTypeRegistry.playC2S().register(VanillaRecipeQueryPayload.ID, VanillaRecipeQueryPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(VanillaRecipeDetailsPayload.ID, VanillaRecipeDetailsPayload.CODEC);
         PayloadTypeRegistry.playC2S().register(VanillaRecipeDetailsQueryPayload.ID, VanillaRecipeDetailsQueryPayload.CODEC);
+
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> awardDefaultRecipes(handler.player, server));
+        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
+            if (success) {
+                for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+                    awardDefaultRecipes(player, server);
+                }
+            }
+        });
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> dispatcher.register(
                 literal("customrecipe")
@@ -90,6 +101,29 @@ public final class ServerConfigNetworking {
             }
         });
 
+    }
+
+    /** Quietly adds enabled defaults to the recipe book without recipe toasts. */
+    private static void awardDefaultRecipes(ServerPlayerEntity player, net.minecraft.server.MinecraftServer server) {
+        List<RecipeEntry<?>> recipes = new ArrayList<>();
+        for (CustomRecipeEntry entry : ConfigLoader.get().custom_recipes) {
+            if (!Boolean.TRUE.equals(entry.known_by_default)
+                    || Boolean.FALSE.equals(entry.enabled)
+                    || (server.isDedicated() && Boolean.FALSE.equals(entry.server_enabled))) {
+                continue;
+            }
+            server.getRecipeManager().get(entry.serverRecipeId()).ifPresent(recipes::add);
+        }
+
+        boolean changed = false;
+        var book = player.getRecipeBook();
+        for (RecipeEntry<?> recipe : recipes) {
+            if (!book.contains(recipe.id())) {
+                book.add(recipe);
+                changed = true;
+            }
+        }
+        if (changed) book.sendInitRecipesPacket(player);
     }
 
     private static int openEditor(ServerCommandSource source) throws CommandSyntaxException {

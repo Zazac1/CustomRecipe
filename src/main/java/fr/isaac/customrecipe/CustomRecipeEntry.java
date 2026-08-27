@@ -1,9 +1,12 @@
 package fr.isaac.customrecipe;
 
+import net.minecraft.util.Identifier;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 /**
  * Represents a single user-created custom crafting recipe.
@@ -45,4 +48,15 @@ public class CustomRecipeEntry {
      * New ModMenu recipes start as {@code false} until an OP adds them.
      */
     public Boolean server_enabled;
+
+    /** Whether every player should know this recipe as soon as they join. */
+    public Boolean known_by_default;
+
+    /** Stable recipe ID shared by reloads and recipe-book unlocks. */
+    public Identifier serverRecipeId() {
+        String source = id == null || id.isBlank() ? result : id;
+        String safeId = source == null ? "recipe"
+                : source.replaceAll("[^a-zA-Z0-9_./-]", "_").toLowerCase(Locale.ROOT);
+        return Identifier.of(CustomRecipeMod.MOD_ID, "custom/" + safeId);
+    }
 }

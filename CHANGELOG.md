@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.4+1.21.1
+
+- Added the **Known by default** option to recipe creation and editing; enabled recipes are silently added to every player's recipe book.
+- Custom recipes with identical inputs now share one recipe-book group and keep the selected output during Shift-crafting.
+- Fixed vanilla ingredient and material-variant previews in the local ModMenu editor for the 1.21 direct ingredient JSON format.
+- Fixed recipe-book output selection: a chosen custom result is no longer replaced by the first matching Vanilla result during crafting-result refreshes.
+- Added a Minecraft-JAR fallback when local recipe resources do not return any craft recipes.
+
 ## 1.1.2+1.21.1
 
 ### Changed

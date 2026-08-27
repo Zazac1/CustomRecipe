@@ -4,6 +4,8 @@ import fr.isaac.customrecipe.ConfigLoader;
 import fr.isaac.customrecipe.CustomRecipeEntry;
 import fr.isaac.customrecipe.CustomRecipeMod;
 import fr.isaac.customrecipe.ModConfig;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.recipe.*;
@@ -74,11 +76,12 @@ public abstract class ServerRecipeManagerMixin {
             // Local ModMenu recipes are drafts until an OP explicitly adds them
             // to the server. Null preserves recipes from configurations made
             // before the server publication state existed.
-            if (Boolean.FALSE.equals(entry.server_enabled) || Boolean.FALSE.equals(entry.enabled)) {
+            boolean dedicatedServer = FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER;
+            if ((dedicatedServer && Boolean.FALSE.equals(entry.server_enabled)) || Boolean.FALSE.equals(entry.enabled)) {
                 idx++;
                 continue;
             }
-            RecipeEntry<?> built = buildCustomRecipe(entry, idx++);
+            RecipeEntry<?> built = buildCustomRecipe(entry, idx++, recipeBookGroup(entry));
             if (built != null) recipes.add(built);
         }
 
@@ -87,7 +90,7 @@ public abstract class ServerRecipeManagerMixin {
 
     // ── dispatch ─────────────────────────────────────────────────────────
 
-    private RecipeEntry<?> buildCustomRecipe(CustomRecipeEntry entry, int idx) {
+    private RecipeEntry<?> buildCustomRecipe(CustomRecipeEntry entry, int idx, String recipeGroup) {
         if (entry == null) return null;
         if (entry.result == null || entry.result.isBlank()) return null;
 
@@ -99,21 +102,19 @@ public abstract class ServerRecipeManagerMixin {
 
         ItemStack result = new ItemStack(Registries.ITEM.get(resultId), Math.max(1, entry.count));
 
-        // Stable recipe key: use result path + index
-        String safeName = entry.result.replace(':', '_').replace('/', '_') + "_" + idx;
-        Identifier key = Identifier.of(CustomRecipeMod.MOD_ID, "custom/" + safeName);
+        Identifier key = entry.serverRecipeId();
 
         if ("shaped".equalsIgnoreCase(entry.type)) {
-            return buildShaped(entry, result, key);
+            return buildShaped(entry, result, key, recipeGroup);
         } else {
-            return buildShapeless(entry, result, key);
+            return buildShapeless(entry, result, key, recipeGroup);
         }
     }
 
     // ── shapeless ─────────────────────────────────────────────────────────
 
     private RecipeEntry<ShapelessRecipe> buildShapeless(CustomRecipeEntry entry, ItemStack result,
-                                                         Identifier key) {
+                                                         Identifier key, String recipeGroup) {
         List<String> rawIngredients = entry.ingredients;
         if (rawIngredients == null || rawIngredients.isEmpty()) return null;
 
@@ -130,7 +131,7 @@ public abstract class ServerRecipeManagerMixin {
         if (ingredients.isEmpty()) return null;
 
         ShapelessRecipe recipe = new ShapelessRecipe(
-                CustomRecipeMod.MOD_ID,
+                recipeGroup,
                 CraftingRecipeCategory.MISC,
                 result,
                 DefaultedList.copyOf(Ingredient.EMPTY, ingredients.toArray(Ingredient[]::new))
@@ -141,7 +142,7 @@ public abstract class ServerRecipeManagerMixin {
     // ── shaped ────────────────────────────────────────────────────────────
 
     private RecipeEntry<ShapedRecipe> buildShaped(CustomRecipeEntry entry, ItemStack result,
-                                                    Identifier key) {
+                                                    Identifier key, String recipeGroup) {
         List<String> pattern = entry.pattern;
         Map<String, String> keysMap = entry.keys;
         if (pattern == null || pattern.isEmpty()) return null;
@@ -170,11 +171,24 @@ public abstract class ServerRecipeManagerMixin {
         if (rawRecipe == null) return null;
 
         ShapedRecipe recipe = new ShapedRecipe(
-                CustomRecipeMod.MOD_ID,
+                recipeGroup,
                 CraftingRecipeCategory.MISC,
                 rawRecipe,
                 result
         );
         return new RecipeEntry<>(key, recipe);
+    }
+
+    private String recipeBookGroup(CustomRecipeEntry entry) {
+        String signature;
+        if ("shaped".equalsIgnoreCase(entry.type)) {
+            signature = "shaped:" + String.join("/", entry.pattern == null ? List.of() : entry.pattern)
+                    + ":" + (entry.keys == null ? Map.of() : new java.util.TreeMap<>(entry.keys));
+        } else {
+            List<String> ingredients = new ArrayList<>(entry.ingredients == null ? List.of() : entry.ingredients);
+            ingredients.sort(String::compareTo);
+            signature = "shapeless:" + String.join(",", ingredients);
+        }
+        return "customrecipe_" + Integer.toUnsignedString(signature.hashCode(), 36);
     }
 }

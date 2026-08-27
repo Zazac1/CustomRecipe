@@ -32,6 +32,7 @@ public class RecipeBuilderScreen extends Screen {
     private String resultItemId   = "";
     private int    resultCount    = 1;
     private boolean shaped        = false;
+    private boolean knownByDefault = false;
     /** -2 = nothing selected, -1 = result slot, 0-8 = grid slot */
     private int selectedSlot      = -2;
 
@@ -140,6 +141,12 @@ public class RecipeBuilderScreen extends Screen {
                        : Text.literal("Mode: Shapeless").withColor(0x88FFFF),
                 b -> { shaped = !shaped; clearAndInit(); }
         ).dimensions(rightX(), modeY, 110, 14).build());
+
+        addDrawableChild(ButtonWidget.builder(
+                knownByDefault ? Text.literal("Known by default: ON").withColor(0x55FF55)
+                               : Text.literal("Known by default: OFF").withColor(0xFFCC55),
+                b -> { knownByDefault = !knownByDefault; clearAndInit(); }
+        ).dimensions(rightX(), modeY + 18, 140, 14).build());
 
         // ── Bottom buttons ────────────────────────────────────────────────
         addDrawableChild(ButtonWidget.builder(Text.literal("Cancel"),
@@ -363,6 +370,7 @@ public class RecipeBuilderScreen extends Screen {
         // A ModMenu recipe is a local draft. Recipes created from the OP editor
         // are explicitly added to that server immediately.
         entry.server_enabled = parent.isServerManaged() ? Boolean.TRUE : Boolean.FALSE;
+        entry.known_by_default = knownByDefault;
         entry.result = resultItemId;
         entry.count  = Math.max(1, resultCount);
 

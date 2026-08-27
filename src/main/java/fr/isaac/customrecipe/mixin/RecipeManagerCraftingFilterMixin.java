@@ -56,6 +56,15 @@ public abstract class RecipeManagerCraftingFilterMixin {
         ModConfig config = ConfigLoader.get();
         if (config.disabled_recipes.isEmpty() && config.disabled_recipe_variants.isEmpty()) return;
 
+        // The recipe book supplies the output explicitly chosen by the player.
+        // Preserve it when it is still allowed instead of replacing it with the
+        // first matching vanilla entry during the result recalculation.
+        if (cachedRecipe != null
+                && !isBlocked(cachedRecipe, input, config)
+                && cachedRecipe.value().matches(input, world)) {
+            cir.setReturnValue(Optional.of(cachedRecipe));
+            return;
+        }
         cir.setReturnValue(findAllowedMatch(type, input, world, config));
     }
 
