@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.4+1.20.1
+
+- Fixed material variants in the local ModMenu editor: vanilla item tags are now resolved from Minecraft data before joining a world.
+- Fixed immediate result refresh after choosing a custom recipe from the green recipe book.
+
 ## 1.1.3+1.20.1
 
 ### Recipe book improvements
