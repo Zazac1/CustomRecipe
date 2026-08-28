@@ -17,13 +17,13 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "fr.isaac.customrecipe.CustomRecipeMod"
+      "fr.zazac1.customrecipe.CustomRecipeMod"
     ],
     "client": [
-      "fr.isaac.customrecipe.client.ClientInit"
+      "fr.zazac1.customrecipe.client.ClientInit"
     ],
     "modmenu": [
-      "fr.isaac.customrecipe.client.ModMenuIntegration"
+      "fr.zazac1.customrecipe.client.ModMenuIntegration"
     ]
   },
   "mixins": [
