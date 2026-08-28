@@ -23,7 +23,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
-// In MC 1.21.11 the shaped-recipe pattern class is RawShapedRecipe (not ShapedRecipePattern)
+// In Minecraft 1.21.8 the shaped-recipe pattern class is RawShapedRecipe (not ShapedRecipePattern)
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

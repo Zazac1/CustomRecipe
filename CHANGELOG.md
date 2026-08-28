@@ -1,11 +1,11 @@
 # Changelog
 
-## 1.1.4+1.21.11
+## 1.1.4+1.21.8
 
 - Fixed vanilla crafting recipes missing from the local ModMenu browser when client resources return no craft entries.
 - Fixed material variants in the local ModMenu editor for 1.21 direct ingredient JSON and nested vanilla item tags.
 
-## 1.1.3+1.21.11
+## 1.1.3+1.21.8
 
 ### Added
 
@@ -21,7 +21,7 @@
 
 - Shift-crafting keeps the custom recipe selected from the green recipe book.
 
-## 1.1.2+1.21.11
+## 1.1.2+1.21.8
 
 ### Changed
 

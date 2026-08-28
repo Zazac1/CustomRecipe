@@ -3,13 +3,11 @@ package fr.zazac1.customrecipe.client;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.MultilineTextWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.input.KeyInput;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
@@ -296,8 +294,7 @@ public class RecipeBuilderScreen extends Screen {
     // ── mouse events ──────────────────────────────────────────────────────
 
     @Override
-    public boolean mouseClicked(Click click, boolean focused) {
-        double mx = click.x(), my = click.y();
+    public boolean mouseClicked(double mx, double my, int button) {
         int gx = gridX(), gy = gridY();
 
         // Click on a grid slot
@@ -331,7 +328,7 @@ public class RecipeBuilderScreen extends Screen {
                 && mx >= leftX() && mx < leftX() + leftW()
                 && my >= fieldY() && my < fieldY() + 14) {
             restoreFocus = 1;
-            return super.mouseClicked(click, focused);
+            return super.mouseClicked(mx, my, button);
         }
 
         // Click on a suggestion
@@ -347,16 +344,16 @@ public class RecipeBuilderScreen extends Screen {
             }
         }
 
-        return super.mouseClicked(click, focused);
+        return super.mouseClicked(mx, my, button);
     }
 
     @Override
-    public boolean keyPressed(KeyInput k) {
-        if (k.key() == 256) { // Escape
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 256) { // Escape
             client.setScreen(parent);
             return true;
         }
-        return super.keyPressed(k);
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     // ── save ──────────────────────────────────────────────────────────────

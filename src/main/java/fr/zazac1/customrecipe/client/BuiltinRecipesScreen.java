@@ -2,7 +2,6 @@ package fr.zazac1.customrecipe.client;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -218,8 +217,7 @@ public class BuiltinRecipesScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean focused) {
-        double mx = click.x(), my = click.y();
+    public boolean mouseClicked(double mx, double my, int button) {
         int toggleStart = width - PAD - 76;
         int vis = maxVisible();
         for (int i = scroll; i < Math.min(RECIPES.length, scroll + vis); i++) {
@@ -234,7 +232,7 @@ public class BuiltinRecipesScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(click, focused);
+        return super.mouseClicked(mx, my, button);
     }
 
     @Override

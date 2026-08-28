@@ -3,7 +3,6 @@ package fr.zazac1.customrecipe.client;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -258,8 +257,7 @@ public class CustomRecipesScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean focused) {
-        double mx = click.x(), my = click.y();
+    public boolean mouseClicked(double mx, double my, int button) {
         // Keep recipe-preview clicks out of the full status-button hitbox.
         int btnStart = width - PAD - 110;
         int vis = maxVisible();
@@ -273,7 +271,7 @@ public class CustomRecipesScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(click, focused);
+        return super.mouseClicked(mx, my, button);
     }
 
     @Override

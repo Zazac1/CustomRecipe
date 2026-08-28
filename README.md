@@ -1,6 +1,6 @@
 # Custom Recipe
 
-Custom Recipe is a Fabric mod for Minecraft **1.21.11**. Create shaped or shapeless crafting recipes in game, manage built-in recipes, and let server operators control custom and vanilla crafting recipes without editing datapacks.
+Custom Recipe is a Fabric mod for Minecraft **1.21.8**. Create shaped or shapeless crafting recipes in game, manage built-in recipes, and let server operators control custom and vanilla crafting recipes without editing datapacks.
 
 ## Highlights
 
@@ -95,11 +95,11 @@ Relevant configuration fields:
 
 | Component | Version |
 |---|---|
-| Minecraft | 1.21.11 |
+| Minecraft | 1.21.8 |
 | Java | 21+ |
-| Fabric Loader | 0.19.3+ |
-| Fabric API | 0.141.4+1.21.11 |
-| ModMenu | 17.0.0 (optional) |
+| Fabric Loader | 0.16.14+ |
+| Fabric API | 0.136.0+1.21.8 |
+| ModMenu | 15.0.1 (optional) |
 
 ## License and links
 
