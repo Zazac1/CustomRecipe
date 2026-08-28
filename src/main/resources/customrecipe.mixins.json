@@ -1,6 +1,6 @@
 {
   "required": true,
-  "package": "fr.isaac.customrecipe.mixin",
+  "package": "fr.zazac1.customrecipe.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ServerRecipeManagerMixin",
