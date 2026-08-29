@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.2.0+1.21.8
+
+### Added
+
+- Added **Known by default** controls for built-in recipes, including silent recipe-book unlocks.
+- Added the Default Recipes status filter: **All**, **Enabled**, and **Disabled**.
+- Added the grouped recipe creator workspace, reusable used-items palette, persistent item picker, protected filled slots, and permanent Empty tile.
+- Added missing-mod protection: required mods are recorded and missing recipes stay saved as **Corrupted** until their dependencies return.
+- Added exact recipe conflict handling: different outputs receive Known by default advice; matching output items conflict even when their output counts differ.
+- Added local ModMenu conflict detection for direct-item recipes.
+
+### Changed
+
+- Default Recipes now includes installed mod recipes, live search, a clear button, item-tag previews, material variants, and client-side local browsing.
+- Default Recipes keeps client and server catalogs isolated: ModMenu uses client resources, while `/customrecipe` uses server resources.
+- The item browser renders ten entries at a time and loads further entries in batches while scrolling.
+
+### Fixed
+
+- Disabled recipe variants are removed from the green recipe book after reload and no longer auto-fill the crafting grid.
+- Recipe-book grouping, Vanilla priority, and Shift-crafting preserve the selected custom output.
+- Local recipe scans safely handle nested Fabric module origins and load installed mod recipe archives.
+- Tool and material previews correctly resolve item tags such as ingots, gems, logs, and ores.
+
 ## 1.1.4+1.21.8
 
 - Fixed vanilla crafting recipes missing from the local ModMenu browser when client resources return no craft entries.

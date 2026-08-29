@@ -30,11 +30,6 @@ public class ClientInit implements ClientModInitializer {
                 context.player().sendMessage(net.minecraft.text.Text.literal("[Custom Recipe] Invalid server config received."), false);
                 return;
             }
-            int imported = mergeLocalRecipes(config);
-            if (imported > 0) {
-                context.player().sendMessage(net.minecraft.text.Text.literal(
-                        "[Custom Recipe] " + imported + " local recipe(s) ready to add to the server."), false);
-            }
             context.client().setScreen(new ConfigScreen(context.client().currentScreen, config,
                     "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
         });
@@ -69,35 +64,5 @@ public class ClientInit implements ClientModInitializer {
             }
         }
         if (changed) ConfigLoader.saveAndInvalidate(localConfig);
-    }
-
-    /** Stages local ModMenu recipes in the server editor without duplicating existing ones. */
-    private static int mergeLocalRecipes(fr.zazac1.customrecipe.ModConfig serverConfig) {
-        int added = 0;
-        for (var localRecipe : ConfigLoader.get().custom_recipes) {
-            boolean alreadyOnServer = serverConfig.custom_recipes.stream()
-                    .anyMatch(serverRecipe -> ConfigLoader.sameRecipe(localRecipe, serverRecipe));
-            if (!alreadyOnServer) {
-                serverConfig.custom_recipes.add(copyLocalRecipeAsDraft(localRecipe));
-                added++;
-            }
-        }
-        return added;
-    }
-
-    private static fr.zazac1.customrecipe.CustomRecipeEntry copyLocalRecipeAsDraft(
-            fr.zazac1.customrecipe.CustomRecipeEntry source) {
-        var copy = new fr.zazac1.customrecipe.CustomRecipeEntry();
-        copy.id = source.id;
-        copy.type = source.type;
-        copy.ingredients = new java.util.ArrayList<>(source.ingredients);
-        copy.pattern = new java.util.ArrayList<>(source.pattern);
-        copy.keys = new java.util.LinkedHashMap<>(source.keys);
-        copy.result = source.result;
-        copy.count = source.count;
-        copy.enabled = source.enabled;
-        copy.server_enabled = Boolean.FALSE;
-        copy.known_by_default = source.known_by_default;
-        return copy;
     }
 }

@@ -6,6 +6,7 @@ import com.google.gson.JsonParser;
 import fr.zazac1.customrecipe.VanillaRecipePage;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -28,58 +29,113 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.Enumeration;
 import java.util.Optional;
 import java.util.jar.JarFile;
 
-/** Server-filtered vanilla crafting recipe browser for OPs. */
+/** Server-filtered default crafting recipe browser for OPs, including installed mods. */
 @Environment(EnvType.CLIENT)
 public class VanillaRecipesScreen extends Screen {
     private static final int ROW = 20;
+
+    private enum StatusFilter {
+        ALL, ENABLED, DISABLED
+    }
     private final ConfigScreen parent;
     private final boolean localMode;
     private String query = "";
     private boolean matchIngredients = true;
     private boolean matchOutput = true;
+    private StatusFilter statusFilter = StatusFilter.ALL;
     private final List<VanillaRecipePage.VanillaRecipeInfo> recipes = new ArrayList<>();
     private int total;
     private int nextPage;
     private int scroll;
     private boolean loading;
     private boolean searchStarted;
+    private int pendingSearchTicks = -1;
+    private boolean restoreSearchFocus;
     private TextFieldWidget searchField;
+
+    /** Applies the local enable/disable view without changing the server search result. */
+    private List<VanillaRecipePage.VanillaRecipeInfo> filteredRecipes() {
+        if (statusFilter == StatusFilter.ALL) return recipes;
+
+        List<VanillaRecipePage.VanillaRecipeInfo> filtered = new ArrayList<>();
+        for (VanillaRecipePage.VanillaRecipeInfo recipe : recipes) {
+            boolean disabled = parent.disabledRecipes.contains(recipe.id());
+            if ((statusFilter == StatusFilter.DISABLED && disabled)
+                    || (statusFilter == StatusFilter.ENABLED && !disabled)) {
+                filtered.add(recipe);
+            }
+        }
+        return filtered;
+    }
+
+    private Text statusFilterLabel() {
+        return switch (statusFilter) {
+            case ALL -> Text.literal("Show: All");
+            case ENABLED -> Text.literal("Show: Enabled").withColor(0x55FF55);
+            case DISABLED -> Text.literal("Show: Disabled").withColor(0xFF5555);
+        };
+    }
+
+    private void cycleStatusFilter() {
+        statusFilter = switch (statusFilter) {
+            case ALL -> StatusFilter.ENABLED;
+            case ENABLED -> StatusFilter.DISABLED;
+            case DISABLED -> StatusFilter.ALL;
+        };
+        scroll = 0;
+        clearAndInit();
+    }
 
     public VanillaRecipesScreen(ConfigScreen parent) {
         this(parent, false);
     }
 
-    /** Local ModMenu mode reads the vanilla recipe data already loaded by the client. */
+    /** Local ModMenu mode reads the default recipe data already loaded by the client. */
     public VanillaRecipesScreen(ConfigScreen parent, boolean localMode) {
-        super(Text.literal("Vanilla Crafting Recipes"));
+        super(Text.literal("Default Recipes"));
         this.parent = parent;
         this.localMode = localMode;
     }
 
     @Override
     protected void init() {
-        searchField = addDrawableChild(new TextFieldWidget(textRenderer, 8, 26, width - 244, 18, Text.literal("Search item or recipe ID")));
+        searchField = addDrawableChild(new TextFieldWidget(textRenderer, 8, 26, width - 354, 18, Text.literal("Search item or recipe ID")));
         searchField.setText(query);
-        searchField.setChangedListener(value -> query = value);
+        searchField.setChangedListener(this::onQueryChanged);
+        if (restoreSearchFocus) {
+            setFocused(searchField);
+            restoreSearchFocus = false;
+        }
+
+        addDrawableChild(ButtonWidget.builder(Text.literal("×"), b -> {
+            query = "";
+            searchField.setText("");
+            pendingSearchTicks = -1;
+            resetSearch();
+        }).dimensions(width - 346, 26, 18, 18).build());
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Search"), b -> resetSearch())
-                .dimensions(width - 236, 26, 60, 18).build());
+                .dimensions(width - 326, 26, 56, 18).build());
         addDrawableChild(ButtonWidget.builder(Text.literal(matchIngredients ? "Ingredient: ON" : "Ingredient: OFF"), b -> {
             matchIngredients = !matchIngredients;
             resetSearch();
-        }).dimensions(width - 172, 26, 90, 18).build());
+        }).dimensions(width - 266, 26, 88, 18).build());
         addDrawableChild(ButtonWidget.builder(Text.literal(matchOutput ? "Output: ON" : "Output: OFF"), b -> {
             matchOutput = !matchOutput;
             resetSearch();
-        }).dimensions(width - 78, 26, 70, 18).build());
+        }).dimensions(width - 174, 26, 70, 18).build());
+        addDrawableChild(ButtonWidget.builder(statusFilterLabel(), b -> cycleStatusFilter())
+                .dimensions(width - 100, 26, 92, 18).build());
 
         int visibleRows = visibleRows();
-        for (int i = 0; i < visibleRows && scroll + i < recipes.size(); i++) {
-            VanillaRecipePage.VanillaRecipeInfo recipe = recipes.get(scroll + i);
+        List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
+        for (int i = 0; i < visibleRows && scroll + i < shownRecipes.size(); i++) {
+            VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
             int y = 52 + i * ROW;
             boolean disabled = parent.disabledRecipes.contains(recipe.id());
             addDrawableChild(ButtonWidget.builder(recipeLabel(recipe), b -> client.setScreen(new VanillaRecipeDetailsScreen(this, recipe)))
@@ -131,6 +187,21 @@ public class VanillaRecipesScreen extends Screen {
         ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput, 0);
     }
 
+    /** Refresh after a short pause so typing does not scan or query once per key. */
+    private void onQueryChanged(String value) {
+        query = value;
+        restoreSearchFocus = true;
+        pendingSearchTicks = 4;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (pendingSearchTicks > 0 && --pendingSearchTicks == 0) {
+            resetSearch();
+        }
+    }
+
     private void loadMore() {
         if (localMode || loading || recipes.size() >= total) return;
         loading = true;
@@ -140,15 +211,16 @@ public class VanillaRecipesScreen extends Screen {
     private VanillaRecipePage findLocalRecipes() {
         String loweredQuery = query.trim().toLowerCase(Locale.ROOT);
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
+        Set<String> matchedIds = new HashSet<>();
         Map<Identifier, Resource> resources = client.getResourceManager().findResources("recipe",
-                id -> id.getNamespace().equals("minecraft") && id.getPath().endsWith(".json"));
+                id -> id.getPath().endsWith(".json"));
 
         for (Map.Entry<Identifier, Resource> resource : resources.entrySet()) {
             try (var input = resource.getValue().getInputStream()) {
                 String json = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-                String recipeId = "minecraft:" + resource.getKey().getPath()
+                String recipeId = resource.getKey().getNamespace() + ":" + resource.getKey().getPath()
                         .substring("recipe/".length(), resource.getKey().getPath().length() - ".json".length());
-                addLocalRecipe(matches, recipeId, json, loweredQuery);
+                addLocalRecipe(matches, matchedIds, recipeId, json, loweredQuery);
             } catch (Exception ignored) {
                 // A malformed optional resource is simply omitted from the local browser.
             }
@@ -156,25 +228,28 @@ public class VanillaRecipesScreen extends Screen {
 
         // At the title screen ModMenu has not mounted server-data resources yet.
         // Vanilla recipes are still available in Minecraft's own JAR, so use it as a fallback.
-        if (matches.isEmpty()) loadBundledVanillaRecipes(matches, loweredQuery);
+        if (matches.isEmpty()) loadBundledVanillaRecipes(matches, matchedIds, loweredQuery);
+        loadInstalledModRecipes(matches, matchedIds, loweredQuery);
 
         matches.sort(java.util.Comparator.comparing(VanillaRecipePage.VanillaRecipeInfo::id));
         return new VanillaRecipePage(matches, 0, matches.size());
     }
 
-    private void addLocalRecipe(List<VanillaRecipePage.VanillaRecipeInfo> matches, String recipeId, String json, String loweredQuery) {
+    private void addLocalRecipe(List<VanillaRecipePage.VanillaRecipeInfo> matches, Set<String> matchedIds,
+                                String recipeId, String json, String loweredQuery) {
         if (!json.contains("crafting_")) return;
         String resultId = findResultId(json, recipeId);
         boolean outputMatch = matchOutput && resultId.toLowerCase(Locale.ROOT).contains(loweredQuery);
         boolean ingredientMatch = matchIngredients && json.toLowerCase(Locale.ROOT).contains(loweredQuery);
-        if (loweredQuery.isEmpty() || outputMatch || ingredientMatch) {
+        if ((loweredQuery.isEmpty() || outputMatch || ingredientMatch) && matchedIds.add(recipeId)) {
             RecipeLayout layout = findLocalRecipeLayout(json);
             matches.add(new VanillaRecipePage.VanillaRecipeInfo(recipeId, resultId, toPreviewSlots(layout),
                     layout.width(), layout.height(), layout.shapeless()));
         }
     }
 
-    private void loadBundledVanillaRecipes(List<VanillaRecipePage.VanillaRecipeInfo> matches, String loweredQuery) {
+    private void loadBundledVanillaRecipes(List<VanillaRecipePage.VanillaRecipeInfo> matches, Set<String> matchedIds,
+                                           String loweredQuery) {
         try (JarFile jar = minecraftJar()) {
             if (jar == null) return;
             Enumeration<java.util.jar.JarEntry> entries = jar.entries();
@@ -185,11 +260,50 @@ public class VanillaRecipesScreen extends Screen {
                 try (var input = jar.getInputStream(entry)) {
                     String json = new String(input.readAllBytes(), StandardCharsets.UTF_8);
                     String recipeId = "minecraft:" + path.substring("data/minecraft/recipe/".length(), path.length() - ".json".length());
-                    addLocalRecipe(matches, recipeId, json, loweredQuery);
+                    addLocalRecipe(matches, matchedIds, recipeId, json, loweredQuery);
                 }
             }
         } catch (Exception ignored) {
             // Normal in unusual launchers that do not expose a Minecraft JAR code source.
+        }
+    }
+
+    /** ModMenu can open before datapack recipes are mounted, so read installed mod archives directly. */
+    private void loadInstalledModRecipes(List<VanillaRecipePage.VanillaRecipeInfo> matches, Set<String> matchedIds,
+                                         String loweredQuery) {
+        Set<Path> scannedArchives = new HashSet<>();
+        for (var mod : FabricLoader.getInstance().getAllMods()) {
+            List<Path> originPaths;
+            try {
+                originPaths = mod.getOrigin().getPaths();
+            } catch (RuntimeException ignored) {
+                // Nested Fabric modules do not always expose a filesystem archive.
+                continue;
+            }
+            for (Path archivePath : originPaths) {
+                Path normalized = archivePath.toAbsolutePath().normalize();
+                if (!scannedArchives.add(normalized) || !Files.isRegularFile(normalized)
+                        || !normalized.getFileName().toString().endsWith(".jar")) continue;
+                try (JarFile jar = new JarFile(normalized.toFile())) {
+                    Enumeration<java.util.jar.JarEntry> entries = jar.entries();
+                    while (entries.hasMoreElements()) {
+                        var entry = entries.nextElement();
+                        String path = entry.getName();
+                        if (!path.startsWith("data/") || !path.contains("/recipe/") || !path.endsWith(".json")) continue;
+                        int namespaceEnd = path.indexOf("/recipe/");
+                        if (namespaceEnd <= "data/".length()) continue;
+                        String recipeId = path.substring("data/".length(), namespaceEnd) + ":"
+                                + path.substring(namespaceEnd + "/recipe/".length(), path.length() - ".json".length());
+                        if (recipeId.startsWith("customrecipe:custom/")) continue;
+                        try (var input = jar.getInputStream(entry)) {
+                            addLocalRecipe(matches, matchedIds, recipeId,
+                                    new String(input.readAllBytes(), StandardCharsets.UTF_8), loweredQuery);
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // A non-archive mod origin simply has no local recipe files to browse.
+                }
+            }
         }
     }
 
@@ -231,8 +345,7 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     private String firstLocalIngredientId(JsonElement element) {
-        List<String> choices = new ArrayList<>();
-        collectIngredientIds(element, choices);
+        List<String> choices = localIngredientChoices(element);
         return choices.isEmpty() ? "" : choices.getFirst();
     }
 
@@ -399,6 +512,14 @@ public class VanillaRecipesScreen extends Screen {
     /** Reads tag JSON too, so variants are available from ModMenu before joining a world. */
     private void collectLocalTagItems(Identifier tagId, Set<String> choices, Set<Identifier> visited) {
         if (!visited.add(tagId)) return;
+        try {
+            for (var entry : Registries.ITEM.iterateEntries(TagKey.of(RegistryKeys.ITEM, tagId))) {
+                choices.add(Registries.ITEM.getId(entry.value()).toString());
+            }
+            if (!choices.isEmpty()) return;
+        } catch (IllegalStateException ignored) {
+            // At the title screen tags may not be bound yet; use their JSON below.
+        }
         Identifier tagResource = Identifier.of(tagId.getNamespace(), "tags/item/" + tagId.getPath() + ".json");
         Optional<String> json = readLocalRecipeJson(tagResource);
         if (json.isEmpty()) return;
@@ -463,12 +584,16 @@ public class VanillaRecipesScreen extends Screen {
             return;
         }
 
-        ctx.drawText(textRenderer, "Found " + total + " recipes - scroll to browse - click a name to preview", 8, 8, 0xFFFFEE88, false);
-        if (recipes.isEmpty()) {
-            ctx.drawText(textRenderer, "No recipe found. Edit the search field, then press Search.", 8, 54, 0xFFBBBBBB, false);
+        List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
+        String countText = statusFilter == StatusFilter.ALL
+                ? "Found " + total + " recipes"
+                : "Showing " + shownRecipes.size() + " " + statusFilter.name().toLowerCase(Locale.ROOT) + " recipes";
+        ctx.drawText(textRenderer, countText + " - scroll to browse - click a name to preview", 8, 8, 0xFFFFEE88, false);
+        if (shownRecipes.isEmpty()) {
+            ctx.drawText(textRenderer, "No recipe found.", 8, 54, 0xFFBBBBBB, false);
         }
-        for (int i = 0; i < visibleRows() && scroll + i < recipes.size(); i++) {
-            VanillaRecipePage.VanillaRecipeInfo recipe = recipes.get(scroll + i);
+        for (int i = 0; i < visibleRows() && scroll + i < shownRecipes.size(); i++) {
+            VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
             int y = 52 + i * ROW;
             ctx.fill(6, y, width - 88, y + ROW - 1, parent.disabledRecipes.contains(recipe.id()) ? 0x44550000 : 0x22005500);
             var item = Registries.ITEM.get(Identifier.tryParse(recipe.result()));
@@ -483,11 +608,12 @@ public class VanillaRecipesScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        int maxScroll = Math.max(0, recipes.size() - visibleRows());
+        List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
+        int maxScroll = Math.max(0, shownRecipes.size() - visibleRows());
         int oldScroll = scroll;
         scroll = Math.max(0, Math.min(maxScroll, scroll - (int) Math.signum(verticalAmount)));
         if (scroll != oldScroll) clearAndInit();
-        if (scroll + visibleRows() >= recipes.size() - 3) loadMore();
+        if (scroll + visibleRows() >= shownRecipes.size() - 3) loadMore();
         return true;
     }
 

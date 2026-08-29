@@ -96,8 +96,12 @@ public abstract class ServerRecipeManagerMixin {
 
         // 2. Inject user custom recipes
         int idx = 0;
+        boolean recipeStateChanged = false;
         List<RecipeEntry<?>> customRecipes = new ArrayList<>();
         for (CustomRecipeEntry entry : config.custom_recipes) {
+            recipeStateChanged |= fr.zazac1.customrecipe.RecipeIntegrity.refresh(entry);
+            RecipeEntry<?> built = Boolean.TRUE.equals(entry.corrupted) ? null
+                    : buildCustomRecipe(entry, idx, recipeBookGroup(entry));
             // Local ModMenu recipes are drafts until an OP explicitly adds them
             // to the server. Null preserves recipes from configurations made
             // before the server publication state existed.
@@ -107,9 +111,16 @@ public abstract class ServerRecipeManagerMixin {
                 idx++;
                 continue;
             }
-            RecipeEntry<?> built = buildCustomRecipe(entry, idx++, recipeBookGroup(entry));
+            if (Boolean.TRUE.equals(entry.corrupted)) {
+                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Disabled corrupted recipe {}: missing {}. Reinstall required mods {} or delete the recipe.",
+                        entry.id, entry.missing_items, entry.required_mods);
+                idx++;
+                continue;
+            }
+            idx++;
             if (built != null) customRecipes.add(built);
         }
+        if (recipeStateChanged) ConfigLoader.saveIntegrityState(config);
 
         // The recipe manager uses the first matching entry. Vanilla entries
         // stay first, so a custom recipe only takes effect after the matching
@@ -144,6 +155,7 @@ public abstract class ServerRecipeManagerMixin {
             return buildShapeless(entry, result, key, recipeGroup);
         }
     }
+
 
     /** Gives recipes with the same custom input one green-book entry. */
     private String recipeBookGroup(CustomRecipeEntry entry) {

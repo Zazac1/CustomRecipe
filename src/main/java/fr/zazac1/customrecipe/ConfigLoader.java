@@ -41,6 +41,12 @@ public final class ConfigLoader {
         invalidate();
     }
 
+    /** Persists an automatically detected integrity state without discarding the loaded config. */
+    public static void saveIntegrityState(ModConfig config) {
+        normalize(config);
+        save(config);
+    }
+
     /** Serializes a config for the OP-only server editor. */
     public static String toJson(ModConfig config) {
         normalize(config);
@@ -95,6 +101,7 @@ public final class ConfigLoader {
 
     private static void normalize(ModConfig config) {
         if (config.disabled_builtin == null) config.disabled_builtin = new java.util.ArrayList<>();
+        if (config.known_by_default_builtin == null) config.known_by_default_builtin = new java.util.ArrayList<>();
         if (config.disabled_recipes == null) config.disabled_recipes = new java.util.ArrayList<>();
         if (config.disabled_recipe_variants == null) config.disabled_recipe_variants = new java.util.ArrayList<>();
         if (config.custom_recipes == null) config.custom_recipes = new java.util.ArrayList<>();
@@ -109,6 +116,16 @@ public final class ConfigLoader {
         Set<String> usedIds = new HashSet<>();
         for (CustomRecipeEntry recipe : config.custom_recipes) {
             if (recipe == null) continue;
+            if (recipe.required_mods == null) recipe.required_mods = new LinkedHashMap<>();
+            if (recipe.missing_items == null) recipe.missing_items = new ArrayList<>();
+            if (recipe.conflicting_recipes == null) recipe.conflicting_recipes = new ArrayList<>();
+            // Conflict metadata written before the same-output rule existed is invalid:
+            // it contained every recipe with matching inputs, including different outputs.
+            if (recipe.same_shape_recipes == null) {
+                recipe.same_shape_recipes = new ArrayList<>();
+                recipe.conflicting_recipes.clear();
+            }
+            RecipeIntegrity.rememberRequiredMods(recipe);
             if (recipe.id == null || recipe.id.isBlank()) {
                 String fingerprint = recipeFingerprint(recipe);
                 CustomRecipeEntry existing = legacyRecipes.get(fingerprint);

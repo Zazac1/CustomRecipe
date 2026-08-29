@@ -40,6 +40,12 @@ public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
     @Override public RecipeSerializer<? extends CraftingRecipe> getSerializer() { return delegate.getSerializer(); }
     @Override public CraftingRecipeCategory getCategory() { return delegate.getCategory(); }
     @Override public IngredientPlacement getIngredientPlacement() { return delegate.getIngredientPlacement(); }
+    /**
+     * The vanilla recipe book cannot express "this recipe except birch planks".
+     * Hiding it avoids its auto-fill selecting a blocked material and leaving a
+     * broken crafting grid behind.
+     */
+    @Override public boolean isIgnoredInRecipeBook() { return true; }
     @Override public String getGroup() { return delegate.getGroup(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }
     @Override public List<RecipeDisplay> getDisplays() { return delegate.getDisplays(); }
