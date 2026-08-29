@@ -1,6 +1,7 @@
 package fr.isaac.customrecipe.client;
 
 import fr.isaac.customrecipe.CustomRecipeEntry;
+import fr.isaac.customrecipe.RecipeIntegrity;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -22,7 +23,7 @@ public class CustomRecipesScreen extends Screen {
     private static final int PAD      = 8;
     private static final int ROW      = 20;
     private static final int MINI     = 18;
-    private static final int DETAIL_H = 76;
+    private static final int DETAIL_H = 94;
 
     private final ConfigScreen parent;
     private final List<CustomRecipeEntry> recipes;
@@ -45,6 +46,7 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     protected void init() {
+        if (!parent.isServerManaged()) LocalRecipeConflictDetector.refresh(recipes, minecraft);
         // ── Fills ────────────────────────────────────────────────────────
         addRenderableOnly((ctx, mx, my, d) -> {
             ctx.fill(PAD, listTop(), width - PAD, listTop() + listH(), 0x88101010);
@@ -54,9 +56,11 @@ public class CustomRecipesScreen extends Screen {
                 int y = rowY(i);
                 if (y < listTop() || y + ROW > listTop() + listH()) continue;
                 boolean sel = selectedRecipe == i;
-                boolean on = isActiveForThisScreen(recipes.get(i));
+                boolean corrupted = isCorrupted(recipes.get(i));
+                boolean on = isActiveForThisScreen(recipes.get(i)) && !corrupted;
                 ctx.fill(PAD + 1, y, width - PAD - 112, y + ROW - 2,
-                        on  ? (sel ? 0x44005533 : 0x22005500)
+                        corrupted ? (sel ? 0x44662200 : 0x44550000)
+                        : on  ? (sel ? 0x44005533 : 0x22005500)
                             : (sel ? 0x44662200 : 0x44550000));
                 // Icône de l'item résultat
                 int statusX = width - PAD - 110;
@@ -97,14 +101,23 @@ public class CustomRecipesScreen extends Screen {
             addRenderableWidget(lbl);
 
             CustomRecipeEntry entry = recipes.get(idx);
+            boolean corrupted = isCorrupted(entry);
+            boolean conflict = firstEnabledConflict(entry) != null;
             boolean addedToServer = !parent.isServerManaged() || !Boolean.FALSE.equals(entry.server_enabled);
-            boolean en = isActiveForThisScreen(entry);
+            boolean en = isActiveForThisScreen(entry) && !corrupted;
             addRenderableWidget(Button.builder(
-                    !addedToServer ? Component.literal("Add to server").withColor(0xFFCC55)
+                    corrupted ? Component.literal("Corrupted").withColor(0xFF5555)
+                    : conflict ? Component.literal("Conflict").withColor(0xFFCC55)
+                    : !addedToServer ? Component.literal("Add to server").withColor(0xFFCC55)
                     : en ? Component.literal("Enabled").withColor(0x55FF55)
                          : Component.literal("Disabled").withColor(0xFF5555),
                     b -> {
                         CustomRecipeEntry r = recipes.get(idx);
+                        if (isCorrupted(r) || firstEnabledConflict(r) != null) {
+                            selectedRecipe = idx;
+                            rebuildWidgets();
+                            return;
+                        }
                         if (parent.isServerManaged() && Boolean.FALSE.equals(r.server_enabled)) {
                             r.server_enabled = Boolean.TRUE;
                             r.enabled = Boolean.TRUE;
@@ -152,10 +165,12 @@ public class CustomRecipesScreen extends Screen {
         if (selectedRecipe >= 0 && selectedRecipe < recipes.size()) {
             CustomRecipeEntry e = recipes.get(selectedRecipe);
             String mode  = "shaped".equalsIgnoreCase(e.type) ? "[Shaped]" : "[Shapeless]";
+            boolean corrupted = isCorrupted(e);
             String label = mode + "  " + toName(e.result) + (e.count > 1 ? " ×" + e.count : "");
+            if (corrupted) label = "[CORRUPTED] " + label;
             MultiLineTextWidget nameW = new MultiLineTextWidget(
                     PAD + 4, detailY() + 4,
-                    Component.literal(label).withColor(0xFFEE77), font);
+                    Component.literal(label).withColor(corrupted ? 0xFF7777 : 0xFFEE77), font);
             nameW.setMaxWidth(width - PAD * 2 - 8);
             nameW.setMaxRows(1);
             addRenderableWidget(nameW);
@@ -169,16 +184,54 @@ public class CustomRecipesScreen extends Screen {
             addRenderableWidget(arrow);
 
             final int selected = selectedRecipe;
-            boolean known = Boolean.TRUE.equals(e.known_by_default);
-            addRenderableWidget(Button.builder(
-                    known ? Component.literal("Known by default: ON").withColor(0x55FF55)
-                          : Component.literal("Known by default: OFF").withColor(0xFFCC55),
-                    b -> {
-                        CustomRecipeEntry recipe = recipes.get(selected);
-                        recipe.known_by_default = !Boolean.TRUE.equals(recipe.known_by_default);
+            if (corrupted) {
+                String mods = String.join(", ", RecipeIntegrity.requiredModIds(e));
+                MultiLineTextWidget warning = new MultiLineTextWidget(PAD + 4, detailY() + 76,
+                        Component.literal("Missing: " + String.join(", ", missingItems(e)) + " - reinstall "
+                                + (mods.isBlank() ? "the required mod" : mods) + " or delete this recipe.").withColor(0xFF7777), font);
+                warning.setMaxWidth(width - PAD * 2 - 8);
+                warning.setMaxRows(1);
+                addRenderableWidget(warning);
+                addRenderableWidget(Button.builder(Component.literal("Delete corrupted recipe").withColor(0xFF7777), b -> {
+                    recipes.remove(selected);
+                    selectedRecipe = -1;
+                    rebuildWidgets();
+                }).bounds(width - PAD - 142, detailY() + 30, 138, 18).build());
+            } else {
+                boolean known = Boolean.TRUE.equals(e.known_by_default);
+                addRenderableWidget(Button.builder(
+                        known ? Component.literal("Known by default: ON").withColor(0x55FF55)
+                                : Component.literal("Known by default: OFF").withColor(0xFFCC55), b -> {
+                            recipes.get(selected).known_by_default = !Boolean.TRUE.equals(recipes.get(selected).known_by_default);
+                            rebuildWidgets();
+                        }).bounds(width - PAD - 142, detailY() + 30, 138, 18).build());
+                String conflict = firstEnabledConflict(e);
+                if (conflict != null) {
+                    MultiLineTextWidget warning = new MultiLineTextWidget(PAD + 4, detailY() + 76,
+                            Component.literal("Conflicts with " + conflict + " - disable it to use this recipe.").withColor(0xFFCC55), font);
+                    warning.setMaxWidth(width - PAD * 2 - 8);
+                    warning.setMaxRows(1);
+                    addRenderableWidget(warning);
+                    addRenderableWidget(Button.builder(Component.literal("Disable conflict").withColor(0xFFCC55), b -> {
+                        if (!parent.disabledRecipes.contains(conflict)) parent.disabledRecipes.add(conflict);
                         rebuildWidgets();
+                    }).bounds(width - PAD - 142, detailY() + 52, 138, 18).build());
+                } else if (!known) {
+                    String alternative = firstEnabledSameShapeRecipe(e);
+                    if (alternative != null) {
+                        MultiLineTextWidget advice = new MultiLineTextWidget(PAD + 4, detailY() + 76,
+                                Component.literal("Same inputs as " + alternative + " but a different result. Set Known by default to choose it in the recipe book.")
+                                        .withColor(0x77BBFF), font);
+                        advice.setMaxWidth(width - PAD * 2 - 8);
+                        advice.setMaxRows(2);
+                        addRenderableWidget(advice);
+                        addRenderableWidget(Button.builder(Component.literal("Set known by default").withColor(0x77BBFF), b -> {
+                            recipes.get(selected).known_by_default = Boolean.TRUE;
+                            rebuildWidgets();
+                        }).bounds(width - PAD - 142, detailY() + 52, 138, 18).build());
                     }
-            ).bounds(width - PAD - 142, detailY() + 30, 138, 18).build());
+                }
+            }
         }
 
         // ── Boutons du bas ────────────────────────────────────────────────
@@ -295,6 +348,32 @@ public class CustomRecipesScreen extends Screen {
     private boolean isActiveForThisScreen(CustomRecipeEntry entry) {
         return (!parent.isServerManaged() || !Boolean.FALSE.equals(entry.server_enabled))
                 && !Boolean.FALSE.equals(entry.enabled);
+    }
+
+    private boolean isCorrupted(CustomRecipeEntry entry) {
+        return Boolean.TRUE.equals(entry.corrupted)
+                || (!parent.isServerManaged() && !RecipeIntegrity.missingItems(entry).isEmpty());
+    }
+
+    private List<String> missingItems(CustomRecipeEntry entry) {
+        java.util.LinkedHashSet<String> missing = new java.util.LinkedHashSet<>();
+        if (entry.missing_items != null) missing.addAll(entry.missing_items);
+        missing.addAll(RecipeIntegrity.missingItems(entry));
+        return new java.util.ArrayList<>(missing);
+    }
+
+    private String firstEnabledConflict(CustomRecipeEntry entry) {
+        if (entry.conflicting_recipes == null) return null;
+        return entry.conflicting_recipes.stream()
+                .filter(id -> id != null && !parent.disabledRecipes.contains(id))
+                .findFirst().orElse(null);
+    }
+
+    private String firstEnabledSameShapeRecipe(CustomRecipeEntry entry) {
+        if (entry.same_shape_recipes == null) return null;
+        return entry.same_shape_recipes.stream()
+                .filter(id -> id != null && !parent.disabledRecipes.contains(id))
+                .findFirst().orElse(null);
     }
 
     private String toName(String id) {

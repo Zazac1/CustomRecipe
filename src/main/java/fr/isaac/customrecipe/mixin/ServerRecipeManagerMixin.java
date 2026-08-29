@@ -102,8 +102,10 @@ public abstract class ServerRecipeManagerMixin {
 
         // 2. Inject user custom recipes
         int idx = 0;
+        boolean recipeStateChanged = false;
         List<RecipeHolder<?>> customRecipes = new ArrayList<>();
         for (CustomRecipeEntry entry : config.custom_recipes) {
+            recipeStateChanged |= fr.isaac.customrecipe.RecipeIntegrity.refresh(entry);
             // Local ModMenu recipes are drafts until an OP explicitly adds them
             // to the server. Null preserves recipes from configurations made
             // before the server publication state existed.
@@ -116,9 +118,16 @@ public abstract class ServerRecipeManagerMixin {
                 idx++;
                 continue;
             }
+            if (Boolean.TRUE.equals(entry.corrupted)) {
+                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Disabled corrupted recipe {}: missing {}. Reinstall required mods {} or delete the recipe.",
+                        entry.id, entry.missing_items, entry.required_mods);
+                idx++;
+                continue;
+            }
             RecipeHolder<?> built = buildCustomRecipe(entry, idx++, recipeBookGroup(entry));
             if (built != null) customRecipes.add(built);
         }
+        if (recipeStateChanged) ConfigLoader.saveIntegrityState(config);
 
         // RecipeManager normally returns the first matching recipe. Vanilla
         // recipes remain first, so custom recipes apply only when that vanilla

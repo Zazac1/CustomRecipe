@@ -27,6 +27,7 @@ public class ConfigScreen extends Screen {
     /** Shared state — modified by sub-screens, saved on Save. */
     final List<CustomRecipeEntry> recipes;
     final List<String> disabled;
+    final List<String> knownByDefaultBuiltin;
     final List<String> disabledRecipes;
     final List<RecipeVariantRule> disabledRecipeVariants;
 
@@ -44,6 +45,7 @@ public class ConfigScreen extends Screen {
         this.serverManaged = serverManaged;
         this.recipes  = new ArrayList<>(config.custom_recipes);
         this.disabled = new ArrayList<>(config.disabled_builtin);
+        this.knownByDefaultBuiltin = new ArrayList<>(config.known_by_default_builtin);
         this.disabledRecipes = new ArrayList<>(config.disabled_recipes);
         this.disabledRecipeVariants = new ArrayList<>(config.disabled_recipe_variants);
     }
@@ -82,7 +84,7 @@ public class ConfigScreen extends Screen {
 
         if (serverManaged) {
             addRenderableWidget(Button.builder(
-                    Component.literal("Vanilla Crafting Recipes"),
+                    Component.literal("Default Recipes"),
                     b -> minecraft.gui.setScreen(new VanillaRecipesScreen(this))
             ).bounds(cx, cy + 72, btnW, btnH).build());
 
@@ -92,7 +94,7 @@ public class ConfigScreen extends Screen {
             ).bounds(cx, cy + 96, btnW, btnH).build());
         } else {
             addRenderableWidget(Button.builder(
-                    Component.literal("Vanilla Crafting Recipes"),
+                    Component.literal("Default Recipes"),
                     b -> minecraft.gui.setScreen(new VanillaRecipesScreen(this, true))
             ).bounds(cx, cy + 72, btnW, btnH).build());
         }
@@ -116,6 +118,7 @@ public class ConfigScreen extends Screen {
     ModConfig currentConfig() {
         baseConfig.custom_recipes = new ArrayList<>(recipes);
         baseConfig.disabled_builtin = new ArrayList<>(disabled);
+        baseConfig.known_by_default_builtin = new ArrayList<>(knownByDefaultBuiltin);
         baseConfig.disabled_recipes = new ArrayList<>(disabledRecipes);
         baseConfig.disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
         return baseConfig;
@@ -126,6 +129,8 @@ public class ConfigScreen extends Screen {
         recipes.addAll(config.custom_recipes);
         disabled.clear();
         disabled.addAll(config.disabled_builtin);
+        knownByDefaultBuiltin.clear();
+        knownByDefaultBuiltin.addAll(config.known_by_default_builtin);
         disabledRecipes.clear();
         disabledRecipes.addAll(config.disabled_recipes);
         disabledRecipeVariants.clear();

@@ -7,6 +7,7 @@ import fr.isaac.customrecipe.VanillaRecipePage;
 import fr.isaac.customrecipe.VanillaRecipePagePayload;
 import fr.isaac.customrecipe.VanillaRecipeDetails;
 import fr.isaac.customrecipe.VanillaRecipeDetailsPayload;
+import fr.isaac.customrecipe.ValidatedServerConfigPayload;
 import com.google.gson.Gson;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
@@ -34,6 +35,14 @@ public class ClientInit implements ClientModInitializer {
             if (imported > 0) {
                 context.player().sendSystemMessage(net.minecraft.network.chat.Component.literal(
                         "[Custom Recipe] " + imported + " local recipe(s) ready to add to the server."));
+            }
+            ClientServerConfigNetworking.validate(config);
+        });
+        ClientPlayNetworking.registerGlobalReceiver(ValidatedServerConfigPayload.ID, (payload, context) -> {
+            var config = ConfigLoader.fromJson(payload.json());
+            if (config == null) {
+                context.player().sendSystemMessage(net.minecraft.network.chat.Component.literal("[Custom Recipe] Invalid server validation received."));
+                return;
             }
             context.client().gui.setScreen(new ConfigScreen(context.client().gui.screen(), config,
                     "Server Recipes (OP)", true, ClientServerConfigNetworking::save));

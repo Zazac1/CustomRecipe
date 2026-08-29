@@ -34,17 +34,22 @@ import java.util.jar.JarFile;
 @Environment(EnvType.CLIENT)
 public class VanillaRecipesScreen extends Screen {
     private static final int ROW = 20;
+
+    private enum StatusFilter { ALL, ENABLED, DISABLED }
     private final ConfigScreen parent;
     private final boolean localMode;
     private String query = "";
     private boolean matchIngredients = true;
     private boolean matchOutput = true;
+    private StatusFilter statusFilter = StatusFilter.ALL;
     private final List<VanillaRecipePage.VanillaRecipeInfo> recipes = new ArrayList<>();
     private int total;
     private int nextPage;
     private int scroll;
     private boolean loading;
     private boolean searchStarted;
+    private int pendingSearchTicks = -1;
+    private boolean restoreSearchFocus;
     private EditBox searchField;
 
     public VanillaRecipesScreen(ConfigScreen parent) {
@@ -53,31 +58,51 @@ public class VanillaRecipesScreen extends Screen {
 
     /** Local ModMenu mode reads the vanilla recipe data already loaded by the client. */
     public VanillaRecipesScreen(ConfigScreen parent, boolean localMode) {
-        super(Component.literal("Vanilla Crafting Recipes"));
+        super(Component.literal("Default Recipes"));
         this.parent = parent;
         this.localMode = localMode;
     }
 
     @Override
     protected void init() {
-        searchField = addRenderableWidget(new EditBox(font, 8, 26, width - 244, 18, Component.literal("Search item or recipe ID")));
+        searchField = addRenderableWidget(new EditBox(font, 8, 26, width - 306, 18, Component.literal("Search item or recipe ID")));
         searchField.setValue(query);
-        searchField.setResponder(value -> query = value);
+        searchField.setResponder(value -> {
+            query = value;
+            pendingSearchTicks = 2;
+            restoreSearchFocus = true;
+        });
+
+        addRenderableWidget(Button.builder(Component.literal("×"), b -> {
+            query = "";
+            searchField.setValue("");
+            resetSearch();
+        }).bounds(width - 296, 26, 18, 18).build());
 
         addRenderableWidget(Button.builder(Component.literal("Search"), b -> resetSearch())
-                .bounds(width - 236, 26, 60, 18).build());
+                .bounds(width - 274, 26, 60, 18).build());
         addRenderableWidget(Button.builder(Component.literal(matchIngredients ? "Ingredient: ON" : "Ingredient: OFF"), b -> {
             matchIngredients = !matchIngredients;
             resetSearch();
-        }).bounds(width - 172, 26, 90, 18).build());
+        }).bounds(width - 210, 26, 90, 18).build());
         addRenderableWidget(Button.builder(Component.literal(matchOutput ? "Output: ON" : "Output: OFF"), b -> {
             matchOutput = !matchOutput;
             resetSearch();
-        }).bounds(width - 78, 26, 70, 18).build());
+        }).bounds(width - 116, 26, 70, 18).build());
+        addRenderableWidget(Button.builder(statusFilterLabel(), b -> {
+            statusFilter = switch (statusFilter) {
+                case ALL -> StatusFilter.ENABLED;
+                case ENABLED -> StatusFilter.DISABLED;
+                case DISABLED -> StatusFilter.ALL;
+            };
+            scroll = 0;
+            rebuildWidgets();
+        }).bounds(width - 42, 26, 34, 18).build());
 
+        List<VanillaRecipePage.VanillaRecipeInfo> visibleRecipes = filteredRecipes();
         int visibleRows = visibleRows();
-        for (int i = 0; i < visibleRows && scroll + i < recipes.size(); i++) {
-            VanillaRecipePage.VanillaRecipeInfo recipe = recipes.get(scroll + i);
+        for (int i = 0; i < visibleRows && scroll + i < visibleRecipes.size(); i++) {
+            VanillaRecipePage.VanillaRecipeInfo recipe = visibleRecipes.get(scroll + i);
             int y = 52 + i * ROW;
             boolean disabled = parent.disabledRecipes.contains(recipe.id());
             addRenderableWidget(Button.builder(recipeLabel(recipe), b -> minecraft.gui.setScreen(new VanillaRecipeDetailsScreen(this, recipe)))
@@ -92,6 +117,10 @@ public class VanillaRecipesScreen extends Screen {
                 .bounds(width / 2 - 50, bottom, 100, 18).build());
 
         if (!searchStarted) resetSearch();
+        else if (restoreSearchFocus) {
+            setFocused(searchField);
+            restoreSearchFocus = false;
+        }
     }
 
     void applyResult(VanillaRecipePage page) {
@@ -139,12 +168,12 @@ public class VanillaRecipesScreen extends Screen {
         String loweredQuery = query.trim().toLowerCase(Locale.ROOT);
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
         Map<Identifier, Resource> resources = minecraft.getResourceManager().listResources("recipe",
-                id -> id.getNamespace().equals("minecraft") && id.getPath().endsWith(".json"));
+                id -> id.getPath().endsWith(".json"));
 
         for (Map.Entry<Identifier, Resource> resource : resources.entrySet()) {
             try (var input = resource.getValue().open()) {
                 String json = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-                String recipeId = "minecraft:" + resource.getKey().getPath()
+                String recipeId = resource.getKey().getNamespace() + ":" + resource.getKey().getPath()
                         .substring("recipe/".length(), resource.getKey().getPath().length() - ".json".length());
                 addLocalRecipe(matches, recipeId, json, loweredQuery);
             } catch (Exception ignored) {
@@ -312,6 +341,31 @@ public class VanillaRecipesScreen extends Screen {
     private void toggle(String recipeId) {
         if (!parent.disabledRecipes.remove(recipeId)) parent.disabledRecipes.add(recipeId);
         rebuildWidgets();
+    }
+
+    private List<VanillaRecipePage.VanillaRecipeInfo> filteredRecipes() {
+        if (statusFilter == StatusFilter.ALL) return recipes;
+        List<VanillaRecipePage.VanillaRecipeInfo> filtered = new ArrayList<>();
+        for (VanillaRecipePage.VanillaRecipeInfo recipe : recipes) {
+            boolean disabled = parent.disabledRecipes.contains(recipe.id());
+            if ((statusFilter == StatusFilter.DISABLED && disabled)
+                    || (statusFilter == StatusFilter.ENABLED && !disabled)) filtered.add(recipe);
+        }
+        return filtered;
+    }
+
+    private Component statusFilterLabel() {
+        return switch (statusFilter) {
+            case ALL -> Component.literal("All");
+            case ENABLED -> Component.literal("On").withColor(0x55FF55);
+            case DISABLED -> Component.literal("Off").withColor(0xFF5555);
+        };
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (pendingSearchTicks >= 0 && --pendingSearchTicks == 0) resetSearch();
     }
 
     void requestDetails(VanillaRecipeDetailsScreen screen, String recipeId) {
@@ -502,8 +556,9 @@ public class VanillaRecipesScreen extends Screen {
         if (recipes.isEmpty()) {
             ctx.text(font, "No recipe found. Edit the search field, then press Search.", 8, 54, 0xFFBBBBBB, false);
         }
-        for (int i = 0; i < visibleRows() && scroll + i < recipes.size(); i++) {
-            VanillaRecipePage.VanillaRecipeInfo recipe = recipes.get(scroll + i);
+        List<VanillaRecipePage.VanillaRecipeInfo> visibleRecipes = filteredRecipes();
+        for (int i = 0; i < visibleRows() && scroll + i < visibleRecipes.size(); i++) {
+            VanillaRecipePage.VanillaRecipeInfo recipe = visibleRecipes.get(scroll + i);
             int y = 52 + i * ROW;
             ctx.fill(6, y, width - 88, y + ROW - 1, parent.disabledRecipes.contains(recipe.id()) ? 0x44550000 : 0x22005500);
             var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(recipe.result()));
@@ -519,11 +574,11 @@ public class VanillaRecipesScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        int maxScroll = Math.max(0, recipes.size() - visibleRows());
+        int maxScroll = Math.max(0, filteredRecipes().size() - visibleRows());
         int oldScroll = scroll;
         scroll = Math.max(0, Math.min(maxScroll, scroll - (int) Math.signum(verticalAmount)));
         if (scroll != oldScroll) rebuildWidgets();
-        if (scroll + visibleRows() >= recipes.size() - 3) loadMore();
+        if (scroll + visibleRows() >= filteredRecipes().size() - 3) loadMore();
         return true;
     }
 

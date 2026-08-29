@@ -189,6 +189,16 @@ public class BuiltinRecipesScreen extends Screen {
             nameW.setMaxRows(1);
             addRenderableWidget(nameW);
 
+            final String builtinId = RECIPES[selectedRecipe][0];
+            boolean known = parent.knownByDefaultBuiltin.contains(builtinId);
+            addRenderableWidget(Button.builder(
+                    known ? Component.literal("Known by default: ON").withColor(0x55FF55)
+                          : Component.literal("Known by default: OFF").withColor(0xFFCC55), b -> {
+                        if (!parent.knownByDefaultBuiltin.remove(builtinId)) parent.knownByDefaultBuiltin.add(builtinId);
+                        rebuildWidgets();
+                    }
+            ).bounds(width - PAD - 142, detailY() + 30, 138, 18).build());
+
             // Flèche →
             int gx = detailGridX(), gy = detailGridY();
             MultiLineTextWidget arrow = new MultiLineTextWidget(

@@ -13,6 +13,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permission;
 import net.minecraft.server.permissions.PermissionLevel;
@@ -39,14 +40,18 @@ public final class ServerConfigNetworking {
     public static void initialize() {
         PayloadTypeRegistry.clientboundPlay().register(ServerConfigPayload.ID, ServerConfigPayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(SaveServerConfigPayload.ID, SaveServerConfigPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ValidatedServerConfigPayload.ID, ValidatedServerConfigPayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(ValidateServerConfigPayload.ID, ValidateServerConfigPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(VanillaRecipePagePayload.ID, VanillaRecipePagePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(VanillaRecipeQueryPayload.ID, VanillaRecipeQueryPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(VanillaRecipeDetailsPayload.ID, VanillaRecipeDetailsPayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(VanillaRecipeDetailsQueryPayload.ID, VanillaRecipeDetailsQueryPayload.CODEC);
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> awardDefaultRecipes(handler.player, server));
+        ServerLifecycleEvents.SERVER_STARTED.register(ServerConfigNetworking::refreshRecipeConflicts);
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
             if (success) {
+                refreshRecipeConflicts(server);
                 for (ServerPlayer player : server.getPlayerList().getPlayers()) awardDefaultRecipes(player, server);
             }
         });
@@ -79,6 +84,20 @@ public final class ServerConfigNetworking {
             context.server().getCommands().performPrefixedCommand(player.createCommandSourceStack(), "reload");
         });
 
+        ServerPlayNetworking.registerGlobalReceiver(ValidateServerConfigPayload.ID, (payload, context) -> {
+            ServerPlayer player = context.player();
+            if (!player.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))
+                    || payload.json().length() > MAX_JSON_CHARS) return;
+            ModConfig config = ConfigLoader.fromJson(payload.json());
+            if (config == null) return;
+
+            validateProposedConfig(context.server(), config);
+            String json = ConfigLoader.toJson(config);
+            if (json.length() <= MAX_JSON_CHARS) {
+                ServerPlayNetworking.send(player, new ValidatedServerConfigPayload(json));
+            }
+        });
+
         ServerPlayNetworking.registerGlobalReceiver(VanillaRecipeQueryPayload.ID, (payload, context) -> {
             if (!context.player().permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))) {
                 return;
@@ -103,13 +122,138 @@ public final class ServerConfigNetworking {
 
     }
 
+    /** Tags are bound only after data-pack reload, so persisted conflict data is refreshed here. */
+    private static void refreshRecipeConflicts(net.minecraft.server.MinecraftServer server) {
+        ModConfig config = ConfigLoader.get();
+        boolean changed = false;
+        for (CustomRecipeEntry entry : config.custom_recipes) {
+            RecipeIntegrity.refresh(entry);
+            ConflictState state = findConflicts(server, entry);
+            if (!state.conflicts().equals(entry.conflicting_recipes)
+                    || !state.sameShape().equals(entry.same_shape_recipes)) {
+                entry.conflicting_recipes = state.conflicts();
+                entry.same_shape_recipes = state.sameShape();
+                changed = true;
+            }
+        }
+        if (changed) ConfigLoader.saveIntegrityState(config);
+    }
+
+    /** Validates unsaved OP drafts against server items and the server recipe catalog only. */
+    private static void validateProposedConfig(net.minecraft.server.MinecraftServer server, ModConfig config) {
+        for (CustomRecipeEntry entry : config.custom_recipes) {
+            RecipeIntegrity.refresh(entry);
+            ConflictState state = findConflicts(server, entry);
+            entry.conflicting_recipes = state.conflicts();
+            entry.same_shape_recipes = state.sameShape();
+        }
+    }
+
+    private static ConflictState findConflicts(net.minecraft.server.MinecraftServer server, CustomRecipeEntry entry) {
+        RecipeSignature signature = Boolean.TRUE.equals(entry.corrupted) ? null : signatureOf(entry);
+        if (signature == null) return new ConflictState(List.of(), List.of());
+        List<String> conflicts = new ArrayList<>();
+        List<String> sameShape = new ArrayList<>();
+        for (RecipeHolder<?> candidate : server.getRecipeManager().getRecipes()) {
+            Identifier id = candidate.id().identifier();
+            if (!(candidate.value() instanceof CraftingRecipe wrapped)
+                    || (id.getNamespace().equals(CustomRecipeMod.MOD_ID) && id.getPath().startsWith("custom/"))) continue;
+            CraftingRecipe existing = unwrap(wrapped);
+            if (!signature.equals(signatureOf(existing))) continue;
+            if (sameOutputItem(entry, existing)) conflicts.add(id.toString());
+            else sameShape.add(id.toString());
+        }
+        conflicts.sort(String::compareTo);
+        sameShape.sort(String::compareTo);
+        return new ConflictState(conflicts, sameShape);
+    }
+
+    private static boolean sameOutputItem(CustomRecipeEntry entry, CraftingRecipe candidate) {
+        Identifier expected = Identifier.tryParse(entry.result);
+        if (expected == null) return false;
+        try {
+            ItemStack result = candidate.assemble(CraftingInput.EMPTY);
+            return !result.isEmpty() && expected.equals(BuiltInRegistries.ITEM.getKey(result.getItem()));
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private static RecipeSignature signatureOf(CustomRecipeEntry entry) {
+        if ("shaped".equalsIgnoreCase(entry.type)) {
+            if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
+            int width = entry.pattern.stream().mapToInt(String::length).max().orElse(0);
+            List<String> slots = new ArrayList<>();
+            for (String row : entry.pattern) {
+                for (int column = 0; column < width; column++) {
+                    char symbol = column < row.length() ? row.charAt(column) : ' ';
+                    String item = symbol == ' ' ? "" : entry.keys.get(String.valueOf(symbol));
+                    if (symbol != ' ' && (item == null || item.isBlank())) return null;
+                    slots.add(item == null ? "" : item.trim());
+                }
+            }
+            return trimSignature(true, width, entry.pattern.size(), slots);
+        }
+        if (entry.ingredients == null || entry.ingredients.isEmpty()) return null;
+        List<String> ingredients = new ArrayList<>();
+        for (String item : entry.ingredients) {
+            if (item == null || item.isBlank()) return null;
+            ingredients.add(item.trim());
+        }
+        ingredients.sort(String::compareTo);
+        return new RecipeSignature(false, ingredients.size(), 1, ingredients);
+    }
+
+    private static RecipeSignature signatureOf(CraftingRecipe recipe) {
+        if (recipe instanceof ShapedRecipe shaped) {
+            List<String> slots = new ArrayList<>();
+            for (var ingredient : shaped.getIngredients()) {
+                slots.add(ingredient.map(ServerConfigNetworking::ingredientSignature).orElse(""));
+            }
+            return trimSignature(true, shaped.getWidth(), shaped.getHeight(), slots);
+        }
+        List<String> ingredients = recipe.placementInfo().ingredients().stream()
+                .map(ServerConfigNetworking::ingredientSignature).sorted().toList();
+        return new RecipeSignature(false, ingredients.size(), 1, ingredients);
+    }
+
+    private static RecipeSignature trimSignature(boolean shaped, int sourceWidth, int sourceHeight, List<String> slots) {
+        int left = sourceWidth, right = -1, top = sourceHeight, bottom = -1;
+        for (int row = 0; row < sourceHeight; row++) for (int column = 0; column < sourceWidth; column++) {
+            if (slots.get(row * sourceWidth + column).isBlank()) continue;
+            left = Math.min(left, column); right = Math.max(right, column);
+            top = Math.min(top, row); bottom = Math.max(bottom, row);
+        }
+        if (right < left || bottom < top) return null;
+        List<String> trimmed = new ArrayList<>();
+        for (int row = top; row <= bottom; row++) for (int column = left; column <= right; column++) {
+            trimmed.add(slots.get(row * sourceWidth + column));
+        }
+        return new RecipeSignature(shaped, right - left + 1, bottom - top + 1, trimmed);
+    }
+
+    private static String ingredientSignature(Ingredient ingredient) {
+        return ingredient.items().map(item -> BuiltInRegistries.ITEM.getKey(item.value()).toString())
+                .sorted().collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private record RecipeSignature(boolean shaped, int width, int height, List<String> ingredients) {}
+    private record ConflictState(List<String> conflicts, List<String> sameShape) {}
+
     /** Grants only enabled custom recipes explicitly marked as known by default. */
     private static void awardDefaultRecipes(ServerPlayer player, net.minecraft.server.MinecraftServer server) {
         List<RecipeHolder<?>> recipes = new ArrayList<>();
-        for (CustomRecipeEntry entry : ConfigLoader.get().custom_recipes) {
-            if (!Boolean.TRUE.equals(entry.known_by_default)) continue;
+        ModConfig config = ConfigLoader.get();
+        for (CustomRecipeEntry entry : config.custom_recipes) {
+            if (!Boolean.TRUE.equals(entry.known_by_default) || Boolean.FALSE.equals(entry.enabled)
+                    || Boolean.TRUE.equals(entry.corrupted)) continue;
             server.getRecipeManager().byKey(ResourceKey.create(Registries.RECIPE, entry.serverRecipeId()))
                     .ifPresent(recipes::add);
+        }
+        for (String builtinId : config.known_by_default_builtin) {
+            if (builtinId == null || config.disabled_builtin.contains(builtinId)) continue;
+            Identifier id = Identifier.tryParse(CustomRecipeMod.MOD_ID + ":" + builtinId);
+            if (id != null) server.getRecipeManager().byKey(ResourceKey.create(Registries.RECIPE, id)).ifPresent(recipes::add);
         }
         // awardRecipes intentionally highlights entries and shows the vanilla
         // toast. Defaults should quietly exist in the recipe book instead.
@@ -153,7 +297,9 @@ public final class ServerConfigNetworking {
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
 
         for (RecipeHolder<?> entry : server.getRecipeManager().getRecipes()) {
-            if (!entry.id().identifier().getNamespace().equals("minecraft") || !(entry.value() instanceof CraftingRecipe wrappedRecipe)) continue;
+            Identifier recipeId = entry.id().identifier();
+            if (!(entry.value() instanceof CraftingRecipe wrappedRecipe)
+                    || (recipeId.getNamespace().equals(CustomRecipeMod.MOD_ID) && recipeId.getPath().startsWith("custom/"))) continue;
             CraftingRecipe recipe = unwrap(wrappedRecipe);
 
             // Special recipes (for example decorated pots) require a real grid and throw on EMPTY.

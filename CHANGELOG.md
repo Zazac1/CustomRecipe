@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.2.1+26.2
+
+### Recipe management overhaul
+
+- Added missing-mod recovery, exact conflict handling, Default Recipe filters, and installed-mod recipe browsing.
+- Reworked the recipe creator with reusable items, persistent selection, protected slots, and a permanent Empty tile.
+
+### Client and server support
+
+- Kept client and server recipe catalogs separate and staged local recipes for explicit OP review and save.
+- Added server-side validation of staged recipes for missing mods and conflicts.
+
+### Recipe-book fixes
+
+- Fixed disabled variants, selected custom outputs, Vanilla priority, and Shift-crafting.
+
+## 1.1.4+26.2
+
+### Release alignment
+
+- Updated the release version to 1.1.4.
+- All existing 26.2 features remain unchanged and validated.
+
 ## 1.1.3+26.2
 
 ### Added
