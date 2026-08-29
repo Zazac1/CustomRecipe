@@ -359,7 +359,8 @@ public class CustomRecipesScreen extends Screen {
     }
 
     private boolean isCorrupted(CustomRecipeEntry entry) {
-        return Boolean.TRUE.equals(entry.corrupted) || !RecipeIntegrity.missingItems(entry).isEmpty();
+        return Boolean.TRUE.equals(entry.corrupted)
+                || (!parent.isServerManaged() && !RecipeIntegrity.missingItems(entry).isEmpty());
     }
 
     private List<String> missingItems(CustomRecipeEntry entry) {

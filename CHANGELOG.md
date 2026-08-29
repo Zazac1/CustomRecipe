@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.1+1.21.8
+
+### Changed
+
+- Restored local ModMenu recipes in the OP server editor when opening `/customrecipe`.
+- Local recipes are staged as server drafts without duplicates and are sent only after an OP clicks **Save**.
+- Client and server catalogs remain separate; only explicitly staged custom recipes are proposed to the server editor.
+- Staged recipes are checked against the server's item registry and default recipe catalog before the editor opens, reporting missing server items and exact conflicts without saving.
+
 ## 1.2.0+1.21.8
 
 ### Added

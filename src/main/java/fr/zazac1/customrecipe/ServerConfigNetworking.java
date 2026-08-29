@@ -39,6 +39,8 @@ public final class ServerConfigNetworking {
     public static void initialize() {
         PayloadTypeRegistry.playS2C().register(ServerConfigPayload.ID, ServerConfigPayload.CODEC);
         PayloadTypeRegistry.playC2S().register(SaveServerConfigPayload.ID, SaveServerConfigPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(ValidatedServerConfigPayload.ID, ValidatedServerConfigPayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(ValidateServerConfigPayload.ID, ValidateServerConfigPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(VanillaRecipePagePayload.ID, VanillaRecipePagePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(VanillaRecipeQueryPayload.ID, VanillaRecipeQueryPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(VanillaRecipeDetailsPayload.ID, VanillaRecipeDetailsPayload.CODEC);
@@ -81,6 +83,19 @@ public final class ServerConfigNetworking {
             ConfigLoader.saveAndInvalidate(config);
             player.sendMessage(Text.literal("[Custom Recipe] Server config saved. Reloading recipes..."), false);
             context.server().getCommandManager().executeWithPrefix(player.getCommandSource(), "reload");
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(ValidateServerConfigPayload.ID, (payload, context) -> {
+            ServerPlayerEntity player = context.player();
+            if (!player.getCommandSource().hasPermissionLevel(2) || payload.json().length() > MAX_JSON_CHARS) return;
+            ModConfig config = ConfigLoader.fromJson(payload.json());
+            if (config == null) return;
+
+            validateProposedConfig(context.server(), config);
+            String json = ConfigLoader.toJson(config);
+            if (json.length() <= MAX_JSON_CHARS) {
+                ServerPlayNetworking.send(player, new ValidatedServerConfigPayload(json));
+            }
         });
 
         ServerPlayNetworking.registerGlobalReceiver(VanillaRecipeQueryPayload.ID, (payload, context) -> {
@@ -139,6 +154,106 @@ public final class ServerConfigNetworking {
         }
         if (changed) ConfigLoader.saveIntegrityState(config);
     }
+
+    /** Validates unsaved OP drafts against the server's items and default recipes only. */
+    private static void validateProposedConfig(net.minecraft.server.MinecraftServer server, ModConfig config) {
+        for (CustomRecipeEntry entry : config.custom_recipes) {
+            RecipeIntegrity.refresh(entry);
+            List<String> conflicts = new ArrayList<>();
+            List<String> sameShape = new ArrayList<>();
+            RecipeSignature signature = Boolean.TRUE.equals(entry.corrupted) ? null : signatureOf(entry);
+            if (signature != null) {
+                for (RecipeEntry<?> candidate : server.getRecipeManager().values()) {
+                    Identifier id = candidate.id().getValue();
+                    if (!(candidate.value() instanceof CraftingRecipe wrapped)
+                            || (id.getNamespace().equals(CustomRecipeMod.MOD_ID) && id.getPath().startsWith("custom/"))) {
+                        continue;
+                    }
+                    CraftingRecipe existing = unwrap(wrapped);
+                    if (!signature.equals(signatureOf(existing))) continue;
+                    if (sameOutputItem(entry, existing, server)) conflicts.add(id.toString());
+                    else sameShape.add(id.toString());
+                }
+            }
+            conflicts.sort(String::compareTo);
+            sameShape.sort(String::compareTo);
+            entry.conflicting_recipes = conflicts;
+            entry.same_shape_recipes = sameShape;
+        }
+    }
+
+    private static boolean sameOutputItem(CustomRecipeEntry entry, CraftingRecipe candidate,
+                                          net.minecraft.server.MinecraftServer server) {
+        Identifier resultId = Identifier.tryParse(entry.result);
+        if (resultId == null) return false;
+        try {
+            ItemStack result = candidate.craft(CraftingRecipeInput.EMPTY, server.getRegistryManager());
+            return !result.isEmpty() && resultId.equals(Registries.ITEM.getId(result.getItem()));
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private static RecipeSignature signatureOf(CustomRecipeEntry entry) {
+        if ("shaped".equalsIgnoreCase(entry.type)) {
+            if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
+            int width = entry.pattern.stream().mapToInt(String::length).max().orElse(0);
+            List<String> slots = new ArrayList<>();
+            for (String row : entry.pattern) {
+                for (int column = 0; column < width; column++) {
+                    char symbol = column < row.length() ? row.charAt(column) : ' ';
+                    String item = symbol == ' ' ? "" : entry.keys.get(String.valueOf(symbol));
+                    if (symbol != ' ' && (item == null || item.isBlank())) return null;
+                    slots.add(item == null ? "" : item.trim());
+                }
+            }
+            return trimSignature(true, width, entry.pattern.size(), slots);
+        }
+        if (entry.ingredients == null || entry.ingredients.isEmpty()) return null;
+        List<String> ingredients = new ArrayList<>();
+        for (String item : entry.ingredients) {
+            if (item == null || item.isBlank()) return null;
+            ingredients.add(item.trim());
+        }
+        ingredients.sort(String::compareTo);
+        return new RecipeSignature(false, ingredients.size(), 1, ingredients);
+    }
+
+    private static RecipeSignature signatureOf(CraftingRecipe recipe) {
+        if (recipe instanceof ShapedRecipe shaped) {
+            List<String> slots = new ArrayList<>();
+            for (java.util.Optional<Ingredient> ingredient : shaped.getIngredients()) {
+                slots.add(ingredient.map(ServerConfigNetworking::ingredientSignature).orElse(""));
+            }
+            return trimSignature(true, shaped.getWidth(), shaped.getHeight(), slots);
+        }
+        List<String> ingredients = recipe.getIngredientPlacement().getIngredients().stream()
+                .map(ServerConfigNetworking::ingredientSignature).sorted().toList();
+        return new RecipeSignature(false, ingredients.size(), 1, ingredients);
+    }
+
+    private static RecipeSignature trimSignature(boolean shaped, int sourceWidth, int sourceHeight, List<String> slots) {
+        int left = sourceWidth, right = -1, top = sourceHeight, bottom = -1;
+        for (int row = 0; row < sourceHeight; row++) {
+            for (int column = 0; column < sourceWidth; column++) {
+                if (slots.get(row * sourceWidth + column).isBlank()) continue;
+                left = Math.min(left, column);
+                right = Math.max(right, column);
+                top = Math.min(top, row);
+                bottom = Math.max(bottom, row);
+            }
+        }
+        if (right < left || bottom < top) return null;
+        List<String> trimmed = new ArrayList<>();
+        for (int row = top; row <= bottom; row++) {
+            for (int column = left; column <= right; column++) {
+                trimmed.add(slots.get(row * sourceWidth + column));
+            }
+        }
+        return new RecipeSignature(shaped, right - left + 1, bottom - top + 1, trimmed);
+    }
+
+    private record RecipeSignature(boolean shaped, int width, int height, List<String> ingredients) {}
 
     private static boolean sameExactInputs(CraftingRecipe first, CraftingRecipe second) {
         boolean firstShaped = first instanceof ShapedRecipe;
