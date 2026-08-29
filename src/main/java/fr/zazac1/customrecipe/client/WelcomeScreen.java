@@ -123,13 +123,13 @@ public class WelcomeScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyInput k) {
-        if (k.key() == 256) { // Escape → dismiss
+    public boolean keyPressed(KeyInput key) {
+        if (key.key() == 256) { // Escape → dismiss
             dismiss();
             client.setScreen(returnTo);
             return true;
         }
-        return super.keyPressed(k);
+        return super.keyPressed(key);
     }
 
     private void drawBox(DrawContext ctx, int x, int y, int w, int h, int c) {

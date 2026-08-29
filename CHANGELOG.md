@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.1+1.21.11
+
+### Added
+
+- Added missing-mod recovery, exact recipe conflict detection, and local direct-item conflict checks.
+- Added installed-mod recipes, status filters, live search, tag previews, and material variants to **Default Recipes**.
+- Added reusable items, persistent picker selection, protected slots, and an Empty clear tile to the recipe creator.
+- Added OP server-editor staging for local recipes, with server-side missing-mod and conflict validation before opening the editor.
+
+### Changed
+
+- Client and server item/recipe catalogs stay independent when their installed mod lists differ.
+
+### Fixed
+
+- Fixed disabled variants, custom-output selection, Vanilla priority, and Shift-crafting in the green recipe book.
+
 ## 1.1.4+1.21.11
 
 - Fixed vanilla crafting recipes missing from the local ModMenu browser when client resources return no craft entries.

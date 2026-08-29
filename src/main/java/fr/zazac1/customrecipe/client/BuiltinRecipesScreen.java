@@ -60,6 +60,7 @@ public class BuiltinRecipesScreen extends Screen {
 
     private final ConfigScreen parent;
     private final List<String> disabled;
+    private final List<String> knownByDefault;
     private int scroll         = 0;
     private int selectedRecipe = -1;
 
@@ -67,6 +68,7 @@ public class BuiltinRecipesScreen extends Screen {
         super(Text.literal("Built-in Recipes"));
         this.parent   = parent;
         this.disabled = parent.disabled;
+        this.knownByDefault = parent.knownByDefaultBuiltin;
     }
 
     private int listTop()    { return 28; }
@@ -198,6 +200,14 @@ public class BuiltinRecipesScreen extends Screen {
             arrow.setMaxWidth(12);
             arrow.setMaxRows(1);
             addDrawableChild(arrow);
+
+            String id = RECIPES[selectedRecipe][0];
+            boolean known = knownByDefault.contains(id);
+            addDrawableChild(ButtonWidget.builder(
+                    known ? Text.literal("Known by default: ON").withColor(0x55FF55)
+                          : Text.literal("Known by default: OFF").withColor(0xFFCC55),
+                    b -> toggleKnownByDefault(id)
+            ).dimensions(width - PAD - 142, detailY() + 30, 138, 18).build());
         }
 
         // ── Bouton Retour ─────────────────────────────────────────────────
@@ -208,6 +218,11 @@ public class BuiltinRecipesScreen extends Screen {
 
     private void toggle(String id) {
         if (!disabled.remove(id)) disabled.add(id);
+        clearAndInit();
+    }
+
+    private void toggleKnownByDefault(String id) {
+        if (!knownByDefault.remove(id)) knownByDefault.add(id);
         clearAndInit();
     }
 
