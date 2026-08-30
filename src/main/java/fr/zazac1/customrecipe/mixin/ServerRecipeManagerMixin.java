@@ -4,6 +4,7 @@ import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.ModConfig;
+import fr.zazac1.customrecipe.RecipeIntegrity;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.item.ItemStack;
@@ -72,7 +73,18 @@ public abstract class ServerRecipeManagerMixin {
 
         // 2. Inject user custom recipes
         int idx = 0;
+        boolean recipeStateChanged = false;
         for (CustomRecipeEntry entry : config.custom_recipes) {
+            if (entry == null) continue;
+            boolean wasCorrupted = Boolean.TRUE.equals(entry.corrupted);
+            RecipeIntegrity.refresh(entry);
+            recipeStateChanged |= wasCorrupted != Boolean.TRUE.equals(entry.corrupted);
+            if (Boolean.TRUE.equals(entry.corrupted)) {
+                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Skipping corrupted recipe {} (missing: {})",
+                        entry.result, entry.missing_items);
+                idx++;
+                continue;
+            }
             // Local ModMenu recipes are drafts until an OP explicitly adds them
             // to the server. Null preserves recipes from configurations made
             // before the server publication state existed.
@@ -84,6 +96,8 @@ public abstract class ServerRecipeManagerMixin {
             RecipeEntry<?> built = buildCustomRecipe(entry, idx++, recipeBookGroup(entry));
             if (built != null) recipes.add(built);
         }
+
+        if (recipeStateChanged) ConfigLoader.saveIntegrityState(config);
 
         setRecipes(recipes);
     }

@@ -52,6 +52,21 @@ public class CustomRecipeEntry {
     /** Whether every player should know this recipe as soon as they join. */
     public Boolean known_by_default;
 
+    /** Non-vanilla mod IDs and versions present when this recipe was saved. */
+    public Map<String, String> required_mods = new LinkedHashMap<>();
+
+    /** Set automatically when an output or ingredient item no longer exists. */
+    public Boolean corrupted;
+
+    /** Missing item IDs that caused this recipe to be marked corrupted. */
+    public List<String> missing_items = new ArrayList<>();
+
+    /** Default crafting recipe IDs with identical inputs and output item. */
+    public List<String> conflicting_recipes = new ArrayList<>();
+
+    /** Default crafting recipe IDs with identical inputs but a different output item. */
+    public List<String> same_shape_recipes = new ArrayList<>();
+
     /** Stable recipe ID shared by reloads and recipe-book unlocks. */
     public Identifier serverRecipeId() {
         String source = id == null || id.isBlank() ? result : id;

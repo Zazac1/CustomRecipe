@@ -11,6 +11,9 @@ public class ModConfig {
      */
     public List<String> disabled_builtin = new ArrayList<>();
 
+    /** Built-in recipe IDs (without namespace) unlocked for every player. */
+    public List<String> known_by_default_builtin = new ArrayList<>();
+
     /**
      * Full recipe IDs disabled by a server administrator.
      * Examples: ["minecraft:torch", "some_mod:machine_recipe"].

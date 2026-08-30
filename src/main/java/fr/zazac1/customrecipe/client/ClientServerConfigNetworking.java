@@ -3,6 +3,7 @@ package fr.zazac1.customrecipe.client;
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.SaveServerConfigPayload;
+import fr.zazac1.customrecipe.ValidateServerConfigPayload;
 import fr.zazac1.customrecipe.VanillaRecipeQueryPayload;
 import fr.zazac1.customrecipe.VanillaRecipeDetailsQueryPayload;
 import com.google.gson.Gson;
@@ -16,6 +17,11 @@ public final class ClientServerConfigNetworking {
     private static final Gson GSON = new Gson();
     public static void save(ModConfig config) {
         ClientPlayNetworking.send(new SaveServerConfigPayload(ConfigLoader.toJson(config)));
+    }
+
+    /** Requests server-only integrity and conflict validation without saving. */
+    public static void validate(ModConfig config) {
+        ClientPlayNetworking.send(new ValidateServerConfigPayload(ConfigLoader.toJson(config)));
     }
 
     public static void searchVanilla(String query, boolean matchIngredients, boolean matchOutput, int page) {
