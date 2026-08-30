@@ -7,6 +7,7 @@ import fr.zazac1.customrecipe.VanillaRecipePage;
 import fr.zazac1.customrecipe.VanillaRecipePagePayload;
 import fr.zazac1.customrecipe.VanillaRecipeDetails;
 import fr.zazac1.customrecipe.VanillaRecipeDetailsPayload;
+import fr.zazac1.customrecipe.ValidatedServerConfigPayload;
 import com.google.gson.Gson;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
@@ -37,19 +38,30 @@ public class ClientInit implements ClientModInitializer {
                 client.player.sendMessage(net.minecraft.text.Text.literal(
                         "[Custom Recipe] " + imported + " local recipe(s) ready to add to the server."), false);
             }
-            client.setScreen(new ConfigScreen(client.currentScreen, config,
-                    "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
+            ClientServerConfigNetworking.validate(config);
+            });
+        });
+        ClientPlayNetworking.registerGlobalReceiver(ValidatedServerConfigPayload.ID, (client, handler, buffer, responseSender) -> {
+            String json = buffer.readString();
+            client.execute(() -> {
+                var config = ConfigLoader.fromJson(json);
+                if (config == null) {
+                    client.player.sendMessage(net.minecraft.text.Text.literal("[Custom Recipe] Invalid validated server config."), false);
+                    return;
+                }
+                client.setScreen(new ConfigScreen(client.currentScreen, config,
+                        "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
             });
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipePagePayload.ID, (client, handler, buffer, responseSender) -> {
             VanillaRecipePage page = GSON.fromJson(buffer.readString(), VanillaRecipePage.class);
-            client.execute(() -> { if (page != null && client.currentScreen instanceof VanillaRecipesScreen screen) {
+            client.execute(() -> { if (page != null && client.currentScreen instanceof VanillaRecipesScreen120 screen) {
                 screen.applyResult(page);
             }});
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsPayload.ID, (client, handler, buffer, responseSender) -> {
             VanillaRecipeDetails details = GSON.fromJson(buffer.readString(), VanillaRecipeDetails.class);
-            client.execute(() -> { if (details != null && client.currentScreen instanceof VanillaRecipeDetailsScreen screen) {
+            client.execute(() -> { if (details != null && client.currentScreen instanceof VanillaRecipeDetailsScreen120 screen) {
                 screen.applyDetails(details);
             }});
         });
@@ -105,6 +117,11 @@ public class ClientInit implements ClientModInitializer {
         copy.enabled = source.enabled;
         copy.server_enabled = Boolean.FALSE;
         copy.known_by_default = source.known_by_default;
+        copy.required_mods = new java.util.LinkedHashMap<>(source.required_mods);
+        copy.corrupted = source.corrupted;
+        copy.missing_items = new java.util.ArrayList<>(source.missing_items);
+        copy.conflicting_recipes = new java.util.ArrayList<>(source.conflicting_recipes);
+        copy.same_shape_recipes = new java.util.ArrayList<>(source.same_shape_recipes);
         return copy;
     }
 }

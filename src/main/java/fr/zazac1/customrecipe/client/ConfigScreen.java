@@ -28,6 +28,7 @@ public class ConfigScreen extends Screen {
     /** Shared state — modified by sub-screens, saved on Save. */
     final List<CustomRecipeEntry> recipes;
     final List<String> disabled;
+    final List<String> knownByDefaultBuiltin;
     final List<String> disabledRecipes;
     final List<RecipeVariantRule> disabledRecipeVariants;
 
@@ -45,6 +46,7 @@ public class ConfigScreen extends Screen {
         this.serverManaged = serverManaged;
         this.recipes  = new ArrayList<>(config.custom_recipes);
         this.disabled = new ArrayList<>(config.disabled_builtin);
+        this.knownByDefaultBuiltin = new ArrayList<>(config.known_by_default_builtin);
         this.disabledRecipes = new ArrayList<>(config.disabled_recipes);
         this.disabledRecipeVariants = new ArrayList<>(config.disabled_recipe_variants);
     }
@@ -78,13 +80,13 @@ public class ConfigScreen extends Screen {
 
         addDrawableChild(ButtonWidget.builder(
                 Text.literal("Create a Recipe"),
-                b -> client.setScreen(new RecipeBuilderScreen(this))
+                    b -> client.setScreen(new RecipeBuilderScreen120(this))
         ).dimensions(cx, cy + 48, btnW, btnH).build());
 
         if (serverManaged) {
             addDrawableChild(ButtonWidget.builder(
-                    Text.literal("Vanilla Crafting Recipes"),
-                    b -> client.setScreen(new VanillaRecipesScreen(this))
+                    Text.literal("Default Recipes"),
+                    b -> client.setScreen(new VanillaRecipesScreen120(this))
             ).dimensions(cx, cy + 72, btnW, btnH).build());
 
             addDrawableChild(ButtonWidget.builder(
@@ -93,8 +95,8 @@ public class ConfigScreen extends Screen {
             ).dimensions(cx, cy + 96, btnW, btnH).build());
         } else {
             addDrawableChild(ButtonWidget.builder(
-                    Text.literal("Vanilla Crafting Recipes"),
-                    b -> client.setScreen(new VanillaRecipesScreen(this, true))
+                    Text.literal("Default Recipes"),
+                    b -> client.setScreen(new VanillaRecipesScreen120(this, true))
             ).dimensions(cx, cy + 72, btnW, btnH).build());
         }
 
@@ -121,6 +123,7 @@ public class ConfigScreen extends Screen {
     ModConfig currentConfig() {
         baseConfig.custom_recipes = new ArrayList<>(recipes);
         baseConfig.disabled_builtin = new ArrayList<>(disabled);
+        baseConfig.known_by_default_builtin = new ArrayList<>(knownByDefaultBuiltin);
         baseConfig.disabled_recipes = new ArrayList<>(disabledRecipes);
         baseConfig.disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
         return baseConfig;
@@ -131,6 +134,8 @@ public class ConfigScreen extends Screen {
         recipes.addAll(config.custom_recipes);
         disabled.clear();
         disabled.addAll(config.disabled_builtin);
+        knownByDefaultBuiltin.clear();
+        knownByDefaultBuiltin.addAll(config.known_by_default_builtin);
         disabledRecipes.clear();
         disabledRecipes.addAll(config.disabled_recipes);
         disabledRecipeVariants.clear();

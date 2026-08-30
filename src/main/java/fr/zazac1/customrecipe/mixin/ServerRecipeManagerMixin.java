@@ -25,13 +25,15 @@ public abstract class ServerRecipeManagerMixin {
     @Inject(method = "apply(Ljava/util/Map;Lnet/minecraft/resource/ResourceManager;Lnet/minecraft/util/profiler/Profiler;)V", at = @At("TAIL"))
     private void customrecipe$applyConfig(Map<Identifier, JsonElement> ignored, ResourceManager manager, Profiler profiler, CallbackInfo ci) {
         ConfigLoader.invalidate(); ModConfig config = ConfigLoader.get();
+        for (CustomRecipeEntry entry : config.custom_recipes) RecipeIntegrity.refresh(entry);
         List<Recipe<?>> recipes = new ArrayList<>(values());
         recipes.removeIf(recipe -> recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID)
                 && config.disabled_builtin.contains(recipe.getId().getPath()));
         recipes.removeIf(recipe -> config.disabled_recipes.contains(recipe.getId().toString()) && !(recipe instanceof CraftingRecipe));
         int index = 0;
         for (CustomRecipeEntry entry : config.custom_recipes) {
-            if (!Boolean.FALSE.equals(entry.server_enabled) && !Boolean.FALSE.equals(entry.enabled)) {
+            if (!Boolean.FALSE.equals(entry.server_enabled) && !Boolean.FALSE.equals(entry.enabled)
+                    && !Boolean.TRUE.equals(entry.corrupted)) {
                 Recipe<?> recipe = build(entry, recipeBookGroup(entry)); if (recipe != null) recipes.add(recipe);
             }
             index++;

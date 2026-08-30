@@ -73,7 +73,7 @@ public class WelcomeScreen extends Screen {
                 b -> {
                     dismiss();
                     ConfigScreen cs = configScreen();
-                    client.setScreen(new RecipeBuilderScreen(cs));
+                    client.setScreen(new RecipeBuilderScreen120(cs));
                 }
         ).dimensions(btnX, py + 124, btnW, 20).build());
 

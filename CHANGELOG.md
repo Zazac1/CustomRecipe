@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.2.1+1.20.1
+
+### Recipe management overhaul
+
+- Added **Known by default** for built-in and custom recipes, missing-mod recovery, and exact conflict handling.
+- Reworked **Default Recipes** with installed-mod recipes, live search, status filters, tag previews, and material variants.
+- Reworked the recipe creator with reusable items, persistent selection, protected slots, and an Empty clear tile.
+
+### Client and server support
+
+- Kept client and server recipe catalogs separate so different mod lists remain safe.
+- Local ModMenu recipes are staged in the OP `/customrecipe` editor and are only published when the OP saves.
+- Staged recipes are checked against server items and recipes for missing mods and conflicts.
+
+### 1.20.1 fixes
+
+- Fixed local recipe discovery for Vanilla and installed mods (`recipes/` data paths and legacy result JSON).
+- Fixed interchangeable tag materials for tools and other recipes in the local browser.
+- Preserved disabled variants, custom-output selection, Vanilla priority, and Shift-crafting in the green recipe book.
+
 ## 1.1.4+1.20.1
 
 - Fixed material variants in the local ModMenu editor: vanilla item tags are now resolved from Minecraft data before joining a world.
@@ -33,9 +53,9 @@
 - Fixed vanilla recipe results and icons in the local ModMenu browser.
 - Fixed local custom recipes so they load in singleplayer after saving.
 
-## 1.1.1+1.21.1
+## 1.1.1+1.20.1
 
-- Ported Recipes Creator 1.1.1 to Minecraft 1.21.1 (Fabric).
+- Ported Recipes Creator 1.1.1 to Minecraft 1.20.1 (Fabric).
 
 ## 1.1.1 - 2026-08-26
 

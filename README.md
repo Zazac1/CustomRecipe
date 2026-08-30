@@ -4,12 +4,14 @@ Custom Recipe is a Fabric mod for Minecraft **1.20.1**. Create shaped or shapele
 
 ## Highlights
 
-- Visual shaped and shapeless recipe builder for vanilla and modded items.
+- Visual shaped and shapeless recipe builder for vanilla and modded items, with reusable items, protected slots, and an Empty clear tile.
 - Persistent custom recipes, with stable IDs and enable/disable state.
-- Four built-in recipes that can be toggled per world.
-- Vanilla and modded crafting recipe browser: search by output, ingredient, or recipe ID; scroll through results; preview the exact 3x3 crafting layout.
+- **Known by default** recipes are silently added to every player's recipe book.
+- Custom recipes with identical inputs share one recipe-book group.
+- Four built-in recipes that can be toggled per world and marked **Known by default**.
+- Default Recipes browser: client-installed Vanilla and modded recipes, live search, status filters, and exact 3x3 previews.
 - Material variants: for recipes using tags such as planks or stone, preview each usable material and disable one material variant or the entire recipe.
-- Same vanilla recipe controls in ModMenu/local singleplayer and the OP server editor.
+- Same default-recipe controls in ModMenu/local singleplayer and the OP server editor.
 - OP-only server configuration command with permission-checked client/server networking.
 
 ## Build and installation
@@ -36,8 +38,8 @@ Open **ModMenu -> Custom Recipe**.
 
 - **My Recipes**: inspect, enable, disable, or delete custom recipes.
 - **Built-in Recipes**: toggle the included recipes.
-- **Create a Recipe**: create a shaped or shapeless recipe.
-- **Vanilla Crafting Recipes**: search vanilla crafting recipes, scroll the results, and click a name to open its preview.
+- **Create a Recipe**: create a shaped or shapeless recipe with persistent item selection and reusable items.
+- **Default Recipes**: search Vanilla and installed-mod crafting recipes, filter by status, and click a name to open its preview.
 
 In a recipe preview, interchangeable ingredients appear in a compact icon grid:
 
@@ -57,7 +59,7 @@ Install the mod on the dedicated server and on the operator's client. An operato
 /customrecipe
 ```
 
-The server sends its authoritative configuration to that operator only. The editor supports custom recipes, built-ins, vanilla crafting recipes, material variants, and manual JSON editing. Click **Save** to send the full configuration back to the server; it is written to the server `config/customrecipe.json` and recipes are reloaded.
+The server sends its authoritative configuration to that operator only. The editor supports custom recipes, built-ins, default crafting recipes, material variants, and manual JSON editing. Local recipes are staged and checked against the server catalog; only **Save** publishes them. The configuration is written to the server `config/customrecipe.json` and recipes are reloaded.
 
 The server validates operator permission and configuration size before accepting a save.
 

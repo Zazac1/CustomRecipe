@@ -33,6 +33,8 @@ public class RecipeBuilderScreen extends Screen {
     private int    resultCount    = 1;
     private boolean shaped        = false;
     private boolean knownByDefault = false;
+    /** Persistently held picker item; empty string is the erase tile. */
+    private String heldItemId;
     /** -2 = nothing selected, -1 = result slot, 0-8 = grid slot */
     private int selectedSlot      = -2;
 
@@ -94,6 +96,11 @@ public class RecipeBuilderScreen extends Screen {
         itemField.setMaxLength(100);
         itemField.setText(itemFieldText);
         itemField.setChangedListener(s -> { itemFieldText = s; restoreFocus = 1; onItemTyped(s); });
+        addDrawableChild(ButtonWidget.builder(Text.literal("×"), b -> {
+            itemFieldText = "";
+            itemField.setText("");
+            setFocused(itemField);
+        }).dimensions(leftX() + leftW() - 14, fieldY(), 14, 14).build());
 
         // Autocomplete suggestions (label widgets)
         for (int i = 0; i < itemSugg.size(); i++) {
@@ -137,6 +144,14 @@ public class RecipeBuilderScreen extends Screen {
                                : Text.literal("Known by default: OFF").styled(s -> s.withColor(0xFFCC55)),
                 b -> { knownByDefault = !knownByDefault; clearAndInit(); }
         ).dimensions(rightX(), modeY + 18, 140, 14).build());
+
+        addDrawableChild(ButtonWidget.builder(Text.literal("Empty selected slot").styled(s -> s.withColor(0xFF7777)),
+                b -> {
+                    heldItemId = "";
+                    if (selectedSlot != -2) applyHeldItemToSelectedSlot();
+                    clearAndInit();
+                }
+        ).dimensions(rightX(), modeY + 36, 140, 14).build());
 
         // ── Bottom buttons ────────────────────────────────────────────────
         addDrawableChild(ButtonWidget.builder(Text.literal("Cancel"),
@@ -184,14 +199,29 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     private void selectItem(String[] s) {
-        if (selectedSlot == -1) {
-            resultItemId = s[0];
-        } else if (selectedSlot >= 0 && selectedSlot < 9) {
-            slotItems[selectedSlot] = s[0];
-        }
+        heldItemId = s[0];
+        applyNewHeldItemToSelectedSlot();
         itemFieldText = s[1].toLowerCase(Locale.ROOT).replace(' ', '_');
         itemSugg      = new ArrayList<>();
         clearAndInit();
+    }
+
+    /** Never replace the previous non-empty selected slot while changing the picker item. */
+    private void applyNewHeldItemToSelectedSlot() {
+        if (selectedSlot == -2) return;
+        if (selectedSlotIsEmpty()) applyHeldItemToSelectedSlot();
+        else selectedSlot = -2;
+    }
+
+    private boolean selectedSlotIsEmpty() {
+        if (selectedSlot == -1) return resultItemId.isEmpty();
+        return selectedSlot >= 0 && selectedSlot < 9 && slotItems[selectedSlot].isEmpty();
+    }
+
+    private void applyHeldItemToSelectedSlot() {
+        if (heldItemId == null) return;
+        if (selectedSlot == -1) resultItemId = heldItemId;
+        else if (selectedSlot >= 0 && selectedSlot < 9) slotItems[selectedSlot] = heldItemId;
     }
 
     // ── rendering ─────────────────────────────────────────────────────────
@@ -283,6 +313,7 @@ public class RecipeBuilderScreen extends Screen {
                 int sx = gx + c * SLOT, sy = gy + r * SLOT;
                 if (mx >= sx && mx < sx + SLOT && my >= sy && my < sy + SLOT) {
                     selectedSlot = slot;
+                    applyHeldItemToSelectedSlot();
                     // Conserver itemFieldText et itemSugg — l'utilisateur n'a pas à reécrire
                     restoreFocus = 1;
                     clearAndInit();
@@ -295,6 +326,7 @@ public class RecipeBuilderScreen extends Screen {
         int rx = resX(), ry = resY();
         if (mx >= rx && mx < rx + SLOT && my >= ry && my < ry + SLOT) {
             selectedSlot = -1;
+            applyHeldItemToSelectedSlot();
             // Conserver itemFieldText et itemSugg
             restoreFocus = 1;
             clearAndInit();
@@ -401,7 +433,7 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     private String shortId(String id) {
-        return id.startsWith("minecraft:") ? id.substring(10) : id;
+        return id;
     }
 
     private MultilineTextWidget makeLabel(int x, int y, String text, int color) {

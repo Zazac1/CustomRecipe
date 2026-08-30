@@ -5,6 +5,7 @@ import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.SaveServerConfigPayload;
 import fr.zazac1.customrecipe.VanillaRecipeQueryPayload;
 import fr.zazac1.customrecipe.VanillaRecipeDetailsQueryPayload;
+import fr.zazac1.customrecipe.ValidateServerConfigPayload;
 import com.google.gson.Gson;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -17,6 +18,11 @@ public final class ClientServerConfigNetworking {
     private static final Gson GSON = new Gson();
     public static void save(ModConfig config) {
         ClientPlayNetworking.send(SaveServerConfigPayload.ID, PacketByteBufs.create().writeString(ConfigLoader.toJson(config)));
+    }
+
+    public static void validate(ModConfig config) {
+        ClientPlayNetworking.send(ValidateServerConfigPayload.ID,
+                PacketByteBufs.create().writeString(ConfigLoader.toJson(config)));
     }
 
     public static void searchVanilla(String query, boolean matchIngredients, boolean matchOutput, int page) {

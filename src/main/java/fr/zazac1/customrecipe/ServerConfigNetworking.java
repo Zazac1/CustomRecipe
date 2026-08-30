@@ -16,6 +16,7 @@ import net.minecraft.recipe.Ingredient;
 import net.minecraft.recipe.ShapedRecipe;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,8 +41,10 @@ public final class ServerConfigNetworking {
         ));
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> awardDefaultRecipes(handler.player, server));
+        ServerLifecycleEvents.SERVER_STARTED.register(RecipeConflictChecker::refreshAndSave);
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
             if (success) {
+                RecipeConflictChecker.refreshAndSave(server);
                 for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
                     awardDefaultRecipes(player, server);
                 }
@@ -61,9 +64,25 @@ public final class ServerConfigNetworking {
                 return;
             }
 
+            RecipeConflictChecker.validate(server, config);
             ConfigLoader.saveAndInvalidate(config);
             player.sendMessage(Text.literal("[Custom Recipe] Server config saved. Reloading recipes..."), false);
             server.getCommandManager().executeWithPrefix(player.getCommandSource(), "reload");
+            });
+        });
+
+        ServerPlayNetworking.registerGlobalReceiver(ValidateServerConfigPayload.ID, (server, player, handler, buffer, sender) -> {
+            String json = buffer.readString(MAX_JSON_CHARS);
+            server.execute(() -> {
+                if (!player.getCommandSource().hasPermissionLevel(2)) return;
+                ModConfig config = ConfigLoader.fromJson(json);
+                if (config == null) return;
+                RecipeConflictChecker.validate(server, config);
+                String checkedJson = ConfigLoader.toJson(config);
+                if (checkedJson.length() <= MAX_JSON_CHARS) {
+                    ServerPlayNetworking.send(player, ValidatedServerConfigPayload.ID,
+                            PacketByteBufs.create().writeString(checkedJson));
+                }
             });
         });
 
@@ -85,10 +104,17 @@ public final class ServerConfigNetworking {
         for (CustomRecipeEntry entry : ConfigLoader.get().custom_recipes) {
             if (!Boolean.TRUE.equals(entry.known_by_default)
                     || Boolean.FALSE.equals(entry.enabled)
+                    || Boolean.TRUE.equals(entry.corrupted)
                     || (server.isDedicated() && Boolean.FALSE.equals(entry.server_enabled))) {
                 continue;
             }
             server.getRecipeManager().get(entry.serverRecipeId()).ifPresent(recipes::add);
+        }
+
+        for (String builtinId : ConfigLoader.get().known_by_default_builtin) {
+            if (builtinId == null || ConfigLoader.get().disabled_builtin.contains(builtinId)) continue;
+            Identifier id = Identifier.tryParse(CustomRecipeMod.MOD_ID + ":" + builtinId);
+            if (id != null) server.getRecipeManager().get(id).ifPresent(recipes::add);
         }
 
         boolean changed = false;
@@ -131,7 +157,8 @@ public final class ServerConfigNetworking {
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
 
         for (net.minecraft.recipe.Recipe<?> entry : server.getRecipeManager().values()) {
-            if (!entry.getId().getNamespace().equals("minecraft") || !(entry instanceof CraftingRecipe wrappedRecipe)) continue;
+            if (!(entry instanceof CraftingRecipe wrappedRecipe)
+                    || (entry.getId().getNamespace().equals(CustomRecipeMod.MOD_ID) && entry.getId().getPath().startsWith("custom/"))) continue;
             CraftingRecipe recipe = unwrap(wrappedRecipe);
 
             // Special recipes (for example decorated pots) require a real grid and throw on EMPTY.
