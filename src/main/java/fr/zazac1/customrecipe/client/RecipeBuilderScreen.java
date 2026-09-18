@@ -124,7 +124,8 @@ public class RecipeBuilderScreen extends Screen {
 
     // ── layout helpers ────────────────────────────────────────────────────
 
-    private int leftW()  { return Math.min(280, Math.max(210, width / 3)); }
+    // Give item IDs enough room while shifting the preview into the unused right-hand space.
+    private int leftW()  { return Math.min(300, Math.max(240, width * 2 / 5)); }
     private int leftX()  { return PAD; }
     private int rightX() { return leftX() + leftW() + PAD; }
     private int rightW() { return width - rightX() - PAD; }
@@ -253,7 +254,7 @@ public class RecipeBuilderScreen extends Screen {
 
         // Result count: type a stack size directly instead of clicking through 64 values.
         int countY = countY();
-        addDrawableChild(makeRightLabel(settingsX(), countY,
+        addDrawableChild(makeRightLabel(settingsX(), countY + 3,
                 Text.translatable("customrecipe.builder.result_count").getString(), 0xCCCCCC));
         resultCountField = addDrawableChild(new TextFieldWidget(textRenderer, settingsX() + 70, countY - 2,
                 34, 18, Text.translatable("customrecipe.builder.result_count")));

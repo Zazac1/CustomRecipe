@@ -161,14 +161,14 @@ public class VanillaRecipesScreen extends Screen {
                     .dimensions(width - 84, y + 1, 76, 18).build());
         }
 
-        int bottom = height - 24;
+        int bottom = height - 26;
         String saveLabel = Text.translatable("customrecipe.button.save").getString();
-        addDrawableChild(ButtonWidget.builder(Text.empty(), b -> parent.saveAndReturn(parent))
-                .dimensions(width / 2 - 100, bottom, 200, 18).build());
+        addDrawableChild(ButtonWidget.builder(Text.empty(), b -> parent.saveFromSubmenu())
+                .dimensions(width / 2 - 100, bottom, 200, 22).build());
         addDrawable((ctx, mouseX, mouseY, delta) -> {
             int iconX = width / 2 - textRenderer.getWidth(saveLabel) / 2 - 20;
-            CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, iconX, bottom + 1, 16, 16);
-            ctx.drawCenteredTextWithShadow(textRenderer, saveLabel, width / 2, bottom + 4, 0xFFFFFFFF);
+            CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, iconX, bottom + 3, 16, 16);
+            ctx.drawCenteredTextWithShadow(textRenderer, saveLabel, width / 2, bottom + 7, 0xFFFFFFFF);
         });
 
         if (!searchStarted) resetSearch();

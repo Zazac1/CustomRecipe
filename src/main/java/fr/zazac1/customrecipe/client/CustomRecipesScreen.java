@@ -78,6 +78,8 @@ public class CustomRecipesScreen extends Screen {
     private int maxVisible()  { return Math.max(1, (listH() - HEADER_H) / ROW); }
     private int rowY(int i)   { return rowsTop() + (i - scroll) * ROW; }
     private int detailY()     { return listTop() + listH() + 2; }
+    /** Keep the detail header fixed below the table, then use all remaining space below it. */
+    private int renderedDetailH() { return Math.max(detailH(), height - bottomReserve() - detailY()); }
     private boolean hasQuickAdd() { return !libraryPicker; }
     private int tableRight() { return width - PAD - (hasQuickAdd() ? QUICK_ADD_W + QUICK_ADD_GAP : 0); }
     private int tableWidth() { return tableRight() - PAD; }
@@ -298,8 +300,8 @@ public class CustomRecipesScreen extends Screen {
                                 snapshot.quick_add = null;
                                 parent.quickAddRecipes.add(snapshot);
                             }
-                            // Keep bulk-add mode active until the user toggles the sidebar + again.
-                            quickAddEditMode = true;
+                            // Adding one shortcut completes this one-shot mode.
+                            quickAddEditMode = false;
                             clearAndInit();
                             return;
                         }
@@ -346,12 +348,13 @@ public class CustomRecipesScreen extends Screen {
 
         // ── Message vide ──────────────────────────────────────────────────
         if (recipes.isEmpty()) {
+            int emptyX = recipeX();
             MultilineTextWidget empty = new MultilineTextWidget(
-                    PAD + 5, rowsTop() + 10,
+                    emptyX, rowsTop() + Math.max(4, (listH() - HEADER_H - 8) / 2),
                     Text.translatable(libraryPicker ? "customrecipe.empty.library" : "customrecipe.empty.recipes")
                             .withColor(0x999999),
                     textRenderer);
-            empty.setMaxWidth(tableWidth() - 8);
+            empty.setMaxWidth(Math.max(20, statusX() - emptyX - 8));
             empty.setCentered(true);
             addDrawableChild(empty);
         }
@@ -522,12 +525,13 @@ public class CustomRecipesScreen extends Screen {
             ).dimensions(width / 2 - 75, height - 22, 150, 18).build());
         } else {
             String saveLabel = Text.translatable("customrecipe.button.save").getString();
-            addDrawableChild(ButtonWidget.builder(Text.empty(), b -> parent.saveAndReturn(parent))
-                    .dimensions(width / 2 - 100, height - 22, 200, 18).build());
+            int saveY = height - 26;
+            addDrawableChild(ButtonWidget.builder(Text.empty(), b -> parent.saveFromSubmenu())
+                    .dimensions(width / 2 - 100, saveY, 200, 22).build());
             addDrawable((ctx, mouseX, mouseY, delta) -> {
                 int iconX = width / 2 - textRenderer.getWidth(saveLabel) / 2 - 20;
-                CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, iconX, height - 21, 16, 16);
-                ctx.drawCenteredTextWithShadow(textRenderer, saveLabel, width / 2, height - 18, 0xFFFFFFFF);
+                CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, iconX, saveY + 3, 16, 16);
+                ctx.drawCenteredTextWithShadow(textRenderer, saveLabel, width / 2, saveY + 7, 0xFFFFFFFF);
             });
         }
     }
@@ -564,8 +568,8 @@ public class CustomRecipesScreen extends Screen {
 
     private void renderDetailFills(DrawContext ctx, CustomRecipeEntry e, boolean quickAddPreview) {
         int dy = detailY();
-        ctx.fill(PAD, dy, detailRight(), dy + detailH(), 0x88101010);
-        drawBox(ctx, PAD, dy, detailWidth(), detailH(), 0xFF506070);
+        ctx.fill(PAD, dy, detailRight(), dy + renderedDetailH(), 0x88101010);
+        drawBox(ctx, PAD, dy, detailWidth(), renderedDetailH(), 0xFF506070);
         boolean shapedDetail = "shaped".equalsIgnoreCase(e.type);
         drawRecipeTypeIcon(ctx, PAD + 4 + (shapedDetail ? 1 : 0), dy + (shapedDetail ? 3 : 2), shapedDetail,
                 isCorrupted(e) ? 0xFFFF7777 : 0xFFEECC77);
@@ -796,6 +800,11 @@ public class CustomRecipesScreen extends Screen {
     @Override
     public boolean mouseClicked(Click click, boolean focused) {
         double mx = click.x(), my = click.y();
+        if (quickAddEditMode && click.button() == 1) {
+            quickAddEditMode = false;
+            clearAndInit();
+            return true;
+        }
         if (hasRecipeScrollbar()
                 && mx >= recipeScrollTrackX() - 3 && mx < recipeScrollTrackX() + 7
                 && my >= recipeScrollTrackY() && my < recipeScrollTrackY() + recipeScrollTrackH()) {

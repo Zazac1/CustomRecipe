@@ -190,9 +190,7 @@ public class ConfigScreen extends Screen {
         int x = width / 2 - buttonWidth / 2;
         String label = Text.translatable("customrecipe.button.save").getString();
         addDrawable((ctx, mouseX, mouseY, delta) -> {
-            int labelWidth = textRenderer.getWidth(label);
-            int iconX = width / 2 - labelWidth / 2 - 20;
-            CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, iconX, y + 6, 16, 16);
+            CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, x + 12, y + 6, 16, 16);
             ctx.drawCenteredTextWithShadow(textRenderer, label, width / 2, y + 10, 0xFFFFFFFF);
         });
     }
@@ -287,6 +285,16 @@ public class ConfigScreen extends Screen {
                     .parseAndExecute(client.getServer().getCommandSource().withSilent(), "reload"));
         }
         client.setScreen(returnTo);
+    }
+
+    /** Dedicated servers receive staged changes only from the main Save action. */
+    void saveFromSubmenu() {
+        if (serverManaged) {
+            currentConfig();
+            client.setScreen(this);
+            return;
+        }
+        saveAndReturn(this);
     }
 
     @Override

@@ -48,6 +48,9 @@ public class ClientInit implements ClientModInitializer {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
                 literal("customrecipe_open_local").executes(context -> {
                     MinecraftClient client = MinecraftClient.getInstance();
+                    // This client-only helper is for the clickable new-world tip.
+                    // Never expose the local editor while connected to a remote server.
+                    if (client.getServer() == null) return 0;
                     client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new GameMenuScreen(true))));
                     return 1;
                 })
