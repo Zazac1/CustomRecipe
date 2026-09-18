@@ -27,15 +27,23 @@ public final class VanillaRecipeDetailsScreen extends Screen {
     private VanillaRecipeDetails.VariantPreview selectedVariant;
 
     VanillaRecipeDetailsScreen(VanillaRecipesScreen parent, VanillaRecipePage.VanillaRecipeInfo recipe) {
-        super(Text.literal("Recipe Preview"));
+        super(Text.translatable("customrecipe.details.title"));
         this.parent = parent;
         this.recipe = recipe;
     }
 
     @Override
+    public void close() {
+        client.setScreen(parent);
+    }
+
+    @Override
     protected void init() {
+        ConfigScreen config = parent.configScreen();
+        addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client, config.target(),
+                config.target().isWorld() ? config.target().displayName() : "Global Library"));
         if (details == null) parent.requestDetails(this, recipe.id());
-        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> client.setScreen(parent))
+        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.back"), b -> client.setScreen(parent))
                 .dimensions(width / 2 - 50, height - 28, 100, 20).build());
 
         if (details != null) {
@@ -54,8 +62,8 @@ public final class VanillaRecipeDetailsScreen extends Screen {
                 String material = selectedVariant == null ? details.variants().getFirst().materialId() : selectedVariant.materialId();
                 boolean blocked = parent.isVariantDisabled(recipe.id(), material);
                 int actionsY = variantActionsY();
-                addDrawableChild(ButtonWidget.builder(blocked ? Text.literal("Variant disabled").withColor(0xFF5555)
-                                : Text.literal("Disable this variant").withColor(0xFF5555), b -> {
+                addDrawableChild(ButtonWidget.builder(blocked ? Text.translatable("customrecipe.details.variant_disabled").withColor(0xFF5555)
+                                : Text.translatable("customrecipe.details.disable_variant").withColor(0xFF5555), b -> {
                             parent.toggleVariant(recipe.id(), material);
                             clearAndInit();
                         }).dimensions(x, actionsY, 142, 20).build());
@@ -63,8 +71,8 @@ public final class VanillaRecipeDetailsScreen extends Screen {
         }
         if (details != null && !details.variants().isEmpty()) {
             boolean allDisabled = parent.isRecipeDisabled(recipe.id());
-            addDrawableChild(ButtonWidget.builder(allDisabled ? Text.literal("All variants disabled").withColor(0xFF5555)
-                            : Text.literal("Disable all variants").withColor(0xFF5555), b -> {
+            addDrawableChild(ButtonWidget.builder(allDisabled ? Text.translatable("customrecipe.details.variants_disabled").withColor(0xFF5555)
+                            : Text.translatable("customrecipe.details.disable_variants").withColor(0xFF5555), b -> {
                         parent.toggleAllVariants(recipe.id());
                         clearAndInit();
                     }).dimensions(variantGridX(), variantActionsY() + 24, 142, 20).build());
@@ -85,7 +93,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
 
         int left = width / 2 - 86;
         int top = height / 2 - 74;
-        ctx.drawCenteredTextWithShadow(textRenderer, Text.literal("Recipe preview"), width / 2, top - 30, 0xFFFFFFFF);
+        ctx.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.details.title"), width / 2, top - 30, 0xFFFFFFFF);
         ctx.drawCenteredTextWithShadow(textRenderer, Text.literal(recipe.id()), width / 2, top - 16, 0xFFAAAAAA);
 
         for (int slot = 0; slot < 9; slot++) {
@@ -168,5 +176,5 @@ public final class VanillaRecipeDetailsScreen extends Screen {
         ctx.fill(x + 21, y + 15, x + 23, y + 23, color);
     }
 
-    @Override public boolean shouldPause() { return false; }
+    @Override public boolean shouldPause() { return true; }
 }

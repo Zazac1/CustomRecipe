@@ -6,6 +6,9 @@
     "ServerRecipeManagerMixin",
     "CraftingScreenHandlerMixin"
   ],
+  "client": [
+    "client.GameMenuScreenMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

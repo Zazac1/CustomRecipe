@@ -7,6 +7,7 @@ import fr.zazac1.customrecipe.DisabledCraftingRecipe;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.RecipeVariantRule;
 import fr.zazac1.customrecipe.VariantFilteredCraftingRecipe;
+import fr.zazac1.customrecipe.WorldRecipeConfig;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.recipe.*;
@@ -17,8 +18,6 @@ import net.minecraft.registry.RegistryKeys;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.profiler.Profiler;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.loader.api.FabricLoader;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -43,7 +42,7 @@ public abstract class ServerRecipeManagerMixin {
     )
     private PreparedRecipes customrecipe$applyConfig(PreparedRecipes original) {
         ConfigLoader.invalidate();
-        ModConfig config = ConfigLoader.get();
+        WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
 
         List<RecipeEntry<?>> recipes = new ArrayList<>(original.recipes());
 
@@ -99,18 +98,13 @@ public abstract class ServerRecipeManagerMixin {
         boolean recipeStateChanged = false;
         List<RecipeEntry<?>> customRecipes = new ArrayList<>();
         for (CustomRecipeEntry entry : config.custom_recipes) {
-            recipeStateChanged |= fr.zazac1.customrecipe.RecipeIntegrity.refresh(entry);
-            RecipeEntry<?> built = Boolean.TRUE.equals(entry.corrupted) ? null
-                    : buildCustomRecipe(entry, idx, recipeBookGroup(entry));
-            // Local ModMenu recipes are drafts until an OP explicitly adds them
-            // to the server. Null preserves recipes from configurations made
-            // before the server publication state existed.
-            boolean dedicatedServer = FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER;
-            if (Boolean.FALSE.equals(entry.enabled)
-                    || (dedicatedServer && Boolean.FALSE.equals(entry.server_enabled))) {
+            if (entry == null || Boolean.FALSE.equals(entry.enabled) || Boolean.FALSE.equals(entry.server_enabled)) {
                 idx++;
                 continue;
             }
+            recipeStateChanged |= fr.zazac1.customrecipe.RecipeIntegrity.refresh(entry);
+            RecipeEntry<?> built = Boolean.TRUE.equals(entry.corrupted) ? null
+                    : buildCustomRecipe(entry, idx, recipeBookGroup(entry));
             if (Boolean.TRUE.equals(entry.corrupted)) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Disabled corrupted recipe {}: missing {}. Reinstall required mods {} or delete the recipe.",
                         entry.id, entry.missing_items, entry.required_mods);
@@ -120,7 +114,7 @@ public abstract class ServerRecipeManagerMixin {
             idx++;
             if (built != null) customRecipes.add(built);
         }
-        if (recipeStateChanged) ConfigLoader.saveIntegrityState(config);
+        if (recipeStateChanged) ConfigLoader.saveIntegrityState(ConfigLoader.get());
 
         // The recipe manager uses the first matching entry. Vanilla entries
         // stay first, so a custom recipe only takes effect after the matching

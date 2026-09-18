@@ -1,13 +1,16 @@
-# Custom Recipe
+# Custom Recipes
 
-Custom Recipe is a Fabric mod for Minecraft **1.21.11**. Create shaped or shapeless crafting recipes in game, manage built-in recipes, and let server operators control custom and vanilla crafting recipes without editing datapacks.
+Custom Recipes is a Fabric mod for Minecraft **1.21.11**. Create shaped or shapeless crafting recipes in game, keep reusable recipes in a global library, and let server operators control custom and vanilla crafting recipes without editing datapacks.
 
 ## Highlights
 
 - Visual shaped and shapeless recipe builder for vanilla and modded items.
+- A **Global Library** plus completely isolated per-world recipe configurations.
 - Persistent custom recipes, with stable IDs and enable/disable state.
-- Five built-in recipes that can be toggled per world.
-- Vanilla and modded crafting recipe browser: search by output, ingredient, or recipe ID; scroll through results; preview the exact 3x3 crafting layout.
+- **Known by default** recipes are silently added to every player's recipe book.
+- Custom recipes with identical inputs share one recipe-book group.
+- **Quick Add** with five optional ready-made recipes and independently stored custom shortcuts.
+- Vanilla and modded crafting recipe browser per world: search by output, ingredient, or recipe ID; scroll through results; preview the exact 3x3 crafting layout.
 - Material variants: for recipes using tags such as planks or stone, preview each usable material and disable one material variant or the entire recipe.
 - Same vanilla recipe controls in ModMenu/local singleplayer and the OP server editor.
 - OP-only server configuration command with permission-checked client/server networking.
@@ -32,12 +35,19 @@ For development:
 
 ## Local / ModMenu usage
 
-Open **ModMenu -> Custom Recipe**.
+Open **ModMenu -> Custom Recipes**.
 
-- **My Recipes**: inspect, enable, disable, or delete custom recipes.
-- **Built-in Recipes**: toggle the included recipes.
-- **Create a Recipe**: create a shaped or shapeless recipe.
-- **Vanilla Crafting Recipes**: search vanilla crafting recipes, scroll the results, and click a name to open its preview.
+Choose the target before opening a sub-menu:
+
+- **Global Library** stores reusable recipe templates. Library recipes are not applied to any world.
+- A **world** owns its own custom recipes, built-ins, disabled vanilla recipes, and disabled material variants.
+
+The world selector scans local saves directly and uses their `level.dat` metadata and `icon.png` thumbnail. When Custom Recipes is opened from the pause menu, the current world is selected automatically. The pause-menu Custom Recipes icon opens the same editor.
+
+- **Library**: inspect, enable, disable, or delete custom recipes for the selected target. In a world, **Add From Library** copies a library recipe; the new copy is independent.
+- **Quick Add**: use the plus button above the shortcut column to enter shortcut-edit mode. Add ready-made or saved recipes as shortcuts; clicking one shows its preview and can add an independent copy to the selected target.
+- **Create a Recipe**: create a shaped or shapeless recipe. From a world, it can save to that world and optionally to the Global Library.
+- **Vanilla Crafting Recipes**: search vanilla crafting recipes, scroll the results, and click a name to open its preview. This is available only for a world target.
 
 In a recipe preview, interchangeable ingredients appear in a compact icon grid:
 
@@ -47,7 +57,7 @@ In a recipe preview, interchangeable ingredients appear in a compact icon grid:
 - **Disable this variant** blocks crafts that use the selected interchangeable material.
 - **Disable all variants** blocks the complete recipe.
 
-Click **Save** in the main menu to store local settings in `config/customrecipe.json`.
+Click **Save** from the home screen, Library, or Vanilla Recipes to store local settings in `config/customrecipe.json`; Custom Recipes reloads the active world's recipes immediately. Closing a screen with unsaved changes asks whether to save, discard, or cancel.
 
 ## Server administration
 
@@ -81,7 +91,11 @@ Relevant configuration fields:
 
 `disabled_recipes` disables the full recipe. `disabled_recipe_variants` disables only the selected interchangeable material for that recipe. Several variant rules can be stored for the same recipe.
 
-## Built-in recipes
+In schema version 1, these recipe fields live inside `global_library` or a `world_configs` entry. `world_configs` is keyed by a stable save-folder ID; `world_names` is display metadata only.
+
+## Quick Add recipes
+
+These are optional shortcuts only. They are not inserted into a world until the player selects one and clicks **Add Recipe**.
 
 | Result | Pattern | Ingredients |
 |---|---|---|

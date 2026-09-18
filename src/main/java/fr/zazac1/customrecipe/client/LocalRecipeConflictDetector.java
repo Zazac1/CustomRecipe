@@ -13,18 +13,22 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.jar.JarFile;
 
-/** Matches local ModMenu drafts against direct-item crafting JSON recipes. */
+/** Matches local ModMenu drafts against installed and other local crafting recipes. */
 final class LocalRecipeConflictDetector {
+    private static Set<String> vanillaCraftingOutputs = Set.of();
+
     private LocalRecipeConflictDetector() {}
 
     static void refresh(List<CustomRecipeEntry> customRecipes, MinecraftClient client) {
         List<DefaultRecipe> defaults = loadDefaults(client);
+        rememberVanillaCraftingOutputs(defaults);
         for (CustomRecipeEntry custom : customRecipes) {
             List<String> conflicts = new ArrayList<>();
             List<String> sameShape = new ArrayList<>();
@@ -33,11 +37,32 @@ final class LocalRecipeConflictDetector {
                 if (candidate.result().equals(custom.result)) conflicts.add(candidate.id());
                 else sameShape.add(candidate.id());
             }
+            for (CustomRecipeEntry candidate : customRecipes) {
+                if (candidate == custom || sameRecipeId(custom, candidate) || !sameInputs(custom, candidate)) continue;
+                if (sameOutputItem(custom, candidate)) conflicts.add(candidate.serverRecipeId().toString());
+                else sameShape.add(candidate.serverRecipeId().toString());
+            }
             conflicts.sort(String::compareTo);
             sameShape.sort(String::compareTo);
             custom.conflicting_recipes = conflicts;
             custom.same_shape_recipes = sameShape;
         }
+    }
+
+    static void refreshVanillaCraftingOutputs(MinecraftClient client) {
+        rememberVanillaCraftingOutputs(loadDefaults(client));
+    }
+
+    static boolean hasVanillaCraftingOutput(String itemId) {
+        return itemId != null && vanillaCraftingOutputs.contains(itemId);
+    }
+
+    private static void rememberVanillaCraftingOutputs(List<DefaultRecipe> defaults) {
+        Set<String> outputs = new HashSet<>();
+        for (DefaultRecipe recipe : defaults) {
+            if (recipe.id().startsWith("minecraft:")) outputs.add(recipe.result());
+        }
+        vanillaCraftingOutputs = Collections.unmodifiableSet(outputs);
     }
 
     private static List<DefaultRecipe> loadDefaults(MinecraftClient client) {
@@ -160,6 +185,23 @@ final class LocalRecipeConflictDetector {
         return customGrid != null && customGrid.width() == candidate.inputs().width()
                 && customGrid.height() == candidate.inputs().height()
                 && customGrid.slots().equals(candidate.inputs().slots());
+    }
+
+    private static boolean sameInputs(CustomRecipeEntry first, CustomRecipeEntry second) {
+        boolean shaped = "shaped".equalsIgnoreCase(first.type);
+        if (shaped != "shaped".equalsIgnoreCase(second.type)) return false;
+        Grid firstGrid = shaped ? customShapedGrid(first) : customShapelessGrid(first);
+        Grid secondGrid = shaped ? customShapedGrid(second) : customShapelessGrid(second);
+        return firstGrid != null && firstGrid.equals(secondGrid);
+    }
+
+    /** Output count intentionally does not matter: it is still a recipe-book conflict. */
+    private static boolean sameOutputItem(CustomRecipeEntry first, CustomRecipeEntry second) {
+        return first.result != null && first.result.equals(second.result);
+    }
+
+    private static boolean sameRecipeId(CustomRecipeEntry first, CustomRecipeEntry second) {
+        return first.id != null && !first.id.isBlank() && first.id.equals(second.id);
     }
 
     private static Grid customShapedGrid(CustomRecipeEntry recipe) {

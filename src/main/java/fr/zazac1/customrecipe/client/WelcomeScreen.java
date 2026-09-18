@@ -21,7 +21,7 @@ public class WelcomeScreen extends Screen {
     private final Screen returnTo;
 
     public WelcomeScreen(Screen returnTo) {
-        super(Text.literal("Welcome to Custom Recipe!"));
+        super(Text.translatable("customrecipe.welcome.title"));
         this.returnTo = returnTo;
     }
 
@@ -47,21 +47,15 @@ public class WelcomeScreen extends Screen {
         addDrawableChild(titleW);
 
         // ── Description ──────────────────────────────────────────────────
-        addLine(lx, py + 28, inner,
-                "This mod lets you craft any vanilla or modded item.",
-                0xCCCCCC);
+        addLine(lx, py + 28, inner, Text.translatable("customrecipe.welcome.intro"), 0xCCCCCC);
 
-        addLine(lx, py + 52, inner,
-                "\u25ba Built-in Recipes \u2014 enable or disable the 5 pre-made recipes.",
-                0xFFEE88);
+        addLine(lx, py + 52, inner, Text.translatable("customrecipe.welcome.quick_add"), 0xFFEE88);
 
-        addLine(lx, py + 72, inner,
-                "\u25ba Create a Recipe \u2014 build your own shapeless or shaped recipe.",
-                0xFFEE88);
+        addLine(lx, py + 72, inner, Text.translatable("customrecipe.welcome.create"), 0xFFEE88);
 
         // ── Boutons de navigation ────────────────────────────────────────
         addDrawableChild(ButtonWidget.builder(
-                Text.literal("\u25b8  Built-in Recipes"),
+                Text.translatable("customrecipe.screen.built_in"),
                 b -> {
                     dismiss();
                     ConfigScreen cs = configScreen();
@@ -70,7 +64,7 @@ public class WelcomeScreen extends Screen {
         ).dimensions(btnX, py + 100, btnW, 20).build());
 
         addDrawableChild(ButtonWidget.builder(
-                Text.literal("\u25b8  Create a Recipe"),
+                Text.translatable("customrecipe.welcome.create_button"),
                 b -> {
                     dismiss();
                     ConfigScreen cs = configScreen();
@@ -80,7 +74,7 @@ public class WelcomeScreen extends Screen {
 
         // ── Dismiss ──────────────────────────────────────────────────────
         addDrawableChild(ButtonWidget.builder(
-                Text.literal("\u2713  Got it, don't show again"),
+                Text.translatable("customrecipe.welcome.dismiss"),
                 b -> { dismiss(); client.setScreen(returnTo); }
         ).dimensions(btnX, py + 152, btnW, 20).build());
     }
@@ -92,9 +86,9 @@ public class WelcomeScreen extends Screen {
     }
 
     /** Ajoute un bloc de texte left-aligné avec maxWidth. */
-    private void addLine(int x, int y, int maxW, String text, int color) {
+    private void addLine(int x, int y, int maxW, Text text, int color) {
         MultilineTextWidget w = new MultilineTextWidget(x, y,
-                Text.literal(text).withColor(color), textRenderer);
+                text.copy().withColor(color), textRenderer);
         w.setMaxWidth(maxW);
         w.setMaxRows(2);
         addDrawableChild(w);
@@ -139,5 +133,5 @@ public class WelcomeScreen extends Screen {
         ctx.drawVerticalLine(x + w - 1, y, y + h - 1, c);
     }
 
-    @Override public boolean shouldPause() { return false; }
+    @Override public boolean shouldPause() { return true; }
 }
