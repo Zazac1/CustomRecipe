@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1+1.21.11
+
+### Changed
+
+- Renamed all visible mod branding to **Custom Recipe**.
+
 ## 1.3.0+1.21.11
 
 ### Added
@@ -8,9 +14,9 @@
 - Added per-world custom recipes, built-in recipe settings, disabled vanilla recipes, and material-variant rules.
 - Added **Add From Library** to copy a global recipe into a world without linking the two copies.
 - Added direct creation into a world, with an optional second save to the Global Library.
-- Added a Custom Recipes icon button to the pause menu; it opens the current world's editor.
+- Added a Custom Recipe icon button to the pause menu; it opens the current world's editor.
 - Added persistent target badges and world thumbnails across the target-aware recipe screens.
-- Added a redesigned RecipesCreator home screen with direct access to target selection, Library, recipe creation, Vanilla Recipes, and Save.
+- Added a redesigned Custom Recipe home screen with direct access to target selection, Library, recipe creation, Vanilla Recipes, and Save.
 - Added **Quick Add**: five optional ready-made recipes plus independently saved custom-recipe shortcuts.
 - Added explicit Save buttons, with the save icon, in the home screen, recipe library, and Vanilla Recipes browser.
 
@@ -20,8 +26,8 @@
 - Global Library is now a template-only target: Vanilla Recipes are disabled there with an explanation.
 - Moved the former Built-in Recipes list into Quick Add; these recipes are no longer added to a world by default.
 - Quick Add entries are independent recipe snapshots. Adding one creates a normal editable world recipe; removing it only removes the shortcut.
-- Save from Library or Vanilla Recipes now returns to RecipesCreator instead of closing the whole editor.
-- Saving now reloads the active world's recipes automatically and reports the action as Custom Recipes.
+- Save from Library or Vanilla Recipes now returns to Custom Recipe instead of closing the whole editor.
+- Saving now reloads the active world's recipes automatically and reports the action as Custom Recipe.
 
 ### Fixed
 

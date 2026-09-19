@@ -5,7 +5,7 @@ import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.Identifier;
 
-/** Original GUI sprites supplied for Custom Recipes' actions and recipe states. */
+/** Original GUI sprites supplied for Custom Recipe' actions and recipe states. */
 final class CustomRecipeSprites {
     static final Identifier WARNING = sprite("warning");
     static final Identifier WARNING_INFO = sprite("warning_info");

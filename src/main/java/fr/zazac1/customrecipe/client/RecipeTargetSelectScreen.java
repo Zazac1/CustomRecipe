@@ -125,7 +125,7 @@ final class RecipeTargetSelectScreen extends Screen {
                     "dynamic/target_worlds/" + id.replaceAll("[^a-z0-9_./-]", "_"));
             WorldIcon icon = new WorldIcon(textureId, image.getWidth(), image.getHeight());
             client.getTextureManager().registerTexture(textureId,
-                    new NativeImageBackedTexture(() -> "Custom Recipes target world icon", image));
+                    new NativeImageBackedTexture(() -> "Custom Recipe target world icon", image));
             return icon;
         } catch (IOException | RuntimeException ignored) {
             return null;

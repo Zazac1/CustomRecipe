@@ -1,6 +1,6 @@
 {
-  "customrecipe.title": "Custom Recipes",
-  "customrecipe.home.title": "RecipesCreator",
+  "customrecipe.title": "Custom Recipe",
+  "customrecipe.home.title": "Custom Recipe",
   "customrecipe.home.select_world": "Select World",
   "customrecipe.home.global": "(Global)",
   "customrecipe.home.library": "Library",
@@ -56,9 +56,9 @@
   "customrecipe.recipe.on": "ON",
   "customrecipe.recipe.off": "OFF",
   "customrecipe.save.title": "Unsaved changes",
-  "customrecipe.save.line1": "You made changes in Custom Recipes.",
+  "customrecipe.save.line1": "You made changes in Custom Recipe.",
   "customrecipe.save.line2": "Save them before leaving?",
-  "customrecipe.chat.applying": "[Custom Recipes] Applying your changes...",
+  "customrecipe.chat.applying": "[Custom Recipe] Applying your changes...",
   "customrecipe.world.local": "Local world",
   "customrecipe.world.creative": "Creative Mode",
   "customrecipe.world.adventure": "Adventure Mode",
@@ -67,17 +67,17 @@
   "customrecipe.world.commands": ", Commands",
   "customrecipe.world.version": ", Version: %s",
   "customrecipe.world.unknown_version": "Unknown Version"
-  ,"customrecipe.chat.permission_denied": "[Custom Recipes] Permission denied."
-  ,"customrecipe.chat.server_too_large": "[Custom Recipes] Server config is too large."
-  ,"customrecipe.chat.invalid_json": "[Custom Recipes] Invalid JSON; nothing was changed."
-  ,"customrecipe.chat.server_applying": "[Custom Recipes] Applying server changes..."
-  ,"customrecipe.chat.client_mod_required": "[Custom Recipes] This client needs the Custom Recipes mod to open the editor."
-  ,"customrecipe.chat.opening_editor": "[Custom Recipes] Opening the server recipe editor."
-  ,"customrecipe.chat.server_send_too_large": "[Custom Recipes] The server config is too large to send to the editor."
-  ,"customrecipe.chat.invalid_server_config": "[Custom Recipes] Invalid server config received."
-  ,"customrecipe.chat.local_recipes_ready": "[Custom Recipes] %s local recipe(s) ready to add to the server."
-  ,"customrecipe.chat.invalid_server_validation": "[Custom Recipes] Invalid server validation received."
-  ,"customrecipe.tooltip.open": "Open Custom Recipes"
+  ,"customrecipe.chat.permission_denied": "[Custom Recipe] Permission denied."
+  ,"customrecipe.chat.server_too_large": "[Custom Recipe] Server config is too large."
+  ,"customrecipe.chat.invalid_json": "[Custom Recipe] Invalid JSON; nothing was changed."
+  ,"customrecipe.chat.server_applying": "[Custom Recipe] Applying server changes..."
+  ,"customrecipe.chat.client_mod_required": "[Custom Recipe] This client needs the Custom Recipe mod to open the editor."
+  ,"customrecipe.chat.opening_editor": "[Custom Recipe] Opening the server recipe editor."
+  ,"customrecipe.chat.server_send_too_large": "[Custom Recipe] The server config is too large to send to the editor."
+  ,"customrecipe.chat.invalid_server_config": "[Custom Recipe] Invalid server config received."
+  ,"customrecipe.chat.local_recipes_ready": "[Custom Recipe] %s local recipe(s) ready to add to the server."
+  ,"customrecipe.chat.invalid_server_validation": "[Custom Recipe] Invalid server validation received."
+  ,"customrecipe.tooltip.open": "Open Custom Recipe"
   ,"customrecipe.vanilla.title": "Vanilla Recipes"
   ,"customrecipe.vanilla.show_all": "Show: All"
   ,"customrecipe.vanilla.show_enabled": "Show: Enabled"
@@ -106,14 +106,14 @@
   ,"customrecipe.builder.result_count": "Result ×:"
   ,"customrecipe.builder.save": "Save"
   ,"customrecipe.chat.world_tip": "You can manage this world's custom recipes from the pause menu (Esc), by clicking %s, or through Mod Menu."
-  ,"customrecipe.chat.world_tip.link": "Custom Recipes"
-  ,"customrecipe.chat.world_tip.hover": "Open the Custom Recipes editor"
+  ,"customrecipe.chat.world_tip.link": "Custom Recipe"
+  ,"customrecipe.chat.world_tip.hover": "Open the Custom Recipe editor"
   ,"customrecipe.screen.built_in": "Built-in Recipes"
   ,"customrecipe.world.recipes_in": "Recipes in %s"
   ,"customrecipe.world.default_name": "World"
   ,"customrecipe.world.enabled_recipes": "Enabled recipes"
   ,"customrecipe.world.available_recipes": "Available recipes"
-  ,"customrecipe.welcome.title": "Welcome to Custom Recipes!"
+  ,"customrecipe.welcome.title": "Welcome to Custom Recipe!"
   ,"customrecipe.welcome.intro": "This mod lets you craft any vanilla or modded item."
   ,"customrecipe.welcome.quick_add": "Quick Add gives you optional pre-made recipes."
   ,"customrecipe.welcome.create": "Create Recipes lets you build your own shapeless or shaped recipe."

@@ -1,6 +1,6 @@
-# Custom Recipes
+# Custom Recipe
 
-Custom Recipes is a Fabric mod for Minecraft **1.21.11**. Create shaped or shapeless crafting recipes in game, keep reusable recipes in a global library, and let server operators control custom and vanilla crafting recipes without editing datapacks.
+Custom Recipe is a Fabric mod for Minecraft **1.21.11**. Create shaped or shapeless crafting recipes in game, keep reusable recipes in a global library, and let server operators control custom and vanilla crafting recipes without editing datapacks.
 
 ## Highlights
 
@@ -35,14 +35,14 @@ For development:
 
 ## Local / ModMenu usage
 
-Open **ModMenu -> Custom Recipes**.
+Open **ModMenu -> Custom Recipe**.
 
 Choose the target before opening a sub-menu:
 
 - **Global Library** stores reusable recipe templates. Library recipes are not applied to any world.
 - A **world** owns its own custom recipes, built-ins, disabled vanilla recipes, and disabled material variants.
 
-The world selector scans local saves directly and uses their `level.dat` metadata and `icon.png` thumbnail. When Custom Recipes is opened from the pause menu, the current world is selected automatically. The pause-menu Custom Recipes icon opens the same editor.
+The world selector scans local saves directly and uses their `level.dat` metadata and `icon.png` thumbnail. When Custom Recipe is opened from the pause menu, the current world is selected automatically. The pause-menu Custom Recipe icon opens the same editor.
 
 - **Library**: inspect, enable, disable, or delete custom recipes for the selected target. In a world, **Add From Library** copies a library recipe; the new copy is independent.
 - **Quick Add**: use the plus button above the shortcut column to enter shortcut-edit mode. Add ready-made or saved recipes as shortcuts; clicking one shows its preview and can add an independent copy to the selected target.
@@ -57,7 +57,7 @@ In a recipe preview, interchangeable ingredients appear in a compact icon grid:
 - **Disable this variant** blocks crafts that use the selected interchangeable material.
 - **Disable all variants** blocks the complete recipe.
 
-Click **Save** from the home screen, Library, or Vanilla Recipes to store local settings in `config/customrecipe.json`; Custom Recipes reloads the active world's recipes immediately. Closing a screen with unsaved changes asks whether to save, discard, or cancel.
+Click **Save** from the home screen, Library, or Vanilla Recipes to store local settings in `config/customrecipe.json`; Custom Recipe reloads the active world's recipes immediately. Closing a screen with unsaved changes asks whether to save, discard, or cancel.
 
 ## Server administration
 
