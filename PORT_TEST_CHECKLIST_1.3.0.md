@@ -1,4 +1,4 @@
-# RecipesCreator 1.3.0 - Checklist de tests 26.2
+# Custom Recipe 1.3.0 - Checklist de tests 26.2
 
 Statut : release 1.3.0 autorisée après build, démarrage client/serveur et vérification locale. Ne coche un élément qu’après l’avoir validé dans le jeu.
 
@@ -20,7 +20,7 @@ Statut : release 1.3.0 autorisée après build, démarrage client/serveur et vé
 
 ## Sélection de cible et navigation
 
-- [ ] Mod Menu ouvre RecipesCreator sans modifier de cible avant une action explicite.
+- [ ] Mod Menu ouvre Custom Recipe sans modifier de cible avant une action explicite.
 - [ ] Sélectionner un monde affiche les sauvegardes valides avec leur nom, miniature, recherche, état de survol et défilement.
 - [ ] La Bibliothèque globale expose Bibliothèque/Créer, mais pas Recettes Vanilla.
 - [ ] Une cible monde expose Bibliothèque/Créer/Recettes Vanilla et affiche le bon badge de cible.
@@ -39,7 +39,7 @@ Statut : release 1.3.0 autorisée après build, démarrage client/serveur et vé
 ## Sauvegarde et autorité serveur
 
 - [ ] Sauvegarder depuis l’accueil local écrit dans la cible sélectionnée et recharge le monde intégré actif.
-- [ ] Sauvegarder depuis Bibliothèque ou Recettes Vanilla revient à RecipesCreator.
+- [ ] Sauvegarder depuis Bibliothèque ou Recettes Vanilla revient à Custom Recipe.
 - [ ] Sur serveur dédié, Sauvegarder depuis Bibliothèque/Vanilla prépare seulement les modifications ; aucune donnée n’est envoyée.
 - [ ] Sur serveur dédié, Sauvegarder depuis l’accueil valide, persiste, recharge les recettes et revient à l’écran appelant.
 - [ ] Un non-OP distant ne peut pas utiliser `/customrecipe`, obtenir les données de recettes serveur ni sauvegarder la configuration.

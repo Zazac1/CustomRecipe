@@ -1,6 +1,6 @@
-# RecipesCreator
+# Custom Recipe
 
-RecipesCreator is a Fabric mod for Minecraft **26.2**. Create shaped or shapeless crafting recipes in game, manage built-in recipes, and let server operators control custom and vanilla crafting recipes without editing datapacks.
+Custom Recipe is a Fabric mod for Minecraft **26.2**. Create shaped or shapeless crafting recipes in game, manage built-in recipes, and let server operators control custom and vanilla crafting recipes without editing datapacks.
 
 ## Highlights
 
@@ -36,7 +36,7 @@ For development:
 
 ## Local / ModMenu usage
 
-Open **ModMenu -> RecipesCreator**.
+Open **ModMenu -> Custom Recipe**.
 
 - **My Recipes**: inspect, enable, disable, or delete custom recipes.
 - **Built-in Recipes**: toggle the included recipes.

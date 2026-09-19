@@ -54,7 +54,7 @@ public class ConfigScreen extends Screen {
     final List<CustomRecipeEntry> quickAddRecipes;
 
     public ConfigScreen(Screen parent) {
-        this(parent, ConfigLoader.get(), "RecipesCreator", false, ConfigLoader::saveAndInvalidate, null, false);
+        this(parent, ConfigLoader.get(), "Custom Recipe", false, ConfigLoader::saveAndInvalidate, null, false);
     }
 
     public static ConfigScreen fromModMenu(Screen parent) {
@@ -62,7 +62,7 @@ public class ConfigScreen extends Screen {
     }
 
     public static ConfigScreen fromPauseMenu(Screen parent) {
-        return new ConfigScreen(parent, ConfigLoader.get(), "RecipesCreator", false,
+        return new ConfigScreen(parent, ConfigLoader.get(), "Custom Recipe", false,
                 ConfigLoader::saveAndInvalidate, null, true);
     }
 

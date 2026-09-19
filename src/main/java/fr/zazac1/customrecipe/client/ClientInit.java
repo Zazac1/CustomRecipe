@@ -72,14 +72,14 @@ public class ClientInit implements ClientModInitializer {
             WorldRecipeConfig savedWorldConfig = ConfigLoader.get().findWorldConfig(worldId);
             boolean alreadyShown = savedWorldConfig != null && savedWorldConfig.shown_editor_tip
                     && worldInstanceId.equals(savedWorldConfig.editor_tip_world_instance);
-            CustomRecipeMod.LOGGER.info("[RecipesCreator] Editor tip check: world='{}', id='{}', instance='{}', day={}, alreadyShown={}",
+            CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip check: world='{}', id='{}', instance='{}', day={}, alreadyShown={}",
                     levelName, worldId, worldInstanceId, day, alreadyShown);
             if (day != 0L) {
-                CustomRecipeMod.LOGGER.info("[RecipesCreator] Editor tip skipped: world is no longer on day 0.");
+                CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip skipped: world is no longer on day 0.");
                 return;
             }
             if (!WorldRecipeAssignments.markEditorTipShown(worldId, levelName, worldInstanceId)) {
-                CustomRecipeMod.LOGGER.info("[RecipesCreator] Editor tip skipped: this world is already marked as shown.");
+                CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip skipped: this world is already marked as shown.");
                 return;
             }
             Component editorLink = Component.translatable("customrecipe.chat.world_tip.link")
@@ -87,7 +87,7 @@ public class ClientInit implements ClientModInitializer {
                             .withClickEvent(new ClickEvent.RunCommand("/customrecipe_open_local"))
                             .withHoverEvent(new HoverEvent.ShowText(Component.translatable("customrecipe.chat.world_tip.hover"))));
             client.player.sendSystemMessage(Component.translatable("customrecipe.chat.world_tip", editorLink));
-            CustomRecipeMod.LOGGER.info("[RecipesCreator] Editor tip sent to chat.");
+            CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
         });
         ClientPlayNetworking.registerGlobalReceiver(ServerConfigPayload.ID, (payload, context) -> {
             var config = ConfigLoader.fromJson(payload.json());

@@ -1,4 +1,4 @@
-# RecipesCreator 1.3.0 port requirements — Minecraft 26.2
+# Custom Recipe 1.3.0 port requirements — Minecraft 26.2
 
 Status: implementation complete for `1.3.0+26.2`; release authorized after build,
 client/server startup, and local user verification. The regression matrix remains
@@ -33,7 +33,7 @@ as a manual follow-up record and must not be marked without an in-game test.
 - Send the first-world chat tip only once per physical world instance at day 0. Recreating a save with the same name must show the tip again.
 - The clickable tip uses a client-only helper that must return without opening anything on remote multiplayer.
 
-### 3. RecipesCreator and Quick Add
+### 3. Custom Recipe and Quick Add
 
 - Port the five-entry home screen: Select World, Library, Create Recipes, Vanilla Recipes, and Save.
 - Port the Library table, selected-recipe preview, scroll behavior, empty-state placement, and save/discard navigation.
@@ -45,7 +45,7 @@ as a manual follow-up record and must not be marked without an in-game test.
 ### 4. Save behavior and server authority
 
 - Local Save persists the target configuration and reloads the active integrated world.
-- Save from Library or Vanilla Recipes returns to RecipesCreator; the home Save returns to the screen that opened the editor.
+- Save from Library or Vanilla Recipes returns to Custom Recipe; the home Save returns to the screen that opened the editor.
 - In the server-managed editor, Library/Vanilla Save only stages the in-memory configuration. Only the home Save may send `SaveServerConfigPayload`, write server config, and reload recipes.
 - `/customrecipe`, save, validation, Vanilla-page, and Vanilla-detail C2S payloads require `PermissionLevel.GAMEMASTERS`.
 - Non-OP players must not receive an editor, server recipe data, or a way to apply configuration changes.
