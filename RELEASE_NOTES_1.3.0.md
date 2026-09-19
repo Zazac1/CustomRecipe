@@ -1,4 +1,4 @@
-# Custom Recipes 1.3.0 for Minecraft 26.2
+# RecipesCreator 1.3.0 for Minecraft 26.2
 
 - Port complet de RecipesCreator vers Minecraft 26.2 et Fabric Loom 1.17.
 - Bibliothèque globale et recettes par monde, avec migration des anciennes sauvegardes.

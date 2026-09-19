@@ -70,7 +70,7 @@ final class RecipeTargetBadge {
                         "dynamic/world_icons/" + target.id().replaceAll("[^a-z0-9_./-]", "_"));
                 WorldIcon icon = new WorldIcon(id, image.getWidth(), image.getHeight());
                 client.getTextureManager().register(id,
-                        new DynamicTexture(() -> "Custom Recipes world icon", image));
+                        new DynamicTexture(() -> "RecipesCreator world icon", image));
                 WORLD_ICONS.put(target.id(), icon);
                 return icon;
             }

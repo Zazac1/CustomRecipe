@@ -21,7 +21,7 @@ public final class WorldRecipeConfig {
     /** Independent recipe snapshots shown in this target's Quick Add sidebar. */
     public List<CustomRecipeEntry> quick_add_recipes = new ArrayList<>();
 
-    /** True once the first-day Custom Recipes chat tip has been shown for this world. */
+    /** True once the first-day RecipesCreator chat tip has been shown for this world. */
     public boolean shown_editor_tip = false;
 
     /** Creation fingerprint for the physical save folder that received the tip. */

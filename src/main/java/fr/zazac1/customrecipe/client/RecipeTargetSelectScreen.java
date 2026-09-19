@@ -130,7 +130,7 @@ final class RecipeTargetSelectScreen extends Screen {
                     "dynamic/target_worlds/" + id.replaceAll("[^a-z0-9_./-]", "_"));
             WorldIcon icon = new WorldIcon(textureId, image.getWidth(), image.getHeight());
             minecraft.getTextureManager().register(textureId,
-                    new DynamicTexture(() -> "Custom Recipes target world icon", image));
+                    new DynamicTexture(() -> "RecipesCreator target world icon", image));
             return icon;
         } catch (IOException | RuntimeException ignored) {
             return null;

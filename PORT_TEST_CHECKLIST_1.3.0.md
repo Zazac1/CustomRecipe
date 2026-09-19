@@ -1,4 +1,4 @@
-# Custom Recipes 1.3.0 - Checklist de tests 26.2
+# RecipesCreator 1.3.0 - Checklist de tests 26.2
 
 Statut : release 1.3.0 autorisée après build, démarrage client/serveur et vérification locale. Ne coche un élément qu’après l’avoir validé dans le jeu.
 

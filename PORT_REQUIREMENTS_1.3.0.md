@@ -1,4 +1,4 @@
-# Custom Recipes 1.3.0 port requirements — Minecraft 26.2
+# RecipesCreator 1.3.0 port requirements — Minecraft 26.2
 
 Status: implementation complete for `1.3.0+26.2`; release authorized after build,
 client/server startup, and local user verification. The regression matrix remains
