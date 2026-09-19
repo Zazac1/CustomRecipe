@@ -11,6 +11,33 @@ $env:JAVA_HOME = $javaHome
 $env:GRADLE_USER_HOME = Join-Path $env:USERPROFILE '.gradle'
 
 $serverPidFile = Join-Path $projectRoot 'run-server\.customrecipe-server-launcher.json'
+$worldLock = Join-Path $projectRoot 'run-server\world\session.lock'
+
+function Test-ExclusiveFileAccess([string]$path) {
+    if (-not (Test-Path -LiteralPath $path)) { return $true }
+    try {
+        $handle = [System.IO.File]::Open(
+            $path,
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::ReadWrite,
+            [System.IO.FileShare]::None
+        )
+        $handle.Dispose()
+        return $true
+    } catch [System.IO.IOException] {
+        return $false
+    }
+}
+
+function Wait-ForWorldUnlock([int]$timeoutSeconds = 12) {
+    $deadline = (Get-Date).AddSeconds($timeoutSeconds)
+    do {
+        if (Test-ExclusiveFileAccess $worldLock) { return $true }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    return $false
+}
+
 if (Test-Path -LiteralPath $serverPidFile) {
     try {
         $previous = Get-Content -LiteralPath $serverPidFile -Raw | ConvertFrom-Json
@@ -23,6 +50,15 @@ if (Test-Path -LiteralPath $serverPidFile) {
         Write-Warning "Impossible de lire l'ancien processus serveur : $($_.Exception.Message)"
     }
     Remove-Item -LiteralPath $serverPidFile -Force -ErrorAction SilentlyContinue
+}
+
+# Never let a second development server crash on the existing world lock.
+# A server stopped by the tracked launcher can take a few seconds to release it.
+if (-not (Wait-ForWorldUnlock)) {
+    $listener = Get-NetTCPConnection -LocalPort 25565 -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty OwningProcess
+    $owner = if ($listener) { " (PID $listener)" } else { '' }
+    throw "Le monde run-server est encore utilisÃ©$owner. Ferme l'ancien serveur, puis relance ce script."
 }
 
 $lanIp = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |

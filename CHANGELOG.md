@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.0+26.2
+
+### Added
+
+- Target-based recipe editing: a reusable **Global Library** and independent, persistent configurations for every local world.
+- Local world browser with thumbnails, search, scrolling, metadata, and most-recently-played-first ordering.
+- Target badges, current-world pause-menu entry point, and first-day local-world editor tip.
+- **Quick Add** shortcuts for built-in and custom recipe snapshots.
+- Translated 1.3.0 UI text and editor textures.
+
+### Changed
+
+- Legacy flat configurations migrate to schema 1 while retaining custom recipes, built-in state, disabled recipes, and material-variant rules.
+- Local saves, Library, and Vanilla Recipes now stage edits; only the home Save button or its Escape confirmation persists and reloads them.
+- `/customrecipe` and server configuration payloads remain restricted to `GAMEMASTERS`.
+
+### Fixed
+
+- Global Library recipes with legacy state no longer appear disabled and copy into worlds as active recipes.
+- Re-enabling an existing world recipe clears stale legacy publication state.
+- The local test launcher now detects an existing world lock before starting another server.
+
 ## 1.2.1+26.2
 
 ### Recipe management overhaul

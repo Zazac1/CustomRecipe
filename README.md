@@ -5,7 +5,9 @@ Custom Recipe is a Fabric mod for Minecraft **26.2**. Create shaped or shapeless
 ## Highlights
 
 - Visual shaped and shapeless recipe builder for vanilla and modded items.
-- Persistent custom recipes, with stable IDs and enable/disable state.
+- Global Library templates and independent persistent recipes for every local world.
+- World selector with save thumbnails, search, and most-recently-played-first ordering.
+- Quick Add shortcuts for built-in and custom recipe snapshots.
 - Optionally mark a custom recipe as **Known by default** so every player receives it silently in the recipe book.
 - Custom recipes sharing the same ingredients are grouped in the recipe book, where players can choose the output.
 - Five built-in recipes that can be toggled per world.
@@ -50,7 +52,7 @@ In a recipe preview, interchangeable ingredients appear in a compact icon grid:
 - **Disable this variant** blocks crafts that use the selected interchangeable material.
 - **Disable all variants** blocks the complete recipe.
 
-Click **Save** in the main menu to store local settings in `config/customrecipe.json`.
+Click **Save** in the main menu, or confirm the Escape popup, to store local settings in `config/customrecipe.json`. Save inside Library or Vanilla Recipes only returns to the home screen with edits staged.
 
 ## Server administration
 

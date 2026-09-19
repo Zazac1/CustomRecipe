@@ -1,10 +1,13 @@
 {
   "required": true,
-  "package": "fr.isaac.customrecipe.mixin",
-  "compatibilityLevel": "JAVA_25",
+  "package": "fr.zazac1.customrecipe.mixin",
+  "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ServerRecipeManagerMixin",
-    "CraftingMenuMixin"
+    "CraftingScreenHandlerMixin"
+  ],
+  "client": [
+    "client.GameMenuScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1
