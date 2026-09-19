@@ -8,11 +8,16 @@ import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.RecipeVariantRule;
 import fr.zazac1.customrecipe.VariantFilteredCraftingRecipe;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
+import com.mojang.serialization.Lifecycle;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.crafting.*;
 import net.minecraft.world.item.crafting.CraftingBookCategory;
@@ -26,23 +31,28 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.stream.Stream;
 
 @Mixin(RecipeManager.class)
 public abstract class ServerRecipeManagerMixin {
 
     @ModifyVariable(
-            method = "apply(Lnet/minecraft/world/item/crafting/RecipeMap;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)V",
+            method = "<init>(Lnet/minecraft/core/HolderLookup$Provider;)V",
             at = @At("HEAD"),
             argsOnly = true
     )
-    private RecipeMap customrecipe$applyConfig(RecipeMap original) {
+    private static HolderLookup.Provider customrecipe$applyConfig(HolderLookup.Provider original) {
         ConfigLoader.invalidate();
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
 
-        List<RecipeHolder<?>> recipes = new ArrayList<>(original.values());
+        HolderLookup.RegistryLookup<Recipe<?>> originalRecipes = original.lookupOrThrow(Registries.RECIPE);
+        List<RecipeHolder<?>> recipes = originalRecipes.listElements()
+                .map(holder -> new RecipeHolder<>(holder.key(), holder.value()))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
 
         // 1. Remove disabled built-in recipes (namespace = "customrecipe")
         if (!config.disabled_builtin.isEmpty()) {
@@ -119,12 +129,81 @@ public abstract class ServerRecipeManagerMixin {
         // vanilla recipe has been disabled. Custom recipes still share groups.
         recipes.addAll(customRecipes);
 
-        return RecipeMap.create(recipes);
+        Map<ResourceKey<Recipe<?>>, Holder.Reference<Recipe<?>>> transformedRecipes = new LinkedHashMap<>();
+        for (RecipeHolder<?> recipe : recipes) {
+            transformedRecipes.put(recipe.id(), customrecipe$reference(recipe.id(), recipe.value()));
+        }
+        return new CustomRecipeProvider(original, new CustomRecipeLookup(originalRecipes, transformedRecipes));
+    }
+
+    private static Holder.Reference<Recipe<?>> customrecipe$reference(ResourceKey<Recipe<?>> key, Recipe<?> recipe) {
+        Holder.Reference<Recipe<?>> reference = Holder.Reference.createStandAlone(new HolderOwner(), key);
+        ((HolderReferenceInvoker<Recipe<?>>) (Object) reference).customrecipe$bindValue(recipe);
+        return reference;
+    }
+
+    private static final class HolderOwner implements net.minecraft.core.HolderOwner<Recipe<?>> {
+    }
+
+    private record CustomRecipeProvider(
+            HolderLookup.Provider delegate,
+            HolderLookup.RegistryLookup<Recipe<?>> recipes
+    ) implements HolderLookup.Provider {
+        @Override
+        public Stream<ResourceKey<? extends net.minecraft.core.Registry<?>>> listRegistryKeys() {
+            return delegate.listRegistryKeys();
+        }
+
+        @Override
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        public <T> Optional<? extends HolderLookup.RegistryLookup<T>> lookup(
+                ResourceKey<? extends net.minecraft.core.Registry<? extends T>> key
+        ) {
+            if (key.equals(Registries.RECIPE)) {
+                return Optional.of((HolderLookup.RegistryLookup) recipes);
+            }
+            return delegate.lookup(key);
+        }
+    }
+
+    private record CustomRecipeLookup(
+            HolderLookup.RegistryLookup<Recipe<?>> delegate,
+            Map<ResourceKey<Recipe<?>>, Holder.Reference<Recipe<?>>> recipes
+    ) implements HolderLookup.RegistryLookup<Recipe<?>> {
+        @Override
+        public ResourceKey<? extends net.minecraft.core.Registry<? extends Recipe<?>>> key() {
+            return delegate.key();
+        }
+
+        @Override
+        public Lifecycle registryLifecycle() {
+            return delegate.registryLifecycle();
+        }
+
+        @Override
+        public Optional<Holder.Reference<Recipe<?>>> get(ResourceKey<Recipe<?>> key) {
+            return Optional.ofNullable(recipes.get(key));
+        }
+
+        @Override
+        public Optional<HolderSet.Named<Recipe<?>>> get(TagKey<Recipe<?>> tag) {
+            return delegate.get(tag);
+        }
+
+        @Override
+        public Stream<Holder.Reference<Recipe<?>>> listElements() {
+            return recipes.values().stream();
+        }
+
+        @Override
+        public Stream<HolderSet.Named<Recipe<?>>> listTags() {
+            return delegate.listTags();
+        }
     }
 
     // ── dispatch ─────────────────────────────────────────────────────────
 
-    private RecipeHolder<?> buildCustomRecipe(CustomRecipeEntry entry, int idx, String recipeGroup) {
+    private static RecipeHolder<?> buildCustomRecipe(CustomRecipeEntry entry, int idx, String recipeGroup) {
         if (entry == null) return null;
         if (entry.result == null || entry.result.isBlank()) return null;
 
@@ -150,11 +229,11 @@ public abstract class ServerRecipeManagerMixin {
 
 
     /** Gives recipes with the same custom input one green-book entry. */
-    private String recipeBookGroup(CustomRecipeEntry entry) {
+    private static String recipeBookGroup(CustomRecipeEntry entry) {
         return "customrecipe_" + Integer.toUnsignedString(recipeInputSignature(entry).hashCode(), 36);
     }
 
-    private String recipeInputSignature(CustomRecipeEntry entry) {
+    private static String recipeInputSignature(CustomRecipeEntry entry) {
         if ("shaped".equalsIgnoreCase(entry.type)) {
             return "shaped:" + entry.pattern + ":" + entry.keys;
         }
@@ -165,8 +244,8 @@ public abstract class ServerRecipeManagerMixin {
 
     // ── shapeless ─────────────────────────────────────────────────────────
 
-    private RecipeHolder<ShapelessRecipe> buildShapeless(CustomRecipeEntry entry, ItemStackTemplate result,
-                                                         ResourceKey<Recipe<?>> key, String recipeGroup) {
+    private static RecipeHolder<ShapelessRecipe> buildShapeless(CustomRecipeEntry entry, ItemStackTemplate result,
+                                                                ResourceKey<Recipe<?>> key, String recipeGroup) {
         List<String> rawIngredients = entry.ingredients;
         if (rawIngredients == null || rawIngredients.isEmpty()) return null;
 
@@ -193,8 +272,8 @@ public abstract class ServerRecipeManagerMixin {
 
     // ── shaped ────────────────────────────────────────────────────────────
 
-    private RecipeHolder<ShapedRecipe> buildShaped(CustomRecipeEntry entry, ItemStackTemplate result,
-                                                    ResourceKey<Recipe<?>> key, String recipeGroup) {
+    private static RecipeHolder<ShapedRecipe> buildShaped(CustomRecipeEntry entry, ItemStackTemplate result,
+                                                           ResourceKey<Recipe<?>> key, String recipeGroup) {
         List<String> pattern = entry.pattern;
         Map<String, String> keysMap = entry.keys;
         if (pattern == null || pattern.isEmpty()) return null;

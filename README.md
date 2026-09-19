@@ -11,7 +11,7 @@ Download the latest release matching your game version:
 - **1.21.8**
 - **1.21.11**
 - **26.2**
-- **26.3** *(upcoming)*
+- **26.3**
 
 All releases require Fabric Loader and Fabric API. ModMenu is optional and provides the local configuration entry point.
 

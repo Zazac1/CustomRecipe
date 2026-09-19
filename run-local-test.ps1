@@ -2,7 +2,12 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
 
-$javaHome = 'C:\Program Files\Java\jdk-25.0.3'
+$bundledJavaHome = Join-Path $projectRoot '.toolchains\jdk-25.0.4.1'
+$javaHome = if (Test-Path -LiteralPath (Join-Path $bundledJavaHome 'bin\java.exe')) {
+    $bundledJavaHome
+} else {
+    'C:\Program Files\Java\jdk-25.0.3'
+}
 if (-not (Test-Path -LiteralPath (Join-Path $javaHome 'bin\java.exe'))) {
     throw "JDK 25 introuvable : $javaHome"
 }

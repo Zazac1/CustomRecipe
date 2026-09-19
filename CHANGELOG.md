@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1+26.3
+
+### Changed
+
+- Ported Custom Recipe to Minecraft **26.3**.
+- Updated Fabric Loader, Fabric API, and Mod Menu dependencies for 26.3.
+- Adapted recipe loading to Minecraft 26.3's registry-based recipe manager.
+
 ## 1.3.1+26.2
 
 ### Changed

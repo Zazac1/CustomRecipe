@@ -15,14 +15,12 @@ import com.google.gson.Gson;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.PauseScreen;
-import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
@@ -38,7 +36,6 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
 @Environment(EnvType.CLIENT)
 public class ClientInit implements ClientModInitializer {
 
-    private static boolean shown = false;
     private static String activeClientWorldId = "";
     private static final Gson GSON = new Gson();
 
@@ -121,12 +118,6 @@ public class ClientInit implements ClientModInitializer {
             VanillaRecipeDetails details = GSON.fromJson(payload.json(), VanillaRecipeDetails.class);
             if (details != null && context.client().gui.screen() instanceof VanillaRecipeDetailsScreen screen) {
                 screen.applyDetails(details);
-            }
-        });
-        ScreenEvents.AFTER_INIT.register((client, screen, sw, sh) -> {
-            if (!shown && screen instanceof TitleScreen && !ConfigLoader.get().seen_welcome) {
-                shown = true;
-                client.execute(() -> client.gui.setScreen(new WelcomeScreen(screen)));
             }
         });
     }
