@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1+26.2
+
+### Changed
+
+- Renamed all visible mod branding to **Custom Recipe**.
+
 ## 1.3.0+26.2
 
 ### Added
