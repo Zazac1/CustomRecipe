@@ -1,0 +1,116 @@
+{
+  "customrecipe.title": "Custom Recipe",
+  "customrecipe.home.title": "Custom Recipe",
+  "customrecipe.home.select_world": "Select World",
+  "customrecipe.home.global": "(Global)",
+  "customrecipe.home.library": "Library",
+  "customrecipe.home.create": "Create Recipes",
+  "customrecipe.home.vanilla": "Vanilla Recipes",
+  "customrecipe.home.vanilla.tooltip": "Select a world to access its Vanilla recipes.",
+  "customrecipe.home.current_world_locked": "The current world is locked when opened from the pause menu.",
+  "customrecipe.button.back": "Back",
+  "customrecipe.button.cancel": "Cancel",
+  "customrecipe.button.save": "Save",
+  "customrecipe.button.discard": "Discard",
+  "customrecipe.button.add": "Add",
+  "customrecipe.button.add_recipe": "Add recipe",
+  "customrecipe.button.add_recipe_new": "+ Add Recipe",
+  "customrecipe.button.add_from_library": "Add From Library",
+  "customrecipe.button.back_to_recipes": "Back to My Recipes",
+  "customrecipe.button.duplicate": "Duplicate",
+  "customrecipe.button.edit": "Edit",
+  "customrecipe.button.delete_corrupted": "Delete corrupted recipe",
+  "customrecipe.button.disable_conflict": "Disable conflict",
+  "customrecipe.button.set_known": "Set known by default",
+  "customrecipe.state.enabled": "Enabled",
+  "customrecipe.state.disabled": "Disabled",
+  "customrecipe.state.library": "Library",
+  "customrecipe.state.corrupted": "Corrupted",
+  "customrecipe.screen.my_recipes": "My Recipes",
+  "customrecipe.screen.global_library": "Global Library",
+  "customrecipe.screen.select_target": "Select target",
+  "customrecipe.screen.select_worlds": "Select worlds",
+  "customrecipe.screen.search_worlds": "Search worlds",
+  "customrecipe.screen.search": "Search...",
+  "customrecipe.screen.no_worlds": "No worlds found.",
+  "customrecipe.table.output": "Output",
+  "customrecipe.table.status": "Status",
+  "customrecipe.table.known": "Known",
+  "customrecipe.table.type": "Type",
+  "customrecipe.table.recipe": "Recipe",
+  "customrecipe.table.state": "State",
+  "customrecipe.table.add": "Add",
+  "customrecipe.empty.library": "Global Library is empty.",
+  "customrecipe.empty.recipes": "No custom recipes yet. Use \"Create a Recipe\".",
+  "customrecipe.quick.preview": "Preview (not added): %s",
+  "customrecipe.recipe.add_to": "Add to %s",
+  "customrecipe.recipe.missing": "Missing: %s",
+  "customrecipe.recipe.conflict": "Conflicts with %s.",
+  "customrecipe.recipe.vanilla_conflict": "Minecraft already crafts this output. Enable Known by default to avoid recipe-book conflicts.",
+  "customrecipe.recipe.same_inputs": "Same inputs as %s but a different result. Set Known by default to choose it in the recipe book.",
+  "customrecipe.recipe.shaped": "Shaped",
+  "customrecipe.recipe.shapeless": "Shapeless",
+  "customrecipe.recipe.shaped_ingredients": "Shaped ingredients (%s/9)",
+  "customrecipe.recipe.shapeless_ingredients": "Shapeless ingredients (%s/9)",
+  "customrecipe.recipe.known": "Known by default: %s",
+  "customrecipe.recipe.on": "ON",
+  "customrecipe.recipe.off": "OFF",
+  "customrecipe.save.title": "Unsaved changes",
+  "customrecipe.save.line1": "You made changes in Custom Recipe.",
+  "customrecipe.save.line2": "Save them before leaving?",
+  "customrecipe.chat.applying": "[Custom Recipe] Applying your changes...",
+  "customrecipe.world.local": "Local world",
+  "customrecipe.world.creative": "Creative Mode",
+  "customrecipe.world.adventure": "Adventure Mode",
+  "customrecipe.world.spectator": "Spectator Mode",
+  "customrecipe.world.survival": "Survival Mode",
+  "customrecipe.world.commands": ", Commands",
+  "customrecipe.world.version": ", Version: %s",
+  "customrecipe.world.unknown_version": "Unknown Version"
+  ,"customrecipe.chat.permission_denied": "[Custom Recipe] Permission denied."
+  ,"customrecipe.chat.server_too_large": "[Custom Recipe] Server config is too large."
+  ,"customrecipe.chat.invalid_json": "[Custom Recipe] Invalid JSON; nothing was changed."
+  ,"customrecipe.chat.server_applying": "[Custom Recipe] Applying server changes..."
+  ,"customrecipe.chat.client_mod_required": "[Custom Recipe] This client needs the Custom Recipe mod to open the editor."
+  ,"customrecipe.chat.opening_editor": "[Custom Recipe] Opening the server recipe editor."
+  ,"customrecipe.chat.server_send_too_large": "[Custom Recipe] The server config is too large to send to the editor."
+  ,"customrecipe.chat.invalid_server_config": "[Custom Recipe] Invalid server config received."
+  ,"customrecipe.chat.local_recipes_ready": "[Custom Recipe] %s local recipe(s) ready to add to the server."
+  ,"customrecipe.chat.invalid_server_validation": "[Custom Recipe] Invalid server validation received."
+  ,"customrecipe.tooltip.open": "Open Custom Recipe"
+  ,"customrecipe.vanilla.title": "Vanilla Recipes"
+  ,"customrecipe.vanilla.show_all": "Show: All"
+  ,"customrecipe.vanilla.show_enabled": "Show: Enabled"
+  ,"customrecipe.vanilla.show_disabled": "Show: Disabled"
+  ,"customrecipe.vanilla.show_special": "Show: Special"
+  ,"customrecipe.vanilla.search_hint": "Search item or recipe ID"
+  ,"customrecipe.vanilla.search": "Search"
+  ,"customrecipe.vanilla.ingredient": "Ingredient: %s"
+  ,"customrecipe.vanilla.output": "Output: %s"
+  ,"customrecipe.vanilla.loading": "Loading recipes..."
+  ,"customrecipe.vanilla.loading_more": "Loading more..."
+  ,"customrecipe.vanilla.none": "No recipe found."
+  ,"customrecipe.vanilla.browse": "%s - scroll to browse - click a name to preview"
+  ,"customrecipe.vanilla.special": "[Special] "
+  ,"customrecipe.details.title": "Recipe Preview"
+  ,"customrecipe.details.variant_disabled": "Variant disabled"
+  ,"customrecipe.details.disable_variant": "Disable this variant"
+  ,"customrecipe.details.variants_disabled": "All variants disabled"
+  ,"customrecipe.details.disable_variants": "Disable all variants"
+  ,"customrecipe.builder.create": "Create a Recipe"
+  ,"customrecipe.builder.edit": "Edit Recipe"
+  ,"customrecipe.builder.search_item": "Search item..."
+  ,"customrecipe.builder.also_library": "Also save to Global Library: %s"
+  ,"customrecipe.builder.empty_remove": "Empty - remove item"
+  ,"customrecipe.builder.shapeless_ingredients": "Shapeless ingredients (%s/9)"
+  ,"customrecipe.builder.result_count": "Result ×:"
+  ,"customrecipe.builder.save": "Save"
+  ,"customrecipe.chat.world_tip": "You can manage this world's custom recipes from the pause menu (Esc), by clicking %s, or through Mod Menu."
+  ,"customrecipe.chat.world_tip.link": "Custom Recipe"
+  ,"customrecipe.chat.world_tip.hover": "Open the Custom Recipe editor"
+  ,"customrecipe.screen.built_in": "Built-in Recipes"
+  ,"customrecipe.world.recipes_in": "Recipes in %s"
+  ,"customrecipe.world.default_name": "World"
+  ,"customrecipe.world.enabled_recipes": "Enabled recipes"
+  ,"customrecipe.world.available_recipes": "Available recipes"
+}

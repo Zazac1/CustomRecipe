@@ -19,7 +19,7 @@ public final class ClientServerConfigNetworking {
         ClientPlayNetworking.send(new SaveServerConfigPayload(ConfigLoader.toJson(config)));
     }
 
-    /** Requests server-only integrity and conflict validation without saving. */
+    /** Requests a server-only integrity and conflict check without saving anything. */
     public static void validate(ModConfig config) {
         ClientPlayNetworking.send(new ValidateServerConfigPayload(ConfigLoader.toJson(config)));
     }

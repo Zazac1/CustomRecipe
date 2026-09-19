@@ -1,7 +1,7 @@
 package fr.zazac1.customrecipe.mixin;
 
 import fr.zazac1.customrecipe.ConfigLoader;
-import fr.zazac1.customrecipe.ModConfig;
+import fr.zazac1.customrecipe.WorldRecipeConfig;
 import fr.zazac1.customrecipe.RecipeVariantRule;
 import net.minecraft.item.ItemStack;
 import net.minecraft.recipe.CraftingRecipe;
@@ -39,7 +39,7 @@ public abstract class RecipeManagerCraftingFilterMixin {
     )
     private <I extends RecipeInput, T extends Recipe<I>> void customrecipe$findAllowedMatch(
             RecipeType<T> type, I input, World world, CallbackInfoReturnable<Optional<RecipeEntry<T>>> cir) {
-        ModConfig config = ConfigLoader.get();
+        WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
         if (config.disabled_recipes.isEmpty() && config.disabled_recipe_variants.isEmpty()) return;
 
         cir.setReturnValue(findAllowedMatch(type, input, world, config));
@@ -53,7 +53,7 @@ public abstract class RecipeManagerCraftingFilterMixin {
     private <I extends RecipeInput, T extends Recipe<I>> void customrecipe$findAllowedCachedMatch(
             RecipeType<T> type, I input, World world, RecipeEntry<T> cachedRecipe,
             CallbackInfoReturnable<Optional<RecipeEntry<T>>> cir) {
-        ModConfig config = ConfigLoader.get();
+        WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
         if (config.disabled_recipes.isEmpty() && config.disabled_recipe_variants.isEmpty()) return;
 
         // The recipe book supplies the output explicitly chosen by the player.
@@ -74,14 +74,14 @@ public abstract class RecipeManagerCraftingFilterMixin {
     )
     private <I extends RecipeInput, T extends Recipe<I>> void customrecipe$filterAllMatches(
             RecipeType<T> type, I input, World world, CallbackInfoReturnable<List<RecipeEntry<T>>> cir) {
-        ModConfig config = ConfigLoader.get();
+        WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
         if (config.disabled_recipes.isEmpty() && config.disabled_recipe_variants.isEmpty()) return;
         cir.setReturnValue(cir.getReturnValue().stream()
                 .filter(entry -> !isBlocked(entry, input, config))
                 .toList());
     }
 
-    private static boolean isBlocked(RecipeEntry<?> entry, RecipeInput input, ModConfig config) {
+    private static boolean isBlocked(RecipeEntry<?> entry, RecipeInput input, WorldRecipeConfig config) {
         if (config.disabled_recipes.contains(entry.id().toString())) return true;
         if (!(entry.value() instanceof CraftingRecipe) || !(input instanceof CraftingRecipeInput craftingInput)) return false;
 
@@ -95,7 +95,7 @@ public abstract class RecipeManagerCraftingFilterMixin {
     }
 
     private <I extends RecipeInput, T extends Recipe<I>> Optional<RecipeEntry<T>> findAllowedMatch(
-            RecipeType<T> type, I input, World world, ModConfig config) {
+            RecipeType<T> type, I input, World world, WorldRecipeConfig config) {
         for (RecipeEntry<T> entry : listAllOfType(type)) {
             if (!isBlocked(entry, input, config) && entry.value().matches(input, world)) {
                 return Optional.of(entry);

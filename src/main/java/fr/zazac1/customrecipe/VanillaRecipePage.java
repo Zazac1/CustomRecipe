@@ -9,5 +9,6 @@ public record VanillaRecipePage(List<VanillaRecipeInfo> recipes, int page, int t
      * shapeless recipes retain the order of their ingredients array.
      */
     public record VanillaRecipeInfo(String id, String result, List<String> slots,
-                                    int gridWidth, int gridHeight, boolean shapeless) {}
+                                    int gridWidth, int gridHeight, boolean shapeless,
+                                    boolean special) {}
 }

@@ -1,0 +1,116 @@
+{
+  "customrecipe.title": "Custom Recipe",
+  "customrecipe.home.title": "Custom Recipe",
+  "customrecipe.home.select_world": "Seleccionar mundo",
+  "customrecipe.home.global": "(Global)",
+  "customrecipe.home.library": "Biblioteca",
+  "customrecipe.home.create": "Crear recetas",
+  "customrecipe.home.vanilla": "Recetas vanilla",
+  "customrecipe.home.vanilla.tooltip": "Selecciona un mundo para acceder a sus recetas vanilla.",
+  "customrecipe.home.current_world_locked": "El mundo actual queda bloqueado al abrir el editor desde el menú de pausa.",
+  "customrecipe.button.back": "Volver",
+  "customrecipe.button.cancel": "Cancelar",
+  "customrecipe.button.save": "Guardar",
+  "customrecipe.button.discard": "Descartar",
+  "customrecipe.button.add": "Añadir",
+  "customrecipe.button.add_recipe": "Añadir receta",
+  "customrecipe.button.add_recipe_new": "+ Añadir receta",
+  "customrecipe.button.add_from_library": "Añadir desde la biblioteca",
+  "customrecipe.button.back_to_recipes": "Volver a mis recetas",
+  "customrecipe.button.duplicate": "Duplicar",
+  "customrecipe.button.edit": "Editar",
+  "customrecipe.button.delete_corrupted": "Eliminar receta dañada",
+  "customrecipe.button.disable_conflict": "Desactivar conflicto",
+  "customrecipe.button.set_known": "Marcar como conocida por defecto",
+  "customrecipe.state.enabled": "Activada",
+  "customrecipe.state.disabled": "Desactivada",
+  "customrecipe.state.library": "Biblioteca",
+  "customrecipe.state.corrupted": "Dañada",
+  "customrecipe.screen.my_recipes": "Mis recetas",
+  "customrecipe.screen.global_library": "Biblioteca global",
+  "customrecipe.screen.select_target": "Seleccionar destino",
+  "customrecipe.screen.select_worlds": "Seleccionar mundos",
+  "customrecipe.screen.search_worlds": "Buscar mundos",
+  "customrecipe.screen.search": "Buscar...",
+  "customrecipe.screen.no_worlds": "No se encontraron mundos.",
+  "customrecipe.table.output": "Resultado",
+  "customrecipe.table.status": "Estado",
+  "customrecipe.table.known": "Conocida",
+  "customrecipe.table.type": "Tipo",
+  "customrecipe.table.recipe": "Receta",
+  "customrecipe.table.state": "Estado",
+  "customrecipe.table.add": "Añadir",
+  "customrecipe.empty.library": "La biblioteca global está vacía.",
+  "customrecipe.empty.recipes": "Aún no hay recetas personalizadas. Usa « Crear una receta ».",
+  "customrecipe.quick.preview": "Vista previa (sin añadir): %s",
+  "customrecipe.recipe.add_to": "Añadir a %s",
+  "customrecipe.recipe.missing": "Falta: %s",
+  "customrecipe.recipe.conflict": "Conflicto con %s.",
+  "customrecipe.recipe.vanilla_conflict": "Minecraft ya fabrica este resultado. Activa « Conocida por defecto » para evitar conflictos en el libro de recetas.",
+  "customrecipe.recipe.same_inputs": "Mismos ingredientes que %s, pero un resultado diferente. Márcala como conocida por defecto para elegirla en el libro de recetas.",
+  "customrecipe.recipe.shaped": "Con forma",
+  "customrecipe.recipe.shapeless": "Sin forma",
+  "customrecipe.recipe.shaped_ingredients": "Ingredientes de la receta con forma (%s/9)",
+  "customrecipe.recipe.shapeless_ingredients": "Ingredientes de la receta sin forma (%s/9)",
+  "customrecipe.recipe.known": "Conocida por defecto: %s",
+  "customrecipe.recipe.on": "SÍ",
+  "customrecipe.recipe.off": "NO",
+  "customrecipe.save.title": "Cambios sin guardar",
+  "customrecipe.save.line1": "Has modificado Custom Recipe.",
+  "customrecipe.save.line2": "¿Guardarlos antes de salir?",
+  "customrecipe.chat.applying": "[Custom Recipe] Aplicando tus cambios...",
+  "customrecipe.world.local": "Mundo local",
+  "customrecipe.world.creative": "Modo creativo",
+  "customrecipe.world.adventure": "Modo aventura",
+  "customrecipe.world.spectator": "Modo espectador",
+  "customrecipe.world.survival": "Modo supervivencia",
+  "customrecipe.world.commands": ", Comandos",
+  "customrecipe.world.version": ", Versión: %s",
+  "customrecipe.world.unknown_version": "Versión desconocida"
+  ,"customrecipe.chat.permission_denied": "[Custom Recipe] Permiso denegado."
+  ,"customrecipe.chat.server_too_large": "[Custom Recipe] La configuración del servidor es demasiado grande."
+  ,"customrecipe.chat.invalid_json": "[Custom Recipe] JSON no válido; no se modificó nada."
+  ,"customrecipe.chat.server_applying": "[Custom Recipe] Aplicando cambios del servidor..."
+  ,"customrecipe.chat.client_mod_required": "[Custom Recipe] Este cliente necesita el mod Custom Recipe para abrir el editor."
+  ,"customrecipe.chat.opening_editor": "[Custom Recipe] Abriendo el editor de recetas del servidor."
+  ,"customrecipe.chat.server_send_too_large": "[Custom Recipe] La configuración del servidor es demasiado grande para enviarla al editor."
+  ,"customrecipe.chat.invalid_server_config": "[Custom Recipe] Configuración del servidor recibida no válida."
+  ,"customrecipe.chat.local_recipes_ready": "[Custom Recipe] %s receta(s) local(es) lista(s) para añadir al servidor."
+  ,"customrecipe.chat.invalid_server_validation": "[Custom Recipe] Validación del servidor recibida no válida."
+  ,"customrecipe.tooltip.open": "Abrir Custom Recipe"
+  ,"customrecipe.vanilla.title": "Recetas vanilla"
+  ,"customrecipe.vanilla.show_all": "Mostrar: todas"
+  ,"customrecipe.vanilla.show_enabled": "Mostrar: activadas"
+  ,"customrecipe.vanilla.show_disabled": "Mostrar: desactivadas"
+  ,"customrecipe.vanilla.show_special": "Mostrar: especiales"
+  ,"customrecipe.vanilla.search_hint": "Buscar objeto o ID de receta"
+  ,"customrecipe.vanilla.search": "Buscar"
+  ,"customrecipe.vanilla.ingredient": "Ingrediente: %s"
+  ,"customrecipe.vanilla.output": "Resultado: %s"
+  ,"customrecipe.vanilla.loading": "Cargando recetas..."
+  ,"customrecipe.vanilla.loading_more": "Cargando más..."
+  ,"customrecipe.vanilla.none": "No se encontró ninguna receta."
+  ,"customrecipe.vanilla.browse": "%s - usa la rueda para explorar - pulsa un nombre para ver la vista previa"
+  ,"customrecipe.vanilla.special": "[Especial] "
+  ,"customrecipe.details.title": "Vista previa de receta"
+  ,"customrecipe.details.variant_disabled": "Variante desactivada"
+  ,"customrecipe.details.disable_variant": "Desactivar esta variante"
+  ,"customrecipe.details.variants_disabled": "Todas las variantes están desactivadas"
+  ,"customrecipe.details.disable_variants": "Desactivar todas las variantes"
+  ,"customrecipe.builder.create": "Crear una receta"
+  ,"customrecipe.builder.edit": "Editar receta"
+  ,"customrecipe.builder.search_item": "Buscar objeto..."
+  ,"customrecipe.builder.also_library": "Guardar también en la biblioteca global: %s"
+  ,"customrecipe.builder.empty_remove": "Vacío - quitar objeto"
+  ,"customrecipe.builder.shapeless_ingredients": "Ingredientes sin forma (%s/9)"
+  ,"customrecipe.builder.result_count": "Resultado ×:"
+  ,"customrecipe.builder.save": "Guardar"
+  ,"customrecipe.chat.world_tip": "Puedes modificar las recetas personalizadas de este mundo desde el menú de pausa (Esc), haciendo clic en %s o mediante Mod Menu."
+  ,"customrecipe.chat.world_tip.link": "Custom Recipe"
+  ,"customrecipe.chat.world_tip.hover": "Abrir el editor de Custom Recipe"
+  ,"customrecipe.screen.built_in": "Recetas integradas"
+  ,"customrecipe.world.recipes_in": "Recetas en %s"
+  ,"customrecipe.world.default_name": "Mundo"
+  ,"customrecipe.world.enabled_recipes": "Recetas activadas"
+  ,"customrecipe.world.available_recipes": "Recetas disponibles"
+}

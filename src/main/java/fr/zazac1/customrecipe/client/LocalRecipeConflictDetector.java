@@ -13,18 +13,22 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.jar.JarFile;
 
-/** Matches local ModMenu drafts against direct-item crafting JSON recipes. */
+/** Matches local ModMenu drafts against installed and other local crafting recipes. */
 final class LocalRecipeConflictDetector {
+    private static Set<String> vanillaCraftingOutputs = Set.of();
+
     private LocalRecipeConflictDetector() {}
 
     static void refresh(List<CustomRecipeEntry> customRecipes, MinecraftClient client) {
         List<DefaultRecipe> defaults = loadDefaults(client);
+        rememberVanillaCraftingOutputs(defaults);
         for (CustomRecipeEntry custom : customRecipes) {
             List<String> conflicts = new ArrayList<>();
             List<String> sameShape = new ArrayList<>();
@@ -33,6 +37,11 @@ final class LocalRecipeConflictDetector {
                 if (candidate.result().equals(custom.result)) conflicts.add(candidate.id());
                 else sameShape.add(candidate.id());
             }
+            for (CustomRecipeEntry candidate : customRecipes) {
+                if (candidate == custom || sameRecipeId(custom, candidate) || !sameInputs(custom, candidate)) continue;
+                if (sameOutputItem(custom, candidate)) conflicts.add(candidate.serverRecipeId().toString());
+                else sameShape.add(candidate.serverRecipeId().toString());
+            }
             conflicts.sort(String::compareTo);
             sameShape.sort(String::compareTo);
             custom.conflicting_recipes = conflicts;
@@ -40,23 +49,45 @@ final class LocalRecipeConflictDetector {
         }
     }
 
+    static void refreshVanillaCraftingOutputs(MinecraftClient client) {
+        rememberVanillaCraftingOutputs(loadDefaults(client));
+    }
+
+    static boolean hasVanillaCraftingOutput(String itemId) {
+        return itemId != null && vanillaCraftingOutputs.contains(itemId);
+    }
+
+    private static void rememberVanillaCraftingOutputs(List<DefaultRecipe> defaults) {
+        Set<String> outputs = new HashSet<>();
+        for (DefaultRecipe recipe : defaults) {
+            if (recipe.id().startsWith("minecraft:")) outputs.add(recipe.result());
+        }
+        vanillaCraftingOutputs = Collections.unmodifiableSet(outputs);
+    }
+
     private static List<DefaultRecipe> loadDefaults(MinecraftClient client) {
         List<DefaultRecipe> recipes = new ArrayList<>();
         Set<String> seenIds = new HashSet<>();
-        Map<Identifier, Resource> resources = client.getResourceManager().findResources("recipe", id -> id.getPath().endsWith(".json"));
+        Map<Identifier, Resource> resources = client.getResourceManager().findResources("recipe",
+                id -> id.getPath().endsWith(".json"));
         for (Map.Entry<Identifier, Resource> resource : resources.entrySet()) {
             Identifier resourceId = resource.getKey();
-            if (resourceId.getNamespace().equals(CustomRecipeMod.MOD_ID) && resourceId.getPath().startsWith("recipe/custom/")) continue;
+            if (resourceId.getNamespace().equals(CustomRecipeMod.MOD_ID)
+                    && resourceId.getPath().startsWith("recipe/custom/")) continue;
             try (var input = resource.getValue().getInputStream()) {
-                String recipeId = resourceId.getNamespace() + ":" + resourceId.getPath().substring("recipe/".length(), resourceId.getPath().length() - ".json".length());
+                String recipeId = resourceId.getNamespace() + ":" + resourceId.getPath()
+                        .substring("recipe/".length(), resourceId.getPath().length() - ".json".length());
                 DefaultRecipe recipe = parse(recipeId, new String(input.readAllBytes(), StandardCharsets.UTF_8));
                 if (recipe != null && seenIds.add(recipe.id())) recipes.add(recipe);
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {
+                // Optional or malformed datapack recipes are not comparable locally.
+            }
         }
         loadBundledVanillaRecipes(client, recipes, seenIds);
         return recipes;
     }
 
+    /** Development clients may not mount Minecraft's own recipe resources. */
     private static void loadBundledVanillaRecipes(MinecraftClient client, List<DefaultRecipe> recipes, Set<String> seenIds) {
         try {
             var source = client.getClass().getProtectionDomain().getCodeSource();
@@ -76,7 +107,9 @@ final class LocalRecipeConflictDetector {
                     }
                 }
             }
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+            // Unusual launchers can hide the Minecraft JAR; datapack resources still work above.
+        }
     }
 
     private static DefaultRecipe parse(String id, String json) {
@@ -85,8 +118,11 @@ final class LocalRecipeConflictDetector {
             String type = root.has("type") ? root.get("type").getAsString() : "";
             String result = resultId(root);
             if (!type.contains("crafting_") || result.isBlank()) return null;
-            return type.contains("crafting_shaped") ? parseShaped(id, result, root) : parseShapeless(id, result, root);
-        } catch (Exception ignored) { return null; }
+            if (type.contains("crafting_shaped")) return parseShaped(id, result, root);
+            return parseShapeless(id, result, root);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static DefaultRecipe parseShaped(String id, String result, JsonObject root) {
@@ -126,9 +162,11 @@ final class LocalRecipeConflictDetector {
         JsonElement result = root.get("result");
         if (result == null) return "";
         if (result.isJsonPrimitive()) return result.getAsString();
-        return result.isJsonObject() && result.getAsJsonObject().has("id") ? result.getAsJsonObject().get("id").getAsString() : "";
+        if (result.isJsonObject() && result.getAsJsonObject().has("id")) return result.getAsJsonObject().get("id").getAsString();
+        return "";
     }
 
+    /** Tags and ingredient alternatives need the authoritative server comparison. */
     private static String directItem(JsonElement ingredient) {
         if (ingredient == null || ingredient.isJsonNull()) return null;
         if (ingredient.isJsonPrimitive()) {
@@ -145,7 +183,25 @@ final class LocalRecipeConflictDetector {
         if (shaped != candidate.shaped()) return false;
         Grid customGrid = shaped ? customShapedGrid(custom) : customShapelessGrid(custom);
         return customGrid != null && customGrid.width() == candidate.inputs().width()
-                && customGrid.height() == candidate.inputs().height() && customGrid.slots().equals(candidate.inputs().slots());
+                && customGrid.height() == candidate.inputs().height()
+                && customGrid.slots().equals(candidate.inputs().slots());
+    }
+
+    private static boolean sameInputs(CustomRecipeEntry first, CustomRecipeEntry second) {
+        boolean shaped = "shaped".equalsIgnoreCase(first.type);
+        if (shaped != "shaped".equalsIgnoreCase(second.type)) return false;
+        Grid firstGrid = shaped ? customShapedGrid(first) : customShapelessGrid(first);
+        Grid secondGrid = shaped ? customShapedGrid(second) : customShapelessGrid(second);
+        return firstGrid != null && firstGrid.equals(secondGrid);
+    }
+
+    /** Output count intentionally does not matter: it is still a recipe-book conflict. */
+    private static boolean sameOutputItem(CustomRecipeEntry first, CustomRecipeEntry second) {
+        return first.result != null && first.result.equals(second.result);
+    }
+
+    private static boolean sameRecipeId(CustomRecipeEntry first, CustomRecipeEntry second) {
+        return first.id != null && !first.id.isBlank() && first.id.equals(second.id);
     }
 
     private static Grid customShapedGrid(CustomRecipeEntry recipe) {
@@ -175,16 +231,23 @@ final class LocalRecipeConflictDetector {
 
     private static Grid trim(Grid source) {
         int left = source.width(), right = -1, top = source.height(), bottom = -1;
-        for (int row = 0; row < source.height(); row++) for (int column = 0; column < source.width(); column++) {
-            if (source.slots().get(row * source.width() + column).isBlank()) continue;
-            left = Math.min(left, column); right = Math.max(right, column);
-            top = Math.min(top, row); bottom = Math.max(bottom, row);
+        for (int row = 0; row < source.height(); row++) {
+            for (int column = 0; column < source.width(); column++) {
+                if (source.slots().get(row * source.width() + column).isBlank()) continue;
+                left = Math.min(left, column);
+                right = Math.max(right, column);
+                top = Math.min(top, row);
+                bottom = Math.max(bottom, row);
+            }
         }
         if (right < left || bottom < top) return new Grid(0, 0, List.of());
         int width = right - left + 1;
         List<String> slots = new ArrayList<>();
-        for (int row = top; row <= bottom; row++) for (int column = left; column <= right; column++)
-            slots.add(source.slots().get(row * source.width() + column));
+        for (int row = top; row <= bottom; row++) {
+            for (int column = left; column <= right; column++) {
+                slots.add(source.slots().get(row * source.width() + column));
+            }
+        }
         return new Grid(width, bottom - top + 1, slots);
     }
 

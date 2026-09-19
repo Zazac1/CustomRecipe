@@ -4,6 +4,7 @@ import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.ModConfig;
+import fr.zazac1.customrecipe.WorldRecipeConfig;
 import fr.zazac1.customrecipe.RecipeIntegrity;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
@@ -44,7 +45,8 @@ public abstract class ServerRecipeManagerMixin {
     private void customrecipe$applyConfig(Map<Identifier, JsonElement> ignored, ResourceManager resourceManager,
                                           Profiler profiler, CallbackInfo ci) {
         ConfigLoader.invalidate();
-        ModConfig config = ConfigLoader.get();
+        ModConfig rootConfig = ConfigLoader.get();
+        WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
 
         List<RecipeEntry<?>> recipes = new ArrayList<>(values());
 
@@ -97,7 +99,7 @@ public abstract class ServerRecipeManagerMixin {
             if (built != null) recipes.add(built);
         }
 
-        if (recipeStateChanged) ConfigLoader.saveIntegrityState(config);
+        if (recipeStateChanged) ConfigLoader.saveIntegrityState(rootConfig);
 
         setRecipes(recipes);
     }
