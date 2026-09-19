@@ -46,9 +46,6 @@ public class ModConfig {
      */
     public List<CustomRecipeEntry> custom_recipes = new ArrayList<>();
 
-    /** Vrai si l'écran de bienvenue a déjà été affiché. */
-    public boolean seen_welcome = false;
-
     /** Local worlds that already received the editor tip on first entry. */
     public List<String> shown_world_editor_tips = new ArrayList<>();
 

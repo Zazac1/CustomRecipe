@@ -113,10 +113,4 @@
   ,"customrecipe.world.default_name": "Monde"
   ,"customrecipe.world.enabled_recipes": "Recettes activées"
   ,"customrecipe.world.available_recipes": "Recettes disponibles"
-  ,"customrecipe.welcome.title": "Bienvenue dans Custom Recipe !"
-  ,"customrecipe.welcome.intro": "Ce mod vous permet de fabriquer tout objet vanilla ou moddé."
-  ,"customrecipe.welcome.quick_add": "Quick Add propose des recettes prêtes à ajouter, facultatives."
-  ,"customrecipe.welcome.create": "Créer des recettes vous permet de créer vos propres recettes façonnées ou sans forme."
-  ,"customrecipe.welcome.create_button": "Créer des recettes"
-  ,"customrecipe.welcome.dismiss": "Compris, ne plus afficher"
 }
