@@ -113,10 +113,4 @@
   ,"customrecipe.world.default_name": "World"
   ,"customrecipe.world.enabled_recipes": "Enabled recipes"
   ,"customrecipe.world.available_recipes": "Available recipes"
-  ,"customrecipe.welcome.title": "Welcome to Custom Recipe!"
-  ,"customrecipe.welcome.intro": "This mod lets you craft any vanilla or modded item."
-  ,"customrecipe.welcome.quick_add": "Quick Add gives you optional pre-made recipes."
-  ,"customrecipe.welcome.create": "Create Recipes lets you build your own shapeless or shaped recipe."
-  ,"customrecipe.welcome.create_button": "Create Recipes"
-  ,"customrecipe.welcome.dismiss": "Got it, don't show again"
 }

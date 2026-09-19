@@ -40,7 +40,6 @@ public class ConfigScreen extends Screen {
     private final RecipeTarget target;
     private final WorldRecipeConfig targetConfig;
     private String initialConfigJson;
-    private boolean welcomeShown = false; // évite la boucle infinie si l'utilisateur revient
 
     /** Shared state — modified by sub-screens, saved on Save. */
     final List<CustomRecipeEntry> recipes;
@@ -105,10 +104,6 @@ public class ConfigScreen extends Screen {
 
     @Override
     protected void init() {
-        if (!serverManaged && !welcomeShown && !ConfigLoader.get().seen_welcome) {
-            welcomeShown = true;
-            client.execute(() -> client.setScreen(new WelcomeScreen(this)));
-        }
 
         int buttonWidth = Math.min(260, width - 32);
         int buttonHeight = 28;
@@ -197,12 +192,6 @@ public class ConfigScreen extends Screen {
 
     /** Previous compact menu retained while Vanilla Recipes is moved to its future location. */
     private void initLegacy() {
-        // Premier lancement : afficher le guide de bienvenue
-        if (!serverManaged && !welcomeShown && !ConfigLoader.get().seen_welcome) {
-            welcomeShown = true;
-            final WelcomeScreen ws = new WelcomeScreen(this); // ConfigScreen est un Screen
-            client.execute(() -> client.setScreen(ws));
-        }
 
         int btnW = 200, btnH = 20;
         int cx = width / 2 - btnW / 2;
@@ -328,7 +317,6 @@ public class ConfigScreen extends Screen {
         baseConfig.disabled_recipes = original.disabled_recipes;
         baseConfig.disabled_recipe_variants = original.disabled_recipe_variants;
         baseConfig.custom_recipes = original.custom_recipes;
-        baseConfig.seen_welcome = original.seen_welcome;
         baseConfig.shown_world_editor_tips = original.shown_world_editor_tips;
     }
 
