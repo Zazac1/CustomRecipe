@@ -160,7 +160,9 @@ public abstract class ServerRecipeManagerMixin {
                 ResourceKey<? extends net.minecraft.core.Registry<? extends T>> key
         ) {
             if (key.equals(Registries.RECIPE)) {
-                return Optional.of((HolderLookup.RegistryLookup) recipes);
+                HolderLookup.RegistryLookup<T> typedRecipes =
+                        (HolderLookup.RegistryLookup<T>) (HolderLookup.RegistryLookup<?>) recipes;
+                return Optional.of(typedRecipes);
             }
             return delegate.lookup(key);
         }
