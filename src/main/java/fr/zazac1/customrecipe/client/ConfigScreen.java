@@ -126,9 +126,9 @@ public class ConfigScreen extends Screen {
 
         int libraryY = top + buttonHeight + gap;
         addDrawableChild(ButtonWidget.builder(Text.empty(),
-                // Dedicated-server editors keep a world target; Library must explicitly open
-                // the server's reusable Global Library so its Import/Export is available.
-                b -> client.setScreen(new CustomRecipesScreen(this, serverManaged)))
+                // The server editor is already scoped to its current world. Its Library
+                // therefore opens that server world instead of the reusable Global Library.
+                b -> client.setScreen(new CustomRecipesScreen(this, !serverManaged)))
                 .dimensions(x, libraryY, buttonWidth, buttonHeight).build());
         addHomeButton(libraryY, buttonWidth, Text.translatable("customrecipe.home.library").getString(), null, Items.BOOKSHELF, true);
 

@@ -44,7 +44,7 @@ final class ImportConfigurationScreen extends Screen {
         int panelHeight = 136;
         int panelX = width / 2 - panelWidth / 2;
         int panelY = height / 2 - panelHeight / 2;
-        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF0181B1E);
+        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xFF181B1E);
         border(context, panelX, panelY, panelWidth, panelHeight);
         super.render(context, mouseX, mouseY, delta);
         context.drawCenteredTextWithShadow(textRenderer, title, width / 2, panelY + 12, 0xFFFFFFFF);

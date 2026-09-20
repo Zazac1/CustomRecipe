@@ -29,6 +29,7 @@ $lanIp = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
     Where-Object { $_.IPAddress -ne '127.0.0.1' -and $_.IPAddress -notlike '169.254.*' } |
     Select-Object -First 1 -ExpandProperty IPAddress
 if (-not $lanIp) { $lanIp = '127.0.0.1' }
+$serverPort = 25566
 
 $serverEula = Join-Path $projectRoot 'run-server\eula.txt'
 if (-not (Test-Path -LiteralPath $serverEula) -or (Get-Content -LiteralPath $serverEula -Raw) -notmatch '(?m)^eula=true\s*$') {
@@ -51,17 +52,22 @@ if ($properties -match '(?m)^online-mode=') {
 } else {
     $properties += "`r`nonline-mode=false`r`n"
 }
+if ($properties -match '(?m)^server-port=') {
+    $properties = $properties -replace '(?m)^server-port=.*$', "server-port=$serverPort"
+} else {
+    $properties += "`r`nserver-port=$serverPort`r`n"
+}
 Set-Content -LiteralPath $serverProperties -Value $properties -NoNewline
 
 Write-Host 'Compilation du mod...'
-& '.\gradlew.bat' build
+& '.\gradlew.bat' build --no-daemon
 if ($LASTEXITCODE -ne 0) { throw 'Compilation échouée : lancement annulé.' }
 
 # Le build unique évite une course entre runServer et runClient sur les classes du mod.
-$serverScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer -x compileJava -x processResources -x classes"
-$clientScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runClient -x compileJava -x processResources -x classes"
+$serverScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer --no-daemon -x compileJava -x processResources -x classes"
+$clientScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runClient --no-daemon -x compileJava -x processResources -x classes"
 
-Write-Host "Serveur : $lanIp`:25565"
+Write-Host "Serveur : $lanIp`:$serverPort"
 Write-Host 'Mode local de développement : online-mode=false.'
 Write-Host 'Le serveur démarre dans une fenêtre dédiée, puis le client dans 6 secondes.'
 $serverLauncher = Start-Process -FilePath 'powershell.exe' -WorkingDirectory $projectRoot -ArgumentList '-NoExit', '-NoProfile', '-Command', $serverScript -PassThru
@@ -72,4 +78,4 @@ $serverLauncher = Start-Process -FilePath 'powershell.exe' -WorkingDirectory $pr
 Start-Sleep -Seconds 6
 Start-Process -FilePath 'powershell.exe' -WorkingDirectory $projectRoot -ArgumentList '-NoExit', '-NoProfile', '-Command', $clientScript
 
-Write-Host "Dans le client : Multijoueur > Ajouter un serveur > $lanIp`:25565"
+Write-Host "Dans le client : Multijoueur > Ajouter un serveur > $lanIp`:$serverPort"
