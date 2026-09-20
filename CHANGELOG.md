@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.3.2+1.21.11
+
+### Added
+
+- Added full configuration Import and Export actions below the home **Save** button.
+- Added a central import confirmation with separate custom-recipe and Vanilla-setting counts.
+- Exported backup filenames now include the selected world's name.
+
+### Changed
+
+- Removed duplicate Import and Export actions from Library and Vanilla Recipes submenus.
+- Global Library imports now preserve Vanilla recipe settings, variants, known-by-default state, and Quick Add visibility.
+- Saved configurations now record the Custom Recipe and Minecraft versions that wrote them.
+
+### Fixed
+
+- Added atomic config writes and recovery copies for legacy configuration migrations.
+- Fixed legacy cached `server_enabled: false` values disabling local recipes after upgrading.
+
 ## 1.3.1+1.21.11
 
 ### Changed

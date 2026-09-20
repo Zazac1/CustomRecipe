@@ -112,6 +112,7 @@ public class VanillaRecipesScreen extends Screen {
 
     @Override
     protected void init() {
+
         addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client, parent.target(),
                 parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
         int searchButtonW = Math.max(72, textRenderer.getWidth(Text.translatable("customrecipe.vanilla.search").getString()) + 16);

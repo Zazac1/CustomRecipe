@@ -23,8 +23,6 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -156,6 +154,8 @@ public class ConfigScreen extends Screen {
         addDrawableChild(ButtonWidget.builder(Text.empty(), b -> save())
                 .dimensions(x, saveY, buttonWidth, buttonHeight).build());
         addHomeSaveButton(saveY, buttonWidth);
+        addDrawableChild(ButtonWidget.builder(Text.literal("Export"), b -> exportAll()).dimensions(width / 2 - 104, saveY + 32, 100, 20).build());
+        addDrawableChild(ButtonWidget.builder(Text.literal("Import"), b -> importAll()).dimensions(width / 2 + 4, saveY + 32, 100, 20).build());
     }
 
     /** Draws the large home entries while the normal ButtonWidget keeps hover/click behavior. */
@@ -185,38 +185,6 @@ public class ConfigScreen extends Screen {
         });
     }
 
-    /** Exports only the reusable Global Library; world data stays private. */
-    private void exportGlobalLibrary() {
-        String filename = "customrecipe-global-library-" + LocalDateTime.now()
-                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss")) + ".json";
-        WindowsFileDialogs.saveJson(filename, path -> {
-            try {
-                ConfigLoader.exportLibraryTo(currentConfig(), path);
-                reportLibraryTransfer("Exported Global Library: " + path.getFileName());
-            } catch (java.io.IOException e) {
-                reportLibraryTransfer("Library export failed: " + e.getMessage());
-            }
-        }, error -> reportLibraryTransfer("Library export failed: " + error));
-    }
-
-    /** Imports missing library recipes only; Save remains the explicit commit. */
-    private void importGlobalLibrary() {
-        WindowsFileDialogs.openJson(path -> {
-            try {
-                WorldRecipeConfig imported = ConfigLoader.importLibraryFrom(path);
-                ConfigLoader.LibraryImportResult result = ConfigLoader.importLibraryInto(currentConfig(), imported);
-                replaceConfig(baseConfig);
-                reportLibraryTransfer("Global Library import: " + result.added() + " added, "
-                        + result.alreadyPresent() + " already present. Use Save to apply it.");
-            } catch (java.io.IOException e) {
-                reportLibraryTransfer("Library import failed: " + e.getMessage());
-            }
-        }, error -> reportLibraryTransfer("Library import failed: " + error));
-    }
-
-    private void reportLibraryTransfer(String message) {
-        if (client.player != null) client.player.sendMessage(Text.literal(message), false);
-    }
     /** Save is explicit on the home screen for local, global and server-managed editors. */
     private void addHomeSaveButton(int y, int buttonWidth) {
         int x = width / 2 - buttonWidth / 2;
@@ -296,6 +264,37 @@ public class ConfigScreen extends Screen {
         ).dimensions(cx, cy + (serverManaged ? 128 : 104), btnW, btnH).build());
     }
 
+    private void exportAll() {
+        WindowsFileDialogs.saveJson(exportFileName(), path -> {
+            try { ConfigLoader.exportTo(currentConfig(), path); } catch (java.io.IOException ignored) {}
+        }, error -> {});
+    }
+
+    private String exportFileName() {
+        String worldName = target.isWorld() ? target.displayName().replaceFirst("^Current\\s+", "") : "global-library";
+        String safeName = worldName.replaceAll("[\\\\/:*?\"<>|]", "_").trim().replaceAll("\\s+", "_");
+        return "customrecipe-backup-" + (safeName.isBlank() ? "world" : safeName) + ".json";
+    }
+
+    private void importAll() {
+        WindowsFileDialogs.openJson(path -> {
+            try {
+                ModConfig imported = ConfigLoader.importFrom(path);
+                WorldRecipeConfig importedTarget = target.resolve(imported);
+                int recipeCount = importedTarget.custom_recipes.size();
+                int vanillaCount = importedTarget.disabled_builtin.size()
+                        + importedTarget.disabled_recipes.size()
+                        + importedTarget.disabled_recipe_variants.size()
+                        + importedTarget.known_by_default_builtin.size()
+                        + importedTarget.hidden_quick_add_builtin.size();
+                client.setScreen(new ImportConfigurationScreen(this, imported, recipeCount, vanillaCount));
+            } catch (java.io.IOException ignored) {}
+        }, error -> {});
+    }
+
+    void confirmImportedConfiguration(ModConfig imported) {
+        client.setScreen(new ConfigScreen(parent, imported, title.getString(), serverManaged, saveAction, target, targetLocked));
+    }
     void save() {
         saveAndReturn(parent);
     }

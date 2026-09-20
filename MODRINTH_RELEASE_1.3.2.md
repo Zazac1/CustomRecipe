@@ -28,13 +28,15 @@ Fabric
 
 ### Added
 
-- Added dedicated Import Library and Export Library actions using the Windows file picker.
-- Added Global Library import/export support in the dedicated-server OP editor.
+- Added full configuration Import and Export actions below the home Save button.
+- Added a central import confirmation with separate custom-recipe and Vanilla-setting counts.
+- Exported backup filenames now include the selected world's name.
 
 ### Changed
 
-- Global Library imports merge missing recipes without deleting existing library recipes.
-- Saved configurations now identify the Custom Recipe and Minecraft versions that wrote them.
+- Import and Export are no longer duplicated in Library and Vanilla Recipes submenus.
+- Global Library imports preserve Vanilla recipe settings, variants, known-by-default state, and Quick Add visibility.
+- Saved configurations identify the Custom Recipe and Minecraft versions that wrote them.
 
 ### Fixed
 

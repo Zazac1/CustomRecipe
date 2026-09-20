@@ -127,7 +127,16 @@ public final class ConfigLoader {
         if (config == null || importedLibrary == null) return new LibraryImportResult(0, 0);
         normalize(config);
         normalizeRecipeConfig(importedLibrary);
-        return importMissingRecipes(importedLibrary.custom_recipes, config.global_library);
+        // Vanilla state is copied exactly so enabled/disabled recipes, variants,
+        // and known-by-default settings survive a library import.
+        WorldRecipeConfig target = config.global_library;
+        target.disabled_builtin = new ArrayList<>(importedLibrary.disabled_builtin);
+        target.known_by_default_builtin = new ArrayList<>(importedLibrary.known_by_default_builtin);
+        target.disabled_recipes = new ArrayList<>(importedLibrary.disabled_recipes);
+        target.disabled_recipe_variants = new ArrayList<>(importedLibrary.disabled_recipe_variants);
+        target.hidden_quick_add_builtin = new ArrayList<>(importedLibrary.hidden_quick_add_builtin);
+        target.quick_add_recipes = new ArrayList<>(importedLibrary.quick_add_recipes);
+        return importMissingRecipes(importedLibrary.custom_recipes, target);
     }
     /** Compares recipes without relying on their position in a config file. */
     public static boolean sameRecipe(CustomRecipeEntry first, CustomRecipeEntry second) {
