@@ -86,7 +86,7 @@ public class CustomRecipesScreen extends Screen {
         super(Component.translatable(libraryPicker ? "customrecipe.screen.global_library" : "customrecipe.screen.my_recipes"));
         this.parent  = parent;
         this.libraryPicker = libraryPicker;
-        this.recipes = libraryPicker ? ConfigLoader.get().global_library.custom_recipes : parent.recipes;
+        this.recipes = libraryPicker ? parent.currentConfig().global_library.custom_recipes : parent.recipes;
     }
 
     private int listTop()     { return 28; }
@@ -274,14 +274,35 @@ public class CustomRecipesScreen extends Screen {
 
         // ── Titre ─────────────────────────────────────────────────────────
         if (libraryPicker) {
+            String libraryLabel = "Global Library";
             addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
-                    GlobalRecipeTarget.INSTANCE, "Global Library"));
+                    GlobalRecipeTarget.INSTANCE, libraryLabel));
+            boolean hasWorldTarget = parent.target().isWorld();
+            int importable = hasWorldTarget ? parent.globalLibraryImportableCount() : 0;
+            int importButtonX = 52 + textRenderer.width(libraryLabel);
+            int importButtonW = Math.max(1, Math.min(200, width - PAD - importButtonX - 8));
+            Component importLabel = hasWorldTarget
+                    ? Component.translatable("customrecipe.button.add_all_from_library")
+                    : Component.translatable("customrecipe.button.select_world_to_import");
+            Button addAll = Button.builder(importLabel, b -> {
+                if (hasWorldTarget) {
+                    minecraft.gui.setScreen(new ImportGlobalLibraryScreen(parent, this, importable));
+                } else {
+                    minecraft.gui.setScreen(new RecipeTargetSelectScreen(parent,
+                            selected -> new CustomRecipesScreen(selected, true)));
+                }
+            }).bounds(importButtonX, 4, importButtonW, 20).build();
+            addAll.active = !hasWorldTarget || importable > 0;
+            if (hasWorldTarget && !addAll.active) addAll.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+                    Component.translatable("customrecipe.import.nothing_to_add")));
+            addDrawableChild(addAll);
         } else if (parent.target().isWorld()) {
             addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
                     parent.target(), "Recipes from " + parent.target().displayName()));
         } else {
             addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
                     parent.target(), "Global Library"));
+            int libraryActionW = 118;
         }
 
         // ── Lignes de recettes ────────────────────────────────────────────

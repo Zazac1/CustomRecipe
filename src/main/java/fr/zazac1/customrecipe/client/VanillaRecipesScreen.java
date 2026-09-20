@@ -112,6 +112,7 @@ public class VanillaRecipesScreen extends Screen {
 
     @Override
     protected void init() {
+
         addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, parent.target(),
                 parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
         int searchButtonW = Math.max(72, font.width(Component.translatable("customrecipe.vanilla.search").getString()) + 16);

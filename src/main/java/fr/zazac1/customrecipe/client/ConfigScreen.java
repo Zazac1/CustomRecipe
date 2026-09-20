@@ -106,6 +106,7 @@ public class ConfigScreen extends Screen {
 
     @Override
     protected void init() {
+
         int buttonWidth = Math.min(260, width - 32);
         int buttonHeight = 28;
         int gap = 8;
@@ -128,7 +129,7 @@ public class ConfigScreen extends Screen {
 
         int libraryY = top + buttonHeight + gap;
         addRenderableWidget(Button.builder(Component.empty(),
-                b -> minecraft.gui.setScreen(new CustomRecipesScreen(this)))
+                b -> minecraft.gui.setScreen(new CustomRecipesScreen(this, serverManaged)))
                 .bounds(x, libraryY, buttonWidth, buttonHeight).build());
         addHomeButton(libraryY, buttonWidth, Component.translatable("customrecipe.home.library").getString(), null, Items.BOOKSHELF, true);
 
@@ -152,6 +153,8 @@ public class ConfigScreen extends Screen {
         addRenderableWidget(Button.builder(Component.empty(), b -> save())
                 .bounds(x, saveY, buttonWidth, buttonHeight).build());
         addHomeSaveButton(saveY, buttonWidth);
+        addRenderableWidget(Button.builder(Component.literal("Export"), b -> exportAll()).bounds(width / 2 - 104, saveY + 32, 100, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Import"), b -> importAll()).bounds(width / 2 + 4, saveY + 32, 100, 20).build());
     }
 
     /** Draws the large home entries while the normal ButtonWidget keeps hover/click behavior. */
@@ -193,6 +196,7 @@ public class ConfigScreen extends Screen {
 
     /** Previous compact menu retained while Vanilla Recipes is moved to its future location. */
     private void initLegacy() {
+
         int btnW = 200, btnH = 20;
         int cx = width / 2 - btnW / 2;
         int cy = height / 2 - 20;
@@ -259,6 +263,37 @@ public class ConfigScreen extends Screen {
         ).bounds(cx, cy + (serverManaged ? 128 : 104), btnW, btnH).build());
     }
 
+    private void exportAll() {
+        WindowsFileDialogs.saveJson(exportFileName(), path -> {
+            try { ConfigLoader.exportTo(currentConfig(), path); } catch (java.io.IOException ignored) {}
+        }, error -> {});
+    }
+
+    private String exportFileName() {
+        String worldName = target.isWorld() ? target.displayName().replaceFirst("^Current\\s+", "") : "global-library";
+        String safeName = worldName.replaceAll("[\\\\/:*?\"<>|]", "_").trim().replaceAll("\\s+", "_");
+        return "customrecipe-backup-" + (safeName.isBlank() ? "world" : safeName) + ".json";
+    }
+
+    private void importAll() {
+        WindowsFileDialogs.openJson(path -> {
+            try {
+                ModConfig imported = ConfigLoader.importFrom(path);
+                WorldRecipeConfig importedTarget = target.resolve(imported);
+                int recipeCount = importedTarget.custom_recipes.size();
+                int vanillaCount = importedTarget.disabled_builtin.size()
+                        + importedTarget.disabled_recipes.size()
+                        + importedTarget.disabled_recipe_variants.size()
+                        + importedTarget.known_by_default_builtin.size()
+                        + importedTarget.hidden_quick_add_builtin.size();
+                minecraft.gui.setScreen(new ImportConfigurationScreen(this, imported, recipeCount, vanillaCount));
+            } catch (java.io.IOException ignored) {}
+        }, error -> {});
+    }
+
+    void confirmImportedConfiguration(ModConfig imported) {
+        minecraft.gui.setScreen(new ConfigScreen(parent, imported, title.getString(), serverManaged, saveAction, target, targetLocked));
+    }
     void save() {
         saveAndReturn(parent);
     }
@@ -371,12 +406,42 @@ public class ConfigScreen extends Screen {
         }
     }
 
+    int globalLibraryImportableCount() {
+        if (!target.isWorld()) return 0;
+        return ConfigLoader.previewGlobalLibraryImport(baseConfig, recipes).added();
+    }
+
+    ConfigLoader.LibraryImportResult addAllFromGlobalLibrary() {
+        if (!target.isWorld()) return new ConfigLoader.LibraryImportResult(0, 0);
+        currentConfig();
+        ConfigLoader.LibraryImportResult result = ConfigLoader.importGlobalLibraryToWorld(
+                baseConfig, target.id(), target.displayName());
+        recipes.clear();
+        recipes.addAll(targetConfig.custom_recipes);
+        return result;
+    }
+
     void alsoSaveToLibrary(CustomRecipeEntry source) {
         if (!target.isWorld() || source == null) return;
         CustomRecipeEntry copy = ConfigLoader.copyRecipe(source);
         if (copy != null) baseConfig.global_library.custom_recipes.add(copy);
     }
 
+    ConfigScreen createTargetScreen(RecipeTarget nextTarget) {
+        currentConfig();
+        ConfigScreen next = new ConfigScreen(parent, baseConfig, title.getString(), serverManaged, saveAction,
+                nextTarget, targetLocked);
+        next.initialConfigJson = initialConfigJson;
+        return next;
+    }
+
+    ConfigScreen createImportedConfigScreen(ModConfig imported) {
+        currentConfig();
+        ConfigScreen next = new ConfigScreen(parent, imported, title.getString(), serverManaged, saveAction,
+                target, targetLocked);
+        next.initialConfigJson = initialConfigJson;
+        return next;
+    }
     void selectTarget(RecipeTarget nextTarget) {
         if (targetLocked) return;
         currentConfig();
