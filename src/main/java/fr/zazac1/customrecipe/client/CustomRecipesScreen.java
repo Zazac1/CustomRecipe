@@ -27,13 +27,19 @@ public class CustomRecipesScreen extends Screen {
 
     private final ConfigScreen parent;
     private final List<CustomRecipeEntry> recipes;
+    private final boolean libraryPicker;
     private int scroll         = 0;
     private int selectedRecipe = -1;
 
     public CustomRecipesScreen(ConfigScreen parent) {
-        super(Text.literal("My Recipes"));
+        this(parent, false);
+    }
+
+    public CustomRecipesScreen(ConfigScreen parent, boolean libraryPicker) {
+        super(Text.literal(libraryPicker ? "Global Library" : "My Recipes"));
         this.parent  = parent;
-        this.recipes = parent.recipes;
+        this.libraryPicker = libraryPicker;
+        this.recipes = libraryPicker ? parent.currentConfig().global_library.custom_recipes : parent.recipes;
     }
 
     private int listTop()     { return 28; }
@@ -221,6 +227,13 @@ public class CustomRecipesScreen extends Screen {
         addDrawableChild(ButtonWidget.builder(Text.literal("+ Add Recipe"),
                 b -> client.setScreen(new RecipeBuilderScreen120(parent))
         ).dimensions(width / 2 - 100, height - 44, 200, 18).build());
+
+        if (libraryPicker && parent.target().isWorld()) {
+            addDrawableChild(ButtonWidget.builder(Text.literal("Add all to current world"), b -> {
+                parent.addAllFromGlobalLibrary();
+                client.setScreen(new CustomRecipesScreen(parent));
+            }).dimensions(width / 2 - 100, height - 66, 200, 18).build());
+        }
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Back"),
                 b -> client.setScreen(parent)

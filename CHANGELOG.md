@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.2+1.20.1
+
+### Added
+
+- Added per-world recipe targets, a reusable Global Library, and full configuration Import and Export actions.
+- Added import confirmation details and world-name export filenames.
+
+### Fixed
+
+- Added safe configuration writes, recovery copies, and migration of legacy recipe settings.
+
 ## 1.2.1+1.20.1
 
 ### Recipe management overhaul

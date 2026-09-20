@@ -101,7 +101,8 @@ public final class ServerConfigNetworking {
     /** Quietly adds enabled defaults to the recipe book without recipe toasts. */
     private static void awardDefaultRecipes(ServerPlayerEntity player, net.minecraft.server.MinecraftServer server) {
         List<net.minecraft.recipe.Recipe<?>> recipes = new ArrayList<>();
-        for (CustomRecipeEntry entry : ConfigLoader.get().custom_recipes) {
+        WorldRecipeConfig active = ConfigLoader.activeWorldConfig();
+        for (CustomRecipeEntry entry : active.custom_recipes) {
             if (!Boolean.TRUE.equals(entry.known_by_default)
                     || Boolean.FALSE.equals(entry.enabled)
                     || Boolean.TRUE.equals(entry.corrupted)
@@ -111,8 +112,8 @@ public final class ServerConfigNetworking {
             server.getRecipeManager().get(entry.serverRecipeId()).ifPresent(recipes::add);
         }
 
-        for (String builtinId : ConfigLoader.get().known_by_default_builtin) {
-            if (builtinId == null || ConfigLoader.get().disabled_builtin.contains(builtinId)) continue;
+        for (String builtinId : active.known_by_default_builtin) {
+            if (builtinId == null || active.disabled_builtin.contains(builtinId)) continue;
             Identifier id = Identifier.tryParse(CustomRecipeMod.MOD_ID + ":" + builtinId);
             if (id != null) server.getRecipeManager().get(id).ifPresent(recipes::add);
         }
@@ -144,7 +145,10 @@ public final class ServerConfigNetworking {
         if (!ServerPlayNetworking.canSend(player, ServerConfigPayload.ID)) return;
         // The config can have changed through the local editor since the last reload.
         ConfigLoader.invalidate();
-        String json = ConfigLoader.toJson(ConfigLoader.get());
+        ModConfig config = ConfigLoader.get();
+        config.editor_world_id = WorldRecipeAssignments.activeWorldId();
+        config.editor_world_name = WorldRecipeAssignments.activeWorldName();
+        String json = ConfigLoader.toJson(config);
         if (json.length() > MAX_JSON_CHARS) {
             player.sendMessage(Text.literal("[Custom Recipe] The server config is too large to send to the editor."), false);
             return;

@@ -25,7 +25,8 @@ public final class RecipeConflictChecker {
     }
 
     public static void validate(MinecraftServer server, ModConfig config) {
-        for (CustomRecipeEntry entry : config.custom_recipes) {
+        WorldRecipeConfig active = ConfigLoader.activeWorldConfig(config);
+        for (CustomRecipeEntry entry : active.custom_recipes) {
             RecipeIntegrity.refresh(entry);
             List<String> conflicts = new ArrayList<>();
             List<String> sameShape = new ArrayList<>();

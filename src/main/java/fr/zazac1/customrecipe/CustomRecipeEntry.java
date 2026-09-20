@@ -49,8 +49,17 @@ public class CustomRecipeEntry {
      */
     public Boolean server_enabled;
 
+    /** World IDs where this recipe is currently available. Null marks a legacy global recipe. */
+    public List<String> world_ids;
+
+    /** Human-readable world names for the assignment editor. */
+    public Map<String, String> world_names;
+
     /** Whether every player should know this recipe as soon as they join. */
     public Boolean known_by_default;
+
+    /** Shows this saved recipe in the Quick Add sidebar. */
+    public Boolean quick_add;
 
     /** Non-vanilla mod IDs and versions present when this recipe was saved. */
     public Map<String, String> required_mods = new LinkedHashMap<>();
