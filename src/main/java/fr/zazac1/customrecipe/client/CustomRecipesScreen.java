@@ -3,6 +3,8 @@ package fr.zazac1.customrecipe.client;
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
+import fr.zazac1.customrecipe.ModConfig;
+import fr.zazac1.customrecipe.WorldRecipeConfig;
 import fr.zazac1.customrecipe.RecipeIntegrity;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -22,6 +24,8 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Environment(EnvType.CLIENT)
 public class CustomRecipesScreen extends Screen {
@@ -58,9 +62,64 @@ public class CustomRecipesScreen extends Screen {
         super(Text.translatable(libraryPicker ? "customrecipe.screen.global_library" : "customrecipe.screen.my_recipes"));
         this.parent  = parent;
         this.libraryPicker = libraryPicker;
-        this.recipes = libraryPicker ? ConfigLoader.get().global_library.custom_recipes : parent.recipes;
+        this.recipes = libraryPicker ? parent.currentConfig().global_library.custom_recipes : parent.recipes;
     }
 
+    private void exportConfiguration() {
+        String filename = "customrecipe-backup-" + LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss")) + ".json";
+        WindowsFileDialogs.saveJson(filename, path -> {
+            try {
+                ConfigLoader.exportTo(parent.currentConfig(), path);
+                reportTransfer("Exported Custom Recipe backup: " + path.getFileName());
+            } catch (java.io.IOException e) {
+                reportTransfer("Export failed: " + e.getMessage());
+            }
+        }, error -> reportTransfer("Export failed: " + error));
+    }
+
+    private void importConfiguration() {
+        WindowsFileDialogs.openJson(path -> {
+            try {
+                ModConfig imported = ConfigLoader.importFrom(path);
+                ConfigScreen next = parent.createImportedConfigScreen(imported);
+                client.setScreen(new CustomRecipesScreen(next, true));
+                reportTransfer("Imported backup. Use Save to apply it.");
+            } catch (java.io.IOException e) {
+                reportTransfer("Import failed: " + e.getMessage());
+            }
+        }, error -> reportTransfer("Import failed: " + error));
+    }
+
+    private void exportGlobalLibrary() {
+        String filename = "customrecipe-global-library-" + LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss")) + ".json";
+        WindowsFileDialogs.saveJson(filename, path -> {
+            try {
+                ConfigLoader.exportLibraryTo(parent.currentConfig(), path);
+                reportTransfer("Exported Global Library: " + path.getFileName());
+            } catch (java.io.IOException e) {
+                reportTransfer("Library export failed: " + e.getMessage());
+            }
+        }, error -> reportTransfer("Library export failed: " + error));
+    }
+
+    private void importGlobalLibrary() {
+        WindowsFileDialogs.openJson(path -> {
+            try {
+                WorldRecipeConfig imported = ConfigLoader.importLibraryFrom(path);
+                ConfigLoader.LibraryImportResult result = ConfigLoader.importLibraryInto(parent.currentConfig(), imported);
+                client.setScreen(new CustomRecipesScreen(parent, true));
+                reportTransfer("Global Library import: " + result.added() + " added, "
+                        + result.alreadyPresent() + " already present. Use Save to apply it.");
+            } catch (java.io.IOException e) {
+                reportTransfer("Library import failed: " + e.getMessage());
+            }
+        }, error -> reportTransfer("Library import failed: " + error));
+    }
+    private void reportTransfer(String message) {
+        if (client.player != null) client.player.sendMessage(Text.literal(message), false);
+    }
     private int listTop()     { return 28; }
     private boolean hasDetail() { return selectedRecipe >= 0 || selectedQuickAdd >= 0; }
     private int listH() {
@@ -240,14 +299,50 @@ public class CustomRecipesScreen extends Screen {
 
         // ── Titre ─────────────────────────────────────────────────────────
         if (libraryPicker) {
+            String libraryLabel = "Global Library";
             addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
-                    GlobalRecipeTarget.INSTANCE, "Global Library"));
+                    GlobalRecipeTarget.INSTANCE, libraryLabel));
+            boolean hasWorldTarget = parent.target().isWorld();
+            int importable = hasWorldTarget ? parent.globalLibraryImportableCount() : 0;
+            int importButtonX = 52 + textRenderer.getWidth(libraryLabel);
+            int libraryActionW = 92;
+            int libraryActionsX = width - PAD - libraryActionW * 2 - 4;
+            int importButtonW = Math.max(1, Math.min(200, libraryActionsX - 8 - importButtonX));
+            Text importLabel = hasWorldTarget
+                    ? Text.translatable("customrecipe.button.add_all_from_library")
+                    : Text.translatable("customrecipe.button.select_world_to_import");
+            ButtonWidget addAll = ButtonWidget.builder(importLabel, b -> {
+                if (hasWorldTarget) {
+                    client.setScreen(new ImportGlobalLibraryScreen(parent, this, importable));
+                } else {
+                    client.setScreen(new RecipeTargetSelectScreen(parent,
+                            selected -> new CustomRecipesScreen(selected, true)));
+                }
+            }).dimensions(importButtonX, 4, importButtonW, 20).build();
+            addAll.active = !hasWorldTarget || importable > 0;
+            if (hasWorldTarget && !addAll.active) addAll.setTooltip(net.minecraft.client.gui.tooltip.Tooltip.of(
+                    Text.translatable("customrecipe.import.nothing_to_add")));
+            addDrawableChild(addAll);
+            addDrawableChild(ButtonWidget.builder(Text.literal("Export Library"),
+                    b -> exportGlobalLibrary()).dimensions(libraryActionsX, 4, libraryActionW, 20).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("Import Library"),
+                    b -> importGlobalLibrary()).dimensions(libraryActionsX + libraryActionW + 4, 4, libraryActionW, 20).build());
         } else if (parent.target().isWorld()) {
+            String worldLabel = "Recipes from " + parent.target().displayName();
             addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
-                    parent.target(), "Recipes from " + parent.target().displayName()));
+                    parent.target(), worldLabel));
+            addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.export"),
+                    b -> exportConfiguration()).dimensions(width - 152, 4, 70, 20).build());
+            addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.import"),
+                    b -> importConfiguration()).dimensions(width - 78, 4, 70, 20).build());
         } else {
             addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
                     parent.target(), "Global Library"));
+            int libraryActionW = 118;
+            addDrawableChild(ButtonWidget.builder(Text.literal("Export Library"),
+                    b -> exportGlobalLibrary()).dimensions(width - libraryActionW * 2 - 12, 4, libraryActionW, 20).build());
+            addDrawableChild(ButtonWidget.builder(Text.literal("Import Library"),
+                    b -> importGlobalLibrary()).dimensions(width - libraryActionW - 8, 4, libraryActionW, 20).build());
         }
 
         // ── Lignes de recettes ────────────────────────────────────────────

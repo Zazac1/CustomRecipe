@@ -54,22 +54,21 @@ if ($properties -match '(?m)^online-mode=') {
 Set-Content -LiteralPath $serverProperties -Value $properties -NoNewline
 
 Write-Host 'Compilation du mod...'
-& '.\gradlew.bat' build
+& '.\gradlew.bat' build --no-daemon
 if ($LASTEXITCODE -ne 0) { throw 'Compilation échouée : lancement annulé.' }
 
 # Le build unique évite une course entre runServer et runClient sur les classes du mod.
-$serverScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer -x compileJava -x processResources -x classes"
-$clientScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runClient -x compileJava -x processResources -x classes"
+$serverScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer --no-daemon -x compileJava -x processResources -x classes"
+$clientScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runClient --no-daemon -x compileJava -x processResources -x classes"
 
 Write-Host "Serveur : $lanIp`:25565"
 Write-Host 'Mode local de développement : online-mode=false.'
-Write-Host 'Le serveur démarre dans une fenêtre dédiée, puis le client dans 6 secondes.'
+Write-Host 'Le serveur et le client démarrent dans des fenêtres dédiées.'
 $serverLauncher = Start-Process -FilePath 'powershell.exe' -WorkingDirectory $projectRoot -ArgumentList '-NoExit', '-NoProfile', '-Command', $serverScript -PassThru
 @{
     processId = $serverLauncher.Id
     startTime = $serverLauncher.StartTime.ToFileTimeUtc()
 } | ConvertTo-Json | Set-Content -LiteralPath $serverPidFile -NoNewline
-Start-Sleep -Seconds 6
 Start-Process -FilePath 'powershell.exe' -WorkingDirectory $projectRoot -ArgumentList '-NoExit', '-NoProfile', '-Command', $clientScript
 
 Write-Host "Dans le client : Multijoueur > Ajouter un serveur > $lanIp`:25565"

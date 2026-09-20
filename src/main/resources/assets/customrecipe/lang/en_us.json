@@ -16,6 +16,16 @@
   "customrecipe.button.add_recipe": "Add recipe",
   "customrecipe.button.add_recipe_new": "+ Add Recipe",
   "customrecipe.button.add_from_library": "Add From Library",
+  "customrecipe.button.add_all_from_library": "Add All Global Library Recipes",
+
+
+  "customrecipe.button.export": "Export",
+  "customrecipe.button.import": "Import",
+  "customrecipe.button.select_world_to_import": "Select a World to Import",
+  "customrecipe.import.title": "Import Global Library",
+  "customrecipe.import.confirm": "Add %s Global Library recipe(s) to %s?",
+  "customrecipe.import.safe": "Existing recipes will not be changed. Save afterwards to apply.",
+  "customrecipe.import.nothing_to_add": "All Global Library recipes are already added.",
   "customrecipe.button.back_to_recipes": "Back to My Recipes",
   "customrecipe.button.duplicate": "Duplicate",
   "customrecipe.button.edit": "Edit",

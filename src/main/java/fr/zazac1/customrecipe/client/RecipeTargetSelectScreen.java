@@ -34,6 +34,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
+import java.util.function.Function;
 
 /** Direct save-folder scan: no asynchronous vanilla world-list omissions. */
 @Environment(EnvType.CLIENT)
@@ -43,20 +44,31 @@ final class RecipeTargetSelectScreen extends Screen {
     private static final DateTimeFormatter LAST_PLAYED_FORMAT =
             DateTimeFormatter.ofPattern("M/d/yy, h:mm a", Locale.US).withZone(ZoneId.systemDefault());
     private final ConfigScreen parent;
+    private final Function<ConfigScreen, Screen> selectedScreen;
     private final List<LocalWorld> worlds = new ArrayList<>();
     private TextFieldWidget search;
     private int scroll;
 
     RecipeTargetSelectScreen(ConfigScreen parent) {
+        this(parent, null);
+    }
+
+    RecipeTargetSelectScreen(ConfigScreen parent, Function<ConfigScreen, Screen> selectedScreen) {
         super(Text.translatable("customrecipe.screen.select_target"));
         this.parent = parent;
+        this.selectedScreen = selectedScreen;
+    }
+
+    private void selectTarget(fr.zazac1.customrecipe.RecipeTarget target) {
+        ConfigScreen next = parent.createTargetScreen(target);
+        client.setScreen(selectedScreen == null ? next : selectedScreen.apply(next));
     }
 
     @Override
     protected void init() {
         scanWorlds();
         addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.screen.global_library"),
-                b -> parent.selectTarget(GlobalRecipeTarget.INSTANCE))
+                b -> selectTarget(GlobalRecipeTarget.INSTANCE))
                 .dimensions(width / 2 - 110, 26, 220, 20).build());
         search = new TextFieldWidget(textRenderer, width / 2 - 100, 52, 200, 18,
                 Text.translatable("customrecipe.screen.search_worlds"));
@@ -173,7 +185,7 @@ final class RecipeTargetSelectScreen extends Screen {
             if (click.x() >= listX() && click.x() < listX() + listW()
                     && click.y() >= y && click.y() < y + ROW) {
                 LocalWorld world = shown.get(index);
-                parent.selectTarget(new WorldRecipeTarget(world.id, world.name));
+                selectTarget(new WorldRecipeTarget(world.id, world.name));
                 return true;
             }
         }

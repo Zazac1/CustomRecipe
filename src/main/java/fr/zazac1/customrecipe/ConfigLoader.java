@@ -8,6 +8,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -26,6 +28,16 @@ public final class ConfigLoader {
 
     private static ModConfig cached = null;
 
+    /** Result of a non-destructive Global Library import. */
+    public record LibraryImportResult(int added, int alreadyPresent) {}
+
+    /** Self-identifying, intentionally narrow JSON format for Global Library sharing. */
+    private static final class LibraryExport {
+        int library_export_version = 1;
+        String saved_with_mod_version = "";
+        String saved_with_minecraft_version = "";
+        WorldRecipeConfig global_library = new WorldRecipeConfig();
+    }
     public static ModConfig get() {
         if (cached == null) cached = load();
         return cached;
@@ -62,9 +74,61 @@ public final class ConfigLoader {
     /** Serializes a config for the OP-only server editor. */
     public static String toJson(ModConfig config) {
         normalize(config);
+        stampSaveMetadata(config);
         return GSON.toJson(config);
     }
 
+    /** Saves a portable full configuration chosen by the player. */
+    public static void exportTo(ModConfig config, Path destination) throws IOException {
+        Files.writeString(destination, toJson(config), StandardCharsets.UTF_8);
+    }
+
+    /** Saves only the reusable Global Library, without any world's recipes or settings. */
+    public static void exportLibraryTo(ModConfig config, Path destination) throws IOException {
+        if (config == null) throw new IOException("Global Library is unavailable.");
+        normalize(config);
+        stampSaveMetadata(config);
+        LibraryExport exported = new LibraryExport();
+        exported.saved_with_mod_version = config.saved_with_mod_version;
+        exported.saved_with_minecraft_version = config.saved_with_minecraft_version;
+        exported.global_library = config.global_library;
+        Files.writeString(destination, GSON.toJson(exported), StandardCharsets.UTF_8);
+    }
+    /** Loads and validates a portable full configuration without writing it to the active config yet. */
+    public static ModConfig importFrom(Path source) throws IOException {
+        if (Files.size(source) > 5_000_000L) throw new IOException("Import file is too large.");
+        String json = Files.readString(source, StandardCharsets.UTF_8);
+        ModConfig raw = GSON.fromJson(json, ModConfig.class);
+        if (raw != null && raw.recipe_target_version > 2) {
+            throw new IOException("This backup uses a newer Custom Recipe format.");
+        }
+        ModConfig config = fromJson(json);
+        if (config == null) throw new IOException("Invalid Custom Recipe configuration.");
+        return config;
+    }
+    /** Reads one portable Global Library. It is not written to the live config here. */
+    public static WorldRecipeConfig importLibraryFrom(Path source) throws IOException {
+        if (Files.size(source) > 5_000_000L) throw new IOException("Import file is too large.");
+        LibraryExport imported;
+        try {
+            imported = GSON.fromJson(Files.readString(source, StandardCharsets.UTF_8), LibraryExport.class);
+        } catch (JsonSyntaxException e) {
+            throw new IOException("Invalid Global Library file.");
+        }
+        if (imported == null || imported.library_export_version > 1 || imported.global_library == null) {
+            throw new IOException("Invalid or newer Global Library file.");
+        }
+        normalizeRecipeConfig(imported.global_library);
+        return imported.global_library;
+    }
+
+    /** Merges a portable library without deleting or replacing the current library. */
+    public static LibraryImportResult importLibraryInto(ModConfig config, WorldRecipeConfig importedLibrary) {
+        if (config == null || importedLibrary == null) return new LibraryImportResult(0, 0);
+        normalize(config);
+        normalizeRecipeConfig(importedLibrary);
+        return importMissingRecipes(importedLibrary.custom_recipes, config.global_library);
+    }
     /** Compares recipes without relying on their position in a config file. */
     public static boolean sameRecipe(CustomRecipeEntry first, CustomRecipeEntry second) {
         if (first == null || second == null) return false;
@@ -96,6 +160,12 @@ public final class ConfigLoader {
         }
         try {
             String json = Files.readString(CONFIG_PATH);
+            try {
+                ModConfig rawConfig = GSON.fromJson(json, ModConfig.class);
+                if (rawConfig != null && rawConfig.recipe_target_version < 2) backupLegacyConfig(json);
+            } catch (JsonSyntaxException ignored) {
+                // fromJson below remains the single validation path for malformed files.
+            }
             ModConfig config = fromJson(json);
             return config != null ? config : new ModConfig();
         } catch (IOException e) {
@@ -104,11 +174,33 @@ public final class ConfigLoader {
         }
     }
 
+    /** Writes through a temporary file and preserves the last known-good config. */
     private static void save(ModConfig config) {
+        stampSaveMetadata(config);
+        Path temporary = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
+        Path previous = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".previous");
         try {
-            Files.writeString(CONFIG_PATH, GSON.toJson(config));
+            Files.writeString(temporary, GSON.toJson(config), StandardCharsets.UTF_8);
+            if (Files.exists(CONFIG_PATH)) Files.copy(CONFIG_PATH, previous, StandardCopyOption.REPLACE_EXISTING);
+            try {
+                Files.move(temporary, CONFIG_PATH, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, CONFIG_PATH, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
-            CustomRecipeMod.LOGGER.error("[CustomRecipe] Failed to write config: {}", e.getMessage());
+            CustomRecipeMod.LOGGER.error("[CustomRecipe] Failed to write config safely: {}", e.getMessage());
+            try { Files.deleteIfExists(temporary); } catch (IOException ignored) {}
+        }
+    }
+    /** Keeps the original pre-target config recoverable before its first migration. */
+    private static void backupLegacyConfig(String json) {
+        Path backup = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".legacy-backup");
+        if (Files.exists(backup)) return;
+        try {
+            Files.writeString(backup, json);
+            CustomRecipeMod.LOGGER.info("[CustomRecipe] Backed up legacy config to: {}", backup);
+        } catch (IOException e) {
+            CustomRecipeMod.LOGGER.warn("[CustomRecipe] Could not back up legacy config: {}", e.getMessage());
         }
     }
 
@@ -149,11 +241,94 @@ public final class ConfigLoader {
         config.disabled_recipe_variants = legacyFields.disabled_recipe_variants;
     }
 
+    private static void stampSaveMetadata(ModConfig config) {
+        config.saved_with_mod_version = FabricLoader.getInstance().getModContainer(CustomRecipeMod.MOD_ID)
+                .map(container -> container.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
+        config.saved_with_minecraft_version = FabricLoader.getInstance().getModContainer("minecraft")
+                .map(container -> container.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
+    }
     /** Deep copy used when a library recipe is added to a world. */
     public static CustomRecipeEntry copyRecipe(CustomRecipeEntry source) {
         return copyForTarget(source);
     }
 
+    /** Counts recipes that can be added without altering the selected world. */
+    public static LibraryImportResult previewGlobalLibraryImport(ModConfig config, List<CustomRecipeEntry> targetRecipes) {
+        if (config == null || config.global_library == null) return new LibraryImportResult(0, 0);
+        return countMissingRecipes(config.global_library.custom_recipes, targetRecipes);
+    }
+
+    /** Copies every missing Global Library recipe into one isolated world target. */
+    public static LibraryImportResult importGlobalLibraryToWorld(ModConfig config, String worldId, String worldName) {
+        if (config == null || config.global_library == null) return new LibraryImportResult(0, 0);
+        return importMissingRecipes(config.global_library.custom_recipes, config.getOrCreateWorldConfig(worldId, worldName));
+    }
+
+    /** Restores all pre-target global settings into the first world opened after upgrade. */
+    static void migrateLegacySettingsToWorld(ModConfig config, String worldId, String worldName) {
+        if (config == null) return;
+        WorldRecipeConfig target = config.getOrCreateWorldConfig(worldId, worldName);
+        mergeStrings(target.disabled_builtin, config.disabled_builtin);
+        mergeStrings(target.known_by_default_builtin, config.known_by_default_builtin);
+        mergeStrings(target.disabled_recipes, config.disabled_recipes);
+        mergeVariants(target.disabled_recipe_variants, config.disabled_recipe_variants);
+    }
+
+    private static void mergeStrings(List<String> target, List<String> source) {
+        if (target == null || source == null) return;
+        for (String value : source) {
+            if (value != null && !value.isBlank() && !target.contains(value)) target.add(value);
+        }
+    }
+
+    private static void mergeVariants(List<RecipeVariantRule> target, List<RecipeVariantRule> source) {
+        if (target == null || source == null) return;
+        for (RecipeVariantRule candidate : source) {
+            if (candidate == null || candidate.recipe_id == null || candidate.material_id == null) continue;
+            boolean exists = target.stream().anyMatch(existing -> existing != null
+                    && candidate.recipe_id.equals(existing.recipe_id)
+                    && candidate.material_id.equals(existing.material_id));
+            if (!exists) target.add(candidate);
+        }
+    }
+    /** Used only once after upgrading an old shared-library configuration. */
+    static LibraryImportResult importLegacyRecipesToWorld(ModConfig config, List<CustomRecipeEntry> legacyRecipes,
+                                                           String worldId, String worldName) {
+        if (config == null) return new LibraryImportResult(0, 0);
+        return importMissingRecipes(legacyRecipes, config.getOrCreateWorldConfig(worldId, worldName));
+    }
+
+    private static LibraryImportResult countMissingRecipes(List<CustomRecipeEntry> source, List<CustomRecipeEntry> target) {
+        if (source == null || source.isEmpty()) return new LibraryImportResult(0, 0);
+        int added = 0;
+        int alreadyPresent = 0;
+        List<CustomRecipeEntry> known = target == null ? List.of() : target;
+        for (CustomRecipeEntry recipe : source) {
+            if (recipe == null) continue;
+            if (known.stream().anyMatch(existing -> sameRecipe(recipe, existing))) alreadyPresent++; else added++;
+        }
+        return new LibraryImportResult(added, alreadyPresent);
+    }
+
+    private static LibraryImportResult importMissingRecipes(List<CustomRecipeEntry> source, WorldRecipeConfig target) {
+        if (source == null || source.isEmpty() || target == null) return new LibraryImportResult(0, 0);
+        if (target.custom_recipes == null) target.custom_recipes = new ArrayList<>();
+        int added = 0;
+        int alreadyPresent = 0;
+        for (CustomRecipeEntry recipe : source) {
+            if (recipe == null) continue;
+            if (target.custom_recipes.stream().anyMatch(existing -> sameRecipe(recipe, existing))) {
+                alreadyPresent++;
+                continue;
+            }
+            CustomRecipeEntry copy = copyForTarget(recipe);
+            if (copy != null) {
+                target.custom_recipes.add(copy);
+                added++;
+            }
+        }
+        return new LibraryImportResult(added, alreadyPresent);
+    }
     private static void migrateLegacyTargets(ModConfig config) {
         WorldRecipeConfig library = new WorldRecipeConfig();
         library.disabled_builtin = new ArrayList<>(config.disabled_builtin);
@@ -163,6 +338,11 @@ public final class ConfigLoader {
         Map<String, WorldRecipeConfig> worlds = new LinkedHashMap<>();
         Map<String, String> names = new LinkedHashMap<>();
 
+        // 1.20.1/1.21.8 persisted a client-side server publication cache.
+        // It must not turn formerly usable local recipes into disabled recipes.
+        for (CustomRecipeEntry recipe : config.custom_recipes) {
+            if (recipe != null) recipe.server_enabled = null;
+        }
         for (CustomRecipeEntry recipe : config.custom_recipes) {
             if (recipe == null || recipe.world_ids == null || recipe.world_ids.isEmpty()) {
                 library.custom_recipes.add(copyForTarget(recipe));

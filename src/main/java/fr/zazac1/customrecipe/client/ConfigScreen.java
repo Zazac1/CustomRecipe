@@ -23,6 +23,8 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -127,7 +129,9 @@ public class ConfigScreen extends Screen {
 
         int libraryY = top + buttonHeight + gap;
         addDrawableChild(ButtonWidget.builder(Text.empty(),
-                b -> client.setScreen(new CustomRecipesScreen(this)))
+                // Dedicated-server editors keep a world target; Library must explicitly open
+                // the server's reusable Global Library so its Import/Export is available.
+                b -> client.setScreen(new CustomRecipesScreen(this, serverManaged)))
                 .dimensions(x, libraryY, buttonWidth, buttonHeight).build());
         addHomeButton(libraryY, buttonWidth, Text.translatable("customrecipe.home.library").getString(), null, Items.BOOKSHELF, true);
 
@@ -146,6 +150,7 @@ public class ConfigScreen extends Screen {
                 Text.translatable("customrecipe.home.vanilla.tooltip")));
         addDrawableChild(vanilla);
         addHomeButton(vanillaY, buttonWidth, Text.translatable("customrecipe.home.vanilla").getString(), null, Items.GRASS_BLOCK, vanilla.active);
+
 
         int saveY = vanillaY + buttonHeight + gap;
         addDrawableChild(ButtonWidget.builder(Text.empty(), b -> save())
@@ -180,6 +185,38 @@ public class ConfigScreen extends Screen {
         });
     }
 
+    /** Exports only the reusable Global Library; world data stays private. */
+    private void exportGlobalLibrary() {
+        String filename = "customrecipe-global-library-" + LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss")) + ".json";
+        WindowsFileDialogs.saveJson(filename, path -> {
+            try {
+                ConfigLoader.exportLibraryTo(currentConfig(), path);
+                reportLibraryTransfer("Exported Global Library: " + path.getFileName());
+            } catch (java.io.IOException e) {
+                reportLibraryTransfer("Library export failed: " + e.getMessage());
+            }
+        }, error -> reportLibraryTransfer("Library export failed: " + error));
+    }
+
+    /** Imports missing library recipes only; Save remains the explicit commit. */
+    private void importGlobalLibrary() {
+        WindowsFileDialogs.openJson(path -> {
+            try {
+                WorldRecipeConfig imported = ConfigLoader.importLibraryFrom(path);
+                ConfigLoader.LibraryImportResult result = ConfigLoader.importLibraryInto(currentConfig(), imported);
+                replaceConfig(baseConfig);
+                reportLibraryTransfer("Global Library import: " + result.added() + " added, "
+                        + result.alreadyPresent() + " already present. Use Save to apply it.");
+            } catch (java.io.IOException e) {
+                reportLibraryTransfer("Library import failed: " + e.getMessage());
+            }
+        }, error -> reportLibraryTransfer("Library import failed: " + error));
+    }
+
+    private void reportLibraryTransfer(String message) {
+        if (client.player != null) client.player.sendMessage(Text.literal(message), false);
+    }
     /** Save is explicit on the home screen for local, global and server-managed editors. */
     private void addHomeSaveButton(int y, int buttonWidth) {
         int x = width / 2 - buttonWidth / 2;
@@ -362,7 +399,22 @@ public class ConfigScreen extends Screen {
     void addFromLibrary(CustomRecipeEntry source) {
         if (!target.isWorld() || source == null) return;
         CustomRecipeEntry copy = ConfigLoader.copyRecipe(source);
-        if (copy != null) recipes.add(copy);
+        if (copy != null && recipes.stream().noneMatch(existing -> ConfigLoader.sameRecipe(existing, copy))) recipes.add(copy);
+    }
+
+    int globalLibraryImportableCount() {
+        if (!target.isWorld()) return 0;
+        return ConfigLoader.previewGlobalLibraryImport(baseConfig, recipes).added();
+    }
+
+    ConfigLoader.LibraryImportResult addAllFromGlobalLibrary() {
+        if (!target.isWorld()) return new ConfigLoader.LibraryImportResult(0, 0);
+        currentConfig();
+        ConfigLoader.LibraryImportResult result = ConfigLoader.importGlobalLibraryToWorld(
+                baseConfig, target.id(), target.displayName());
+        recipes.clear();
+        recipes.addAll(targetConfig.custom_recipes);
+        return result;
     }
 
     void alsoSaveToLibrary(CustomRecipeEntry source) {
@@ -371,13 +423,24 @@ public class ConfigScreen extends Screen {
         if (copy != null) baseConfig.global_library.custom_recipes.add(copy);
     }
 
-    void selectTarget(RecipeTarget nextTarget) {
-        if (targetLocked) return;
+    ConfigScreen createTargetScreen(RecipeTarget nextTarget) {
         currentConfig();
         ConfigScreen next = new ConfigScreen(parent, baseConfig, title.getString(), serverManaged, saveAction,
                 nextTarget, targetLocked);
         next.initialConfigJson = initialConfigJson;
-        client.setScreen(next);
+        return next;
+    }
+
+    ConfigScreen createImportedConfigScreen(ModConfig imported) {
+        currentConfig();
+        ConfigScreen next = new ConfigScreen(parent, imported, title.getString(), serverManaged, saveAction,
+                target, targetLocked);
+        next.initialConfigJson = initialConfigJson;
+        return next;
+    }
+    void selectTarget(RecipeTarget nextTarget) {
+        if (targetLocked) return;
+        client.setScreen(createTargetScreen(nextTarget));
     }
 
     ModConfig currentConfig() {
