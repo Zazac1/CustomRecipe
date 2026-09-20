@@ -107,7 +107,7 @@ final class RecipeTargetSelectScreen extends Screen {
     /** Reads only the save metadata, never opens or locks a world. */
     private WorldDetails readWorldDetails(Path directory, String fallbackName) {
         try {
-            NbtCompound data = NbtIo.readCompressed(directory.resolve("level.dat"), NbtSizeTracker.of(2_097_152L))
+            NbtCompound data = NbtIo.readCompressed(directory.resolve("level.dat"), NbtSizeTracker.of(104_857_600L))
                     .getCompoundOrEmpty("Data");
             String name = data.getString("LevelName", fallbackName);
             long lastPlayed = data.getLong("LastPlayed", 0L);
