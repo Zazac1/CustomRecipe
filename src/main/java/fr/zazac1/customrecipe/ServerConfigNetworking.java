@@ -60,6 +60,7 @@ public final class ServerConfigNetworking {
                 for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
                     awardDefaultRecipes(player, server, true);
                 }
+                ReiCompat.refreshAfterRecipeReload(server);
             }
         });
 

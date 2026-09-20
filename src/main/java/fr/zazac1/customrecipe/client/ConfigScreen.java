@@ -398,6 +398,11 @@ public class ConfigScreen extends Screen {
     void addFromLibrary(CustomRecipeEntry source) {
         if (!target.isWorld() || source == null) return;
         CustomRecipeEntry copy = ConfigLoader.copyRecipe(source);
+        // A library entry is a reusable template, never a disabled server copy.
+        if (copy != null) {
+            copy.enabled = null;
+            copy.server_enabled = null;
+        }
         if (copy != null && recipes.stream().noneMatch(existing -> ConfigLoader.sameRecipe(existing, copy))) recipes.add(copy);
     }
 

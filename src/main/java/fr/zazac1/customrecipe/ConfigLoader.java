@@ -230,6 +230,7 @@ public final class ConfigLoader {
         if (config.world_configs == null) config.world_configs = new LinkedHashMap<>();
         if (config.world_names == null) config.world_names = new LinkedHashMap<>();
         normalizeRecipeConfig(config.global_library);
+        normalizeLibraryRecipes(config.global_library);
         config.world_configs.entrySet().removeIf(entry -> entry.getKey() == null || entry.getKey().isBlank()
                 || entry.getValue() == null);
         for (WorldRecipeConfig worldConfig : config.world_configs.values()) normalizeRecipeConfig(worldConfig);
@@ -248,6 +249,20 @@ public final class ConfigLoader {
         config.known_by_default_builtin = legacyFields.known_by_default_builtin;
         config.disabled_recipes = legacyFields.disabled_recipes;
         config.disabled_recipe_variants = legacyFields.disabled_recipe_variants;
+    }
+
+    /**
+     * Library recipes are templates only: they cannot be enabled, disabled, or
+     * server-published.  Older upgrade paths could retain either legacy flag
+     * after the target split, making a Global Library entry appear disabled.
+     */
+    private static void normalizeLibraryRecipes(WorldRecipeConfig library) {
+        if (library == null || library.custom_recipes == null) return;
+        for (CustomRecipeEntry recipe : library.custom_recipes) {
+            if (recipe == null) continue;
+            recipe.enabled = null;
+            recipe.server_enabled = null;
+        }
     }
 
     private static void stampSaveMetadata(ModConfig config) {

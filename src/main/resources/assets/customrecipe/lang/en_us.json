@@ -16,6 +16,8 @@
   "customrecipe.button.add_recipe": "Add recipe",
   "customrecipe.button.add_recipe_new": "+ Add Recipe",
   "customrecipe.button.add_from_library": "Add From Library",
+  "customrecipe.button.enable_all": "Enable All",
+  "customrecipe.button.disable_all": "Disable All",
   "customrecipe.button.add_all_from_library": "Add All Global Library Recipes",
 
 
