@@ -4,6 +4,8 @@ import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.RecipeVariantRule;
+import fr.zazac1.customrecipe.WorldRecipeAssignments;
+import fr.zazac1.customrecipe.WorldRecipeConfig;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
@@ -23,6 +25,7 @@ public class ConfigScreen extends Screen {
     private final ModConfig baseConfig;
     private final Consumer<ModConfig> saveAction;
     private final boolean serverManaged;
+    private final WorldRecipeConfig targetConfig;
     private boolean welcomeShown = false; // évite la boucle infinie si l'utilisateur revient
 
     /** Shared state — modified by sub-screens, saved on Save. */
@@ -44,11 +47,19 @@ public class ConfigScreen extends Screen {
         this.baseConfig = config;
         this.saveAction = saveAction;
         this.serverManaged = serverManaged;
-        this.recipes  = new ArrayList<>(config.custom_recipes);
-        this.disabled = new ArrayList<>(config.disabled_builtin);
-        this.knownByDefaultBuiltin = new ArrayList<>(config.known_by_default_builtin);
-        this.disabledRecipes = new ArrayList<>(config.disabled_recipes);
-        this.disabledRecipeVariants = new ArrayList<>(config.disabled_recipe_variants);
+        this.targetConfig = resolveTarget(config);
+        this.recipes  = new ArrayList<>(targetConfig.custom_recipes);
+        this.disabled = new ArrayList<>(targetConfig.disabled_builtin);
+        this.knownByDefaultBuiltin = new ArrayList<>(targetConfig.known_by_default_builtin);
+        this.disabledRecipes = new ArrayList<>(targetConfig.disabled_recipes);
+        this.disabledRecipeVariants = new ArrayList<>(targetConfig.disabled_recipe_variants);
+    }
+
+    private WorldRecipeConfig resolveTarget(ModConfig config) {
+        String worldId = serverManaged ? config.editor_world_id : WorldRecipeAssignments.activeWorldId();
+        String worldName = serverManaged ? config.editor_world_name : WorldRecipeAssignments.activeWorldName();
+        if (worldId == null || worldId.isBlank()) return config.global_library;
+        return config.getOrCreateWorldConfig(worldId, worldName);
     }
 
     @Override
@@ -105,6 +116,72 @@ public class ConfigScreen extends Screen {
                 Text.literal("Save"),
                 b -> save()
         ).dimensions(cx, cy + (serverManaged ? 128 : 104), btnW, btnH).build());
+
+        int transferY = cy + (serverManaged ? 152 : 128);
+        addDrawableChild(ButtonWidget.builder(Text.literal("Export"), b -> exportAll())
+                .dimensions(cx, transferY, 96, btnH).build());
+        addDrawableChild(ButtonWidget.builder(Text.literal("Import"), b -> importAll())
+                .dimensions(cx + 104, transferY, 96, btnH).build());
+    }
+
+    private void exportAll() {
+        WindowsFileDialogs.saveJson(exportFileName(), path -> {
+            try {
+                ConfigLoader.exportTo(currentConfig(), path);
+            } catch (java.io.IOException ignored) {
+            }
+        }, error -> {});
+    }
+
+    private String exportFileName() {
+        String name = serverManaged ? baseConfig.editor_world_name : WorldRecipeAssignments.activeWorldName();
+        if (name == null || name.isBlank()) name = "global-library";
+        String safe = name.replaceAll("[\\\\/:*?\"<>|]", "_").trim().replaceAll("\\s+", "_");
+        return "customrecipe-backup-" + (safe.isBlank() ? "world" : safe) + ".json";
+    }
+
+    private void importAll() {
+        WindowsFileDialogs.openJson(path -> {
+            try {
+                ModConfig imported = ConfigLoader.importFrom(path);
+                WorldRecipeConfig importedTarget = resolveImportedTarget(imported);
+                int recipes = importedTarget.custom_recipes.size();
+                int vanilla = importedTarget.disabled_builtin.size()
+                        + importedTarget.disabled_recipes.size()
+                        + importedTarget.disabled_recipe_variants.size()
+                        + importedTarget.known_by_default_builtin.size()
+                        + importedTarget.hidden_quick_add_builtin.size();
+                client.setScreen(new ImportConfigurationScreen(this, imported, recipes, vanilla));
+            } catch (java.io.IOException ignored) {
+            }
+        }, error -> {});
+    }
+
+    private WorldRecipeConfig resolveImportedTarget(ModConfig config) {
+        String worldId = serverManaged ? baseConfig.editor_world_id : WorldRecipeAssignments.activeWorldId();
+        if (worldId != null && !worldId.isBlank()) {
+            WorldRecipeConfig world = config.findWorldConfig(worldId);
+            if (world != null) return world;
+        }
+        return config.global_library;
+    }
+
+    void confirmImportedConfiguration(ModConfig imported) {
+        copyTarget(resolveImportedTarget(imported));
+        client.setScreen(this);
+    }
+
+    private void copyTarget(WorldRecipeConfig source) {
+        recipes.clear();
+        recipes.addAll(source.custom_recipes);
+        disabled.clear();
+        disabled.addAll(source.disabled_builtin);
+        knownByDefaultBuiltin.clear();
+        knownByDefaultBuiltin.addAll(source.known_by_default_builtin);
+        disabledRecipes.clear();
+        disabledRecipes.addAll(source.disabled_recipes);
+        disabledRecipeVariants.clear();
+        disabledRecipeVariants.addAll(source.disabled_recipe_variants);
     }
 
     void save() {
@@ -117,25 +194,16 @@ public class ConfigScreen extends Screen {
     }
 
     ModConfig currentConfig() {
-        baseConfig.custom_recipes = new ArrayList<>(recipes);
-        baseConfig.disabled_builtin = new ArrayList<>(disabled);
-        baseConfig.known_by_default_builtin = new ArrayList<>(knownByDefaultBuiltin);
-        baseConfig.disabled_recipes = new ArrayList<>(disabledRecipes);
-        baseConfig.disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
+        targetConfig.custom_recipes = new ArrayList<>(recipes);
+        targetConfig.disabled_builtin = new ArrayList<>(disabled);
+        targetConfig.known_by_default_builtin = new ArrayList<>(knownByDefaultBuiltin);
+        targetConfig.disabled_recipes = new ArrayList<>(disabledRecipes);
+        targetConfig.disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
         return baseConfig;
     }
 
     void replaceConfig(ModConfig config) {
-        recipes.clear();
-        recipes.addAll(config.custom_recipes);
-        disabled.clear();
-        disabled.addAll(config.disabled_builtin);
-        knownByDefaultBuiltin.clear();
-        knownByDefaultBuiltin.addAll(config.known_by_default_builtin);
-        disabledRecipes.clear();
-        disabledRecipes.addAll(config.disabled_recipes);
-        disabledRecipeVariants.clear();
-        disabledRecipeVariants.addAll(config.disabled_recipe_variants);
+        copyTarget(resolveImportedTarget(config));
     }
 
     @Override

@@ -125,8 +125,9 @@ public final class ServerConfigNetworking {
     /** Tags are bound only after data-pack reload, so conflict comparison must happen here. */
     private static void refreshRecipeConflicts(net.minecraft.server.MinecraftServer server) {
         ModConfig config = ConfigLoader.get();
+        WorldRecipeConfig recipeConfig = ConfigLoader.activeWorldConfig(config);
         boolean changed = false;
-        for (CustomRecipeEntry entry : config.custom_recipes) {
+        for (CustomRecipeEntry entry : recipeConfig.custom_recipes) {
             List<String> conflicts = new ArrayList<>();
             List<String> sameShape = new ArrayList<>();
             RecipeEntry<?> customEntry = server.getRecipeManager()
@@ -157,7 +158,7 @@ public final class ServerConfigNetworking {
 
     /** Validates unsaved OP drafts against the server's items and default recipes only. */
     private static void validateProposedConfig(net.minecraft.server.MinecraftServer server, ModConfig config) {
-        for (CustomRecipeEntry entry : config.custom_recipes) {
+        for (CustomRecipeEntry entry : ConfigLoader.activeWorldConfig(config).custom_recipes) {
             RecipeIntegrity.refresh(entry);
             List<String> conflicts = new ArrayList<>();
             List<String> sameShape = new ArrayList<>();
@@ -308,7 +309,8 @@ public final class ServerConfigNetworking {
                                             boolean refreshBook) {
         List<RecipeEntry<?>> recipes = new ArrayList<>();
         ModConfig config = ConfigLoader.get();
-        for (CustomRecipeEntry entry : config.custom_recipes) {
+        WorldRecipeConfig recipeConfig = ConfigLoader.activeWorldConfig(config);
+        for (CustomRecipeEntry entry : recipeConfig.custom_recipes) {
             if (!Boolean.TRUE.equals(entry.known_by_default)
                     || Boolean.FALSE.equals(entry.enabled)
                     || Boolean.TRUE.equals(entry.corrupted)
@@ -318,8 +320,8 @@ public final class ServerConfigNetworking {
             server.getRecipeManager().get(RegistryKey.of(RegistryKeys.RECIPE, entry.serverRecipeId()))
                     .ifPresent(recipes::add);
         }
-        for (String builtinId : config.known_by_default_builtin) {
-            if (builtinId == null || config.disabled_builtin.contains(builtinId)) continue;
+        for (String builtinId : recipeConfig.known_by_default_builtin) {
+            if (builtinId == null || recipeConfig.disabled_builtin.contains(builtinId)) continue;
             Identifier id = Identifier.tryParse(CustomRecipeMod.MOD_ID + ":" + builtinId);
             if (id == null) continue;
             server.getRecipeManager().get(RegistryKey.of(RegistryKeys.RECIPE, id))
@@ -355,7 +357,10 @@ public final class ServerConfigNetworking {
         if (!ServerPlayNetworking.canSend(player, ServerConfigPayload.ID)) return;
         // The config can have changed through the local editor since the last reload.
         ConfigLoader.invalidate();
-        String json = ConfigLoader.toJson(ConfigLoader.get());
+        ModConfig config = ConfigLoader.get();
+        config.editor_world_id = WorldRecipeAssignments.activeWorldId();
+        config.editor_world_name = WorldRecipeAssignments.activeWorldName();
+        String json = ConfigLoader.toJson(config);
         if (json.length() > MAX_JSON_CHARS) {
             player.sendMessage(Text.literal("[Custom Recipe] The server config is too large to send to the editor."), false);
             return;
