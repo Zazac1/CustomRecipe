@@ -2,11 +2,15 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
 
-$javaHome = 'C:\Program Files\Java\jdk-25.0.3'
-if (-not (Test-Path -LiteralPath (Join-Path $javaHome 'bin\java.exe'))) {
-    throw "JDK 25 introuvable : $javaHome"
+$javaHomes = Get-ChildItem -LiteralPath 'C:\Program Files\Java' -Directory -Filter 'jdk-25*' -ErrorAction SilentlyContinue |
+    Sort-Object Name -Descending |
+    Select-Object -ExpandProperty FullName
+$javaHome = $javaHomes | Where-Object {
+    Test-Path -LiteralPath (Join-Path $_ 'bin\java.exe')
+} | Select-Object -First 1
+if (-not $javaHome) {
+    throw 'JDK 25 introuvable. Installe un JDK 25 dans C:\Program Files\Java.'
 }
-
 $env:JAVA_HOME = $javaHome
 $env:GRADLE_USER_HOME = Join-Path $env:USERPROFILE '.gradle'
 
@@ -90,12 +94,12 @@ if ($properties -match '(?m)^online-mode=') {
 Set-Content -LiteralPath $serverProperties -Value $properties -NoNewline
 
 Write-Host 'Compilation du mod...'
-& '.\gradlew.bat' build
+& '.\gradlew.bat' build --no-daemon
 if ($LASTEXITCODE -ne 0) { throw 'Compilation échouée : lancement annulé.' }
 
 # Le build unique évite une course entre runServer et runClient sur les classes du mod.
-$serverScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer -x compileJava -x processResources -x classes"
-$clientScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runClient -x compileJava -x processResources -x classes"
+$serverScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer --no-daemon -x compileJava -x processResources -x classes"
+$clientScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runClient --no-daemon -x compileJava -x processResources -x classes"
 
 Write-Host "Serveur : $lanIp`:25565"
 Write-Host 'Mode local de développement : online-mode=false.'

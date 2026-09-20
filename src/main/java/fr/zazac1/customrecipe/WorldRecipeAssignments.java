@@ -7,6 +7,7 @@ import net.minecraft.world.level.storage.LevelResource;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /** Keeps custom-recipe availability scoped to the currently loaded world. */
@@ -58,29 +59,40 @@ public final class WorldRecipeAssignments {
         return true;
     }
 
-    /** Legacy recipes remain available in the first world that opens them, never all worlds. */
+    /**
+     * Schema 2 restores recipes made before target libraries existed into the
+     * first world opened after upgrading. ConfigLoader writes a backup first.
+     */
     public static void migrateLegacyRecipes() {
         migrateLegacyRecipes(ConfigLoader.get());
     }
 
     public static void migrateLegacyRecipes(ModConfig config) {
-        // ConfigLoader has already split legacy shared recipes into targets.
-        if (config == null || config.recipe_target_version >= 1) return;
-        if (activeWorldId.isBlank() || config == null) return;
-        boolean changed = false;
-        for (CustomRecipeEntry recipe : config.custom_recipes) {
-            if (recipe == null || recipe.world_ids != null) continue;
-            recipe.world_ids = new ArrayList<>();
-            recipe.world_names = new java.util.LinkedHashMap<>();
-            if (!Boolean.FALSE.equals(recipe.enabled) && !Boolean.FALSE.equals(recipe.server_enabled)) {
-                recipe.world_ids.add(activeWorldId);
-                recipe.world_names.put(activeWorldId, activeWorldName);
-            }
-            changed = true;
-        }
-        if (changed && config == ConfigLoader.get()) ConfigLoader.saveAndInvalidate(config);
-    }
+        if (config == null || config.recipe_target_version >= 2 || activeWorldId.isBlank()) return;
 
+        List<CustomRecipeEntry> source = new ArrayList<>();
+        if (config.custom_recipes != null) source.addAll(config.custom_recipes);
+        if (source.isEmpty() && config.global_library != null && config.global_library.custom_recipes != null) {
+            source.addAll(config.global_library.custom_recipes);
+        }
+
+        List<CustomRecipeEntry> activeLegacyRecipes = new ArrayList<>();
+        for (CustomRecipeEntry recipe : source) {
+            if (recipe == null || Boolean.FALSE.equals(recipe.enabled)) continue;
+            if (recipe.world_ids != null && !recipe.world_ids.isEmpty() && !recipe.world_ids.contains(activeWorldId)) continue;
+            activeLegacyRecipes.add(recipe);
+        }
+
+        // Older versions had one global configuration. Restore every setting
+        // (disabled recipes, variants, known-by-default) before moving recipes.
+        ConfigLoader.migrateLegacySettingsToWorld(config, activeWorldId, activeWorldName);
+        ConfigLoader.LibraryImportResult result = ConfigLoader.importLegacyRecipesToWorld(
+                config, activeLegacyRecipes, activeWorldId, activeWorldName);
+        config.recipe_target_version = 2;
+        ConfigLoader.saveAndInvalidate(config);
+        CustomRecipeMod.LOGGER.info("[CustomRecipe] Legacy recovery for world '{}': {} recipe(s) added, {} already present.",
+                activeWorldName, result.added(), result.alreadyPresent());
+    }
     public static boolean isRecipeActive(CustomRecipeEntry recipe) {
         if (recipe == null) return false;
         // A lifecycle event can run after the initial data-pack read; preserve legacy recipes for that one read.
