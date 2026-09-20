@@ -1,0 +1,126 @@
+{
+  "customrecipe.title": "Custom Recipe",
+  "customrecipe.home.title": "Custom Recipe",
+  "customrecipe.home.select_world": "Sélectionner un monde",
+  "customrecipe.home.global": "(Global)",
+  "customrecipe.home.library": "Bibliothèque",
+  "customrecipe.home.create": "Créer des recettes",
+  "customrecipe.home.vanilla": "Recettes vanilla",
+  "customrecipe.home.vanilla.tooltip": "Sélectionnez un monde pour accéder à ses recettes vanilla.",
+  "customrecipe.home.current_world_locked": "Le monde actuel est verrouillé lorsque l’éditeur est ouvert depuis le menu pause.",
+  "customrecipe.button.back": "Retour",
+  "customrecipe.button.cancel": "Annuler",
+  "customrecipe.button.save": "Sauvegarder",
+  "customrecipe.button.discard": "Ignorer",
+  "customrecipe.button.add": "Ajouter",
+  "customrecipe.button.add_recipe": "Ajouter la recette",
+  "customrecipe.button.add_recipe_new": "+ Ajouter une recette",
+  "customrecipe.button.add_from_library": "Ajouter depuis la bibliothèque",
+  "customrecipe.button.add_all_from_library": "Ajouter toutes les recettes globales",
+
+
+  "customrecipe.button.export": "Exporter",
+  "customrecipe.button.import": "Importer",
+  "customrecipe.button.select_world_to_import": "Sélectionner un monde pour importer",
+  "customrecipe.import.title": "Importer la bibliothèque globale",
+  "customrecipe.import.confirm": "Ajouter %s recette(s) globale(s) à %s ?",
+  "customrecipe.import.safe": "Les recettes existantes ne seront pas modifiées. Sauvegardez ensuite pour appliquer.",
+  "customrecipe.import.nothing_to_add": "Toutes les recettes globales sont déjà ajoutées.",
+  "customrecipe.button.back_to_recipes": "Retour aux recettes",
+  "customrecipe.button.duplicate": "Dupliquer",
+  "customrecipe.button.edit": "Modifier",
+  "customrecipe.button.delete_corrupted": "Supprimer la recette corrompue",
+  "customrecipe.button.disable_conflict": "Désactiver le conflit",
+  "customrecipe.button.set_known": "Définir comme connue par défaut",
+  "customrecipe.state.enabled": "Activée",
+  "customrecipe.state.disabled": "Désactivée",
+  "customrecipe.state.library": "Bibliothèque",
+  "customrecipe.state.corrupted": "Corrompue",
+  "customrecipe.screen.my_recipes": "Mes recettes",
+  "customrecipe.screen.global_library": "Bibliothèque globale",
+  "customrecipe.screen.select_target": "Sélectionner une cible",
+  "customrecipe.screen.select_worlds": "Sélectionner des mondes",
+  "customrecipe.screen.search_worlds": "Rechercher des mondes",
+  "customrecipe.screen.search": "Rechercher...",
+  "customrecipe.screen.no_worlds": "Aucun monde trouvé.",
+  "customrecipe.table.output": "Résultat",
+  "customrecipe.table.status": "Statut",
+  "customrecipe.table.known": "Connue",
+  "customrecipe.table.type": "Type",
+  "customrecipe.table.recipe": "Recette",
+  "customrecipe.table.state": "État",
+  "customrecipe.table.add": "Ajouter",
+  "customrecipe.empty.library": "La bibliothèque globale est vide.",
+  "customrecipe.empty.recipes": "Aucune recette personnalisée. Utilisez « Créer une recette ».",
+  "customrecipe.quick.preview": "Aperçu (non ajoutée) : %s",
+  "customrecipe.recipe.add_to": "Ajouter à %s",
+  "customrecipe.recipe.missing": "Manquant : %s",
+  "customrecipe.recipe.conflict": "Conflit avec %s.",
+  "customrecipe.recipe.vanilla_conflict": "Minecraft fabrique déjà ce résultat. Activez « Connue par défaut » pour éviter les conflits du livre de recettes.",
+  "customrecipe.recipe.same_inputs": "Mêmes ingrédients que %s, mais résultat différent. Définissez-la comme connue par défaut pour la choisir dans le livre de recettes.",
+  "customrecipe.recipe.shaped": "Façonnée",
+  "customrecipe.recipe.shapeless": "Sans forme",
+  "customrecipe.recipe.shaped_ingredients": "Ingrédients de la recette façonnée (%s/9)",
+  "customrecipe.recipe.shapeless_ingredients": "Ingrédients de la recette sans forme (%s/9)",
+  "customrecipe.recipe.known": "Connue par défaut : %s",
+  "customrecipe.recipe.on": "OUI",
+  "customrecipe.recipe.off": "NON",
+  "customrecipe.save.title": "Modifications non sauvegardées",
+  "customrecipe.save.line1": "Vous avez modifié Custom Recipe.",
+  "customrecipe.save.line2": "Les sauvegarder avant de quitter ?",
+  "customrecipe.chat.applying": "[Custom Recipe] Application de vos modifications...",
+  "customrecipe.world.local": "Monde local",
+  "customrecipe.world.creative": "Mode créatif",
+  "customrecipe.world.adventure": "Mode aventure",
+  "customrecipe.world.spectator": "Mode spectateur",
+  "customrecipe.world.survival": "Mode survie",
+  "customrecipe.world.commands": ", Commandes",
+  "customrecipe.world.version": ", Version : %s",
+  "customrecipe.world.unknown_version": "Version inconnue"
+  ,"customrecipe.chat.permission_denied": "[Custom Recipe] Permission refusée."
+  ,"customrecipe.chat.server_too_large": "[Custom Recipe] La configuration serveur est trop volumineuse."
+  ,"customrecipe.chat.invalid_json": "[Custom Recipe] JSON invalide ; aucune modification n’a été appliquée."
+  ,"customrecipe.chat.server_applying": "[Custom Recipe] Application des modifications serveur..."
+  ,"customrecipe.chat.client_mod_required": "[Custom Recipe] Ce client doit avoir le mod Custom Recipe pour ouvrir l’éditeur."
+  ,"customrecipe.chat.opening_editor": "[Custom Recipe] Ouverture de l’éditeur de recettes serveur."
+  ,"customrecipe.chat.server_send_too_large": "[Custom Recipe] La configuration serveur est trop volumineuse pour être envoyée à l’éditeur."
+  ,"customrecipe.chat.invalid_server_config": "[Custom Recipe] Configuration serveur reçue invalide."
+  ,"customrecipe.chat.local_recipes_ready": "[Custom Recipe] %s recette(s) locale(s) prête(s) à être ajoutée(s) au serveur."
+  ,"customrecipe.chat.invalid_server_validation": "[Custom Recipe] Validation serveur reçue invalide."
+  ,"customrecipe.tooltip.open": "Ouvrir Custom Recipe"
+  ,"customrecipe.vanilla.title": "Recettes vanilla"
+  ,"customrecipe.vanilla.show_all": "Afficher : toutes"
+  ,"customrecipe.vanilla.show_enabled": "Afficher : activées"
+  ,"customrecipe.vanilla.show_disabled": "Afficher : désactivées"
+  ,"customrecipe.vanilla.show_special": "Afficher : spéciales"
+  ,"customrecipe.vanilla.search_hint": "Rechercher un objet ou un ID de recette"
+  ,"customrecipe.vanilla.search": "Rechercher"
+  ,"customrecipe.vanilla.ingredient": "Ingrédient : %s"
+  ,"customrecipe.vanilla.output": "Résultat : %s"
+  ,"customrecipe.vanilla.loading": "Chargement des recettes..."
+  ,"customrecipe.vanilla.loading_more": "Chargement..."
+  ,"customrecipe.vanilla.none": "Aucune recette trouvée."
+  ,"customrecipe.vanilla.browse": "%s - molette pour parcourir - cliquez un nom pour l’aperçu"
+  ,"customrecipe.vanilla.special": "[Spéciale] "
+  ,"customrecipe.details.title": "Aperçu de recette"
+  ,"customrecipe.details.variant_disabled": "Variante désactivée"
+  ,"customrecipe.details.disable_variant": "Désactiver cette variante"
+  ,"customrecipe.details.variants_disabled": "Toutes les variantes sont désactivées"
+  ,"customrecipe.details.disable_variants": "Désactiver toutes les variantes"
+  ,"customrecipe.builder.create": "Créer une recette"
+  ,"customrecipe.builder.edit": "Modifier la recette"
+  ,"customrecipe.builder.search_item": "Rechercher un objet..."
+  ,"customrecipe.builder.also_library": "Sauvegarder aussi dans la bibliothèque globale : %s"
+  ,"customrecipe.builder.empty_remove": "Vide - retirer l’objet"
+  ,"customrecipe.builder.shapeless_ingredients": "Ingrédients sans forme (%s/9)"
+  ,"customrecipe.builder.result_count": "Résultat × :"
+  ,"customrecipe.builder.save": "Sauvegarder"
+  ,"customrecipe.chat.world_tip": "Vous pouvez modifier les recettes personnalisées de ce monde via le menu pause (Échap), en cliquant sur %s, ou via Mod Menu."
+  ,"customrecipe.chat.world_tip.link": "Custom Recipe"
+  ,"customrecipe.chat.world_tip.hover": "Ouvrir l’éditeur Custom Recipe"
+  ,"customrecipe.screen.built_in": "Recettes intégrées"
+  ,"customrecipe.world.recipes_in": "Recettes dans %s"
+  ,"customrecipe.world.default_name": "Monde"
+  ,"customrecipe.world.enabled_recipes": "Recettes activées"
+  ,"customrecipe.world.available_recipes": "Recettes disponibles"
+}

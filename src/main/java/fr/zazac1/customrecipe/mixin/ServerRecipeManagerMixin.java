@@ -18,8 +18,6 @@ import net.minecraft.registry.RegistryKeys;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.profiler.Profiler;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.loader.api.FabricLoader;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -44,17 +42,16 @@ public abstract class ServerRecipeManagerMixin {
     )
     private PreparedRecipes customrecipe$applyConfig(PreparedRecipes original) {
         ConfigLoader.invalidate();
-        ModConfig config = ConfigLoader.get();
-        WorldRecipeConfig recipeConfig = ConfigLoader.activeWorldConfig(config);
+        WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
 
         List<RecipeEntry<?>> recipes = new ArrayList<>(original.recipes());
 
         // 1. Remove disabled built-in recipes (namespace = "customrecipe")
-        if (!recipeConfig.disabled_builtin.isEmpty()) {
+        if (!config.disabled_builtin.isEmpty()) {
             recipes.removeIf(entry -> {
                 Identifier id = entry.id().getValue();
                 if (!id.getNamespace().equals(CustomRecipeMod.MOD_ID)) return false;
-                for (String disabled : recipeConfig.disabled_builtin) {
+                for (String disabled : config.disabled_builtin) {
                     if (id.getPath().equals(disabled)) return true;
                 }
                 return false;
@@ -63,20 +60,20 @@ public abstract class ServerRecipeManagerMixin {
 
         // 1b. Non-crafting recipes can be removed. Crafting recipes stay in the manager
         // so the server browser can still show and re-enable them after a restart.
-        if (!recipeConfig.disabled_recipes.isEmpty()) {
-            recipes.removeIf(entry -> recipeConfig.disabled_recipes.contains(entry.id().getValue().toString())
+        if (!config.disabled_recipes.isEmpty()) {
+            recipes.removeIf(entry -> config.disabled_recipes.contains(entry.id().getValue().toString())
                     && !(entry.value() instanceof CraftingRecipe));
         }
 
         // 1c. Keep recipes available, but make selected material variants fail to match.
-        if (!recipeConfig.disabled_recipe_variants.isEmpty()) {
+        if (!config.disabled_recipe_variants.isEmpty()) {
             Map<String, Set<String>> variantsByRecipe = new HashMap<>();
-            for (RecipeVariantRule rule : recipeConfig.disabled_recipe_variants) {
+            for (RecipeVariantRule rule : config.disabled_recipe_variants) {
                 variantsByRecipe.computeIfAbsent(rule.recipe_id, ignored -> new HashSet<>()).add(rule.material_id);
             }
             for (int i = 0; i < recipes.size(); i++) {
                 RecipeEntry<?> entry = recipes.get(i);
-                if (recipeConfig.disabled_recipes.contains(entry.id().getValue().toString())
+                if (config.disabled_recipes.contains(entry.id().getValue().toString())
                         && entry.value() instanceof CraftingRecipe recipe) {
                     recipes.set(i, new RecipeEntry<>(entry.id(), new DisabledCraftingRecipe(recipe)));
                     continue;
@@ -86,10 +83,10 @@ public abstract class ServerRecipeManagerMixin {
                     recipes.set(i, new RecipeEntry<>(entry.id(), new VariantFilteredCraftingRecipe(recipe, blocked)));
                 }
             }
-        } else if (!recipeConfig.disabled_recipes.isEmpty()) {
+        } else if (!config.disabled_recipes.isEmpty()) {
             for (int i = 0; i < recipes.size(); i++) {
                 RecipeEntry<?> entry = recipes.get(i);
-                if (recipeConfig.disabled_recipes.contains(entry.id().getValue().toString())
+                if (config.disabled_recipes.contains(entry.id().getValue().toString())
                         && entry.value() instanceof CraftingRecipe recipe) {
                     recipes.set(i, new RecipeEntry<>(entry.id(), new DisabledCraftingRecipe(recipe)));
                 }
@@ -100,19 +97,14 @@ public abstract class ServerRecipeManagerMixin {
         int idx = 0;
         boolean recipeStateChanged = false;
         List<RecipeEntry<?>> customRecipes = new ArrayList<>();
-        for (CustomRecipeEntry entry : recipeConfig.custom_recipes) {
-            recipeStateChanged |= fr.zazac1.customrecipe.RecipeIntegrity.refresh(entry);
-            RecipeEntry<?> built = Boolean.TRUE.equals(entry.corrupted) ? null
-                    : buildCustomRecipe(entry, idx, recipeBookGroup(entry));
-            // Local ModMenu recipes are drafts until an OP explicitly adds them
-            // to the server. Null preserves recipes from configurations made
-            // before the server publication state existed.
-            boolean dedicatedServer = FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER;
-            if (Boolean.FALSE.equals(entry.enabled)
-                    || (dedicatedServer && Boolean.FALSE.equals(entry.server_enabled))) {
+        for (CustomRecipeEntry entry : config.custom_recipes) {
+            if (entry == null || Boolean.FALSE.equals(entry.enabled) || Boolean.FALSE.equals(entry.server_enabled)) {
                 idx++;
                 continue;
             }
+            recipeStateChanged |= fr.zazac1.customrecipe.RecipeIntegrity.refresh(entry);
+            RecipeEntry<?> built = Boolean.TRUE.equals(entry.corrupted) ? null
+                    : buildCustomRecipe(entry, idx, recipeBookGroup(entry));
             if (Boolean.TRUE.equals(entry.corrupted)) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Disabled corrupted recipe {}: missing {}. Reinstall required mods {} or delete the recipe.",
                         entry.id, entry.missing_items, entry.required_mods);
@@ -122,7 +114,7 @@ public abstract class ServerRecipeManagerMixin {
             idx++;
             if (built != null) customRecipes.add(built);
         }
-        if (recipeStateChanged) ConfigLoader.saveIntegrityState(config);
+        if (recipeStateChanged) ConfigLoader.saveIntegrityState(ConfigLoader.get());
 
         // The recipe manager uses the first matching entry. Vanilla entries
         // stay first, so a custom recipe only takes effect after the matching

@@ -52,9 +52,6 @@ public class ModConfig {
     /** Local worlds that already received the editor tip on first entry. */
     public List<String> shown_world_editor_tips = new ArrayList<>();
 
-    /** Vrai si l'écran de bienvenue a déjà été affiché. */
-    public boolean seen_welcome = false;
-
     public WorldRecipeConfig getOrCreateWorldConfig(String worldId, String worldName) {
         if (worldId == null || worldId.isBlank()) return global_library;
         if (world_configs == null) world_configs = new LinkedHashMap<>();

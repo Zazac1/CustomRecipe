@@ -1,5 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
+import fr.zazac1.customrecipe.CustomRecipeEntry;
+import fr.zazac1.customrecipe.RecipeIntegrity;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
@@ -12,7 +14,11 @@ import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Environment(EnvType.CLIENT)
 public class BuiltinRecipesScreen extends Screen {
@@ -52,8 +58,48 @@ public class BuiltinRecipesScreen extends Screen {
 
     private static final int[] RESULT_COUNTS = {1, 1, 1, 1, 1};
 
+    static int quickAddCount() { return RECIPES.length; }
+    static String quickAddId(int index) { return RECIPES[index][0]; }
+    static String quickAddName(int index) {
+        Identifier id = Identifier.tryParse(RECIPES[index][2]);
+        return id != null && Registries.ITEM.containsId(id)
+                ? Registries.ITEM.get(id).getName().getString() : RECIPES[index][1];
+    }
+    static String quickAddResult(int index) { return RECIPES[index][2]; }
+
+    /** Converts an old built-in recipe into an independent custom-recipe entry. */
+    static CustomRecipeEntry createQuickAddRecipe(int index) {
+        CustomRecipeEntry entry = new CustomRecipeEntry();
+        entry.id = UUID.randomUUID().toString();
+        entry.type = "shaped";
+        entry.result = RECIPES[index][2];
+        entry.count = RESULT_COUNTS[index];
+        entry.enabled = Boolean.TRUE;
+
+        Map<String, Character> itemKeys = new LinkedHashMap<>();
+        char next = 'A';
+        for (String[] gridRow : GRIDS[index]) {
+            StringBuilder patternRow = new StringBuilder();
+            for (String itemId : gridRow) {
+                if (itemId == null) {
+                    patternRow.append(' ');
+                } else {
+                    if (!itemKeys.containsKey(itemId)) itemKeys.put(itemId, next++);
+                    patternRow.append(itemKeys.get(itemId));
+                }
+            }
+            entry.pattern.add(patternRow.toString());
+        }
+        for (Map.Entry<String, Character> key : itemKeys.entrySet()) {
+            entry.keys.put(String.valueOf(key.getValue()), key.getKey());
+        }
+        RecipeIntegrity.rememberRequiredMods(entry);
+        return entry;
+    }
+
     private static final int PAD     = 8;
-    private static final int ROW     = 22;
+    private static final int ROW     = 20;
+    private static final int HEADER_H = 16;
     private static final int MINI    = 18;  // mini-slot size for detail grid
     private static final int DETAIL_H = 76; // height of detail panel
 
@@ -64,7 +110,7 @@ public class BuiltinRecipesScreen extends Screen {
     private int selectedRecipe = -1;
 
     public BuiltinRecipesScreen(ConfigScreen parent) {
-        super(Text.literal("Built-in Recipes"));
+        super(Text.translatable("customrecipe.screen.built_in"));
         this.parent   = parent;
         this.disabled = parent.disabled;
         this.knownByDefault = parent.knownByDefaultBuiltin;
@@ -72,9 +118,14 @@ public class BuiltinRecipesScreen extends Screen {
 
     private int listTop()    { return 28; }
     private int listH()      { return height - listTop() - (selectedRecipe >= 0 ? DETAIL_H + 4 : 0) - 30; }
-    private int maxVisible() { return Math.max(1, listH() / ROW); }
-    private int rowY(int i)  { return listTop() + (i - scroll) * ROW; }
+    private int rowsTop()    { return listTop() + HEADER_H; }
+    private int maxVisible() { return Math.max(1, (listH() - HEADER_H) / ROW); }
+    private int rowY(int i)  { return rowsTop() + (i - scroll) * ROW; }
     private int detailY()    { return listTop() + listH() + 2; }
+    private int itemIconX()  { return PAD + 14; }
+    private int knownIconX() { return PAD + 60; }
+    private int recipeX()    { return PAD + 101; }
+    private int stateX()     { return width - PAD - 92; }
 
     // Centre du mini-grille dans le panneau de détail
     private int detailGridX() { return width / 2 - (3 * MINI + 14 + MINI) / 2; }
@@ -82,11 +133,24 @@ public class BuiltinRecipesScreen extends Screen {
 
     @Override
     protected void init() {
+        addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client, parent.target(),
+                parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
         // ── Fills + icônes + mini-grille ─────────────────────────────────
         addDrawable((ctx, mx, my, d) -> {
             // Liste background
             ctx.fill(PAD, listTop(), width - PAD, listTop() + listH(), 0x88101010);
             drawBox(ctx, PAD, listTop(), width - PAD * 2, listH(), 0xFF505050);
+            ctx.fill(PAD + 1, listTop() + 1, width - PAD - 1, rowsTop() - 1, 0xDD252B2A);
+            ctx.drawHorizontalLine(PAD + 1, width - PAD - 2, rowsTop() - 1, 0xFF596462);
+            int[] columns = {PAD + 45, PAD + 96, stateX() - 4};
+            for (int column : columns)
+                ctx.drawVerticalLine(column, listTop() + 1, listTop() + listH() - 2, 0xFF39433F);
+            int headerColor = 0xFFB8C7C1;
+            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.output"), PAD + 4, listTop() + 4, headerColor, false);
+            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.known"), PAD + 48, listTop() + 4, headerColor, false);
+            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.recipe"), recipeX(), listTop() + 4, headerColor, false);
+            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.state"), stateX() + 28, listTop() + 4, headerColor, false);
+            if (RECIPES.length > maxVisible()) drawScrollIcon(ctx, PAD, listTop() + listH() - 15);
 
             int vis = maxVisible();
             for (int i = scroll; i < Math.min(RECIPES.length, scroll + vis); i++) {
@@ -94,13 +158,19 @@ public class BuiltinRecipesScreen extends Screen {
                 if (y < listTop() || y + ROW > listTop() + listH()) continue;
                 boolean dis = disabled.contains(RECIPES[i][0]);
                 boolean sel = selectedRecipe == i;
-                ctx.fill(PAD + 1, y, width - PAD - 78, y + ROW - 2,
-                        dis ? (sel ? 0x44662200 : 0x44550000)
-                            : (sel ? 0x44005533 : 0x22005500));
-                // Icône résultat
+                int rowColor = dis ? (sel ? 0x44662200 : 0x44550000)
+                        : (sel ? 0x44005533 : 0x22005500);
+                // Keep the reactive state tint visible behind the state button as well.
+                ctx.fillGradient(PAD + 1, y, width - PAD - 1, y + ROW - 2,
+                        rowColor, (rowColor & 0x00FFFFFF) | 0x18000000);
                 var item = Registries.ITEM.get(Identifier.tryParse(RECIPES[i][2]));
                 if (item != null && item != Items.AIR)
-                    ctx.drawItem(new ItemStack(item), width - PAD - 78 - 18, y + 3);
+                    ctx.drawItem(new ItemStack(item), itemIconX(), y + 2);
+                CustomRecipeSprites.draw(ctx,
+                        knownByDefault.contains(RECIPES[i][0])
+                                ? CustomRecipeSprites.KNOWN_BY_DEFAULT_INFO
+                                : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT_INFO,
+                        knownIconX(), y + 1, 20, 18);
             }
 
             // Panneau de détail
@@ -108,6 +178,14 @@ public class BuiltinRecipesScreen extends Screen {
                 int dy = detailY();
                 ctx.fill(PAD, dy, width - PAD, dy + DETAIL_H, 0x88101010);
                 drawBox(ctx, PAD, dy, width - PAD * 2, DETAIL_H, 0xFF607050);
+                var detailItem = Registries.ITEM.get(Identifier.tryParse(RECIPES[selectedRecipe][2]));
+                if (detailItem != null && detailItem != Items.AIR)
+                    ctx.drawItem(new ItemStack(detailItem), PAD + 4, dy + 2);
+                CustomRecipeSprites.draw(ctx,
+                        knownByDefault.contains(RECIPES[selectedRecipe][0])
+                                ? CustomRecipeSprites.KNOWN_BY_DEFAULT_INFO
+                                : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT_INFO,
+                        PAD + 24, dy + 1, 20, 18);
 
                 int gx = detailGridX(), gy = detailGridY();
                 String[][] grid = GRIDS[selectedRecipe];
@@ -135,12 +213,6 @@ public class BuiltinRecipesScreen extends Screen {
             }
         });
 
-        // ── Titre ────────────────────────────────────────────────────────
-        MultilineTextWidget titleW = new MultilineTextWidget(PAD, 10, title, textRenderer);
-        titleW.setMaxWidth(width - 20);
-        titleW.setCentered(true);
-        addDrawableChild(titleW);
-
         // ── Lignes de recettes ────────────────────────────────────────────
         int vis = maxVisible();
         for (int i = scroll; i < Math.min(RECIPES.length, scroll + vis); i++) {
@@ -152,28 +224,28 @@ public class BuiltinRecipesScreen extends Screen {
             boolean sel = selectedRecipe == i;
 
             MultilineTextWidget lbl = new MultilineTextWidget(
-                    PAD + 4, y + (ROW - 8) / 2,
-                    Text.literal((sel ? "▸ " : "  ") + RECIPES[i][1])
+                    recipeX(), y + (ROW - 8) / 2,
+                    Text.literal(quickAddName(i))
                             .withColor(dis ? (sel ? 0xBBAAAA : 0x888888)
                                            : (sel ? 0xFFEE88 : 0xE0E0E0)),
                     textRenderer);
-            lbl.setMaxWidth(width - PAD * 2 - 90);
+            lbl.setMaxWidth(stateX() - recipeX() - 8);
             lbl.setMaxRows(1);
             addDrawableChild(lbl);
 
             addDrawableChild(ButtonWidget.builder(
-                    dis ? Text.literal("Disabled").withColor(0xFF5555)
-                        : Text.literal("Enabled").withColor(0x55FF55),
+                    dis ? Text.translatable("customrecipe.state.disabled").withColor(0xFF5555)
+                        : Text.translatable("customrecipe.state.enabled").withColor(0x55FF55),
                     b -> toggle(id)
-            ).dimensions(width - PAD - 76, y + 3, 76, ROW - 6).build());
+            ).dimensions(stateX(), y + 2, 88, ROW - 4).build());
         }
 
         // ── Indicateur de scroll ──────────────────────────────────────────
         if (RECIPES.length > maxVisible()) {
             int from = scroll + 1, to = Math.min(scroll + maxVisible(), RECIPES.length);
             MultilineTextWidget hint = new MultilineTextWidget(
-                    PAD, listTop() + listH() - 10,
-                    Text.literal("↕ " + from + "-" + to + "/" + RECIPES.length).withColor(0x666666),
+                    PAD + 14, listTop() + listH() - 10,
+                    Text.literal(from + "-" + to + "/" + RECIPES.length).withColor(0x666666),
                     textRenderer);
             hint.setMaxWidth(70);
             hint.setMaxRows(1);
@@ -185,7 +257,7 @@ public class BuiltinRecipesScreen extends Screen {
             int cnt = RESULT_COUNTS[selectedRecipe];
             String label = RECIPES[selectedRecipe][1] + (cnt > 1 ? "  ×" + cnt : "");
             MultilineTextWidget nameW = new MultilineTextWidget(
-                    PAD + 4, detailY() + 4,
+                    PAD + 50, detailY() + 4,
                     Text.literal(label).withColor(0xFFEE77), textRenderer);
             nameW.setMaxWidth(width - PAD * 2 - 8);
             nameW.setMaxRows(1);
@@ -202,15 +274,17 @@ public class BuiltinRecipesScreen extends Screen {
 
             String id = RECIPES[selectedRecipe][0];
             boolean known = knownByDefault.contains(id);
-            addDrawableChild(ButtonWidget.builder(
-                    known ? Text.literal("Known by default: ON").withColor(0x55FF55)
-                          : Text.literal("Known by default: OFF").withColor(0xFFCC55),
+            int knownButtonX = stateX() + 34;
+            addDrawableChild(ButtonWidget.builder(Text.empty(),
                     b -> toggleKnownByDefault(id)
-            ).dimensions(width - PAD - 142, detailY() + 30, 138, 18).build());
+            ).dimensions(knownButtonX, detailY() + 30, 20, 20).build());
+            addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+                    known ? CustomRecipeSprites.KNOWN_BY_DEFAULT : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT,
+                    knownButtonX, detailY() + 30, 20, 20));
         }
 
         // ── Bouton Retour ─────────────────────────────────────────────────
-        addDrawableChild(ButtonWidget.builder(Text.literal("Back"),
+        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.back"),
                 b -> client.setScreen(parent)
         ).dimensions(width / 2 - 50, height - 24, 100, 18).build());
     }
@@ -233,7 +307,7 @@ public class BuiltinRecipesScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
-        int toggleStart = width - PAD - 76;
+        int toggleStart = stateX();
         int vis = maxVisible();
         for (int i = scroll; i < Math.min(RECIPES.length, scroll + vis); i++) {
             int rowTop = rowY(i);
@@ -258,6 +332,11 @@ public class BuiltinRecipesScreen extends Screen {
         return true;
     }
 
+    /** Small scroll/list marker shown beside range indicators. */
+    private void drawScrollIcon(DrawContext ctx, int x, int y) {
+        CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SCROLLER_IDLE, x, y, 12, 15);
+    }
+
     private void drawBox(DrawContext ctx, int x, int y, int w, int h, int c) {
         ctx.drawHorizontalLine(x, x + w - 1, y, c);
         ctx.drawHorizontalLine(x, x + w - 1, y + h - 1, c);
@@ -265,5 +344,7 @@ public class BuiltinRecipesScreen extends Screen {
         ctx.drawVerticalLine(x + w - 1, y, y + h - 1, c);
     }
 
-    @Override public boolean shouldPause() { return false; }
+    @Override public boolean shouldPause() { return true; }
+
+    @Override public void close() { client.setScreen(parent); }
 }
