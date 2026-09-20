@@ -57,7 +57,7 @@ public class CustomRecipesScreen extends Screen {
         super(Text.translatable(libraryPicker ? "customrecipe.screen.global_library" : "customrecipe.screen.my_recipes"));
         this.parent  = parent;
         this.libraryPicker = libraryPicker;
-        this.recipes = libraryPicker ? ConfigLoader.get().global_library.custom_recipes : parent.recipes;
+        this.recipes = libraryPicker ? parent.currentConfig().global_library.custom_recipes : parent.recipes;
     }
 
     private int listTop()     { return 28; }
@@ -239,14 +239,38 @@ public class CustomRecipesScreen extends Screen {
 
         // ── Titre ─────────────────────────────────────────────────────────
         if (libraryPicker) {
+            String libraryLabel = "Global Library";
             addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
-                    GlobalRecipeTarget.INSTANCE, "Global Library"));
+                    GlobalRecipeTarget.INSTANCE, libraryLabel));
+            boolean hasWorldTarget = parent.target().isWorld();
+            int importable = hasWorldTarget ? parent.globalLibraryImportableCount() : 0;
+            int importButtonX = 52 + textRenderer.getWidth(libraryLabel);
+            int libraryActionW = 92;
+            int libraryActionsX = width - PAD - libraryActionW * 2 - 4;
+            int importButtonW = Math.max(1, Math.min(200, libraryActionsX - 8 - importButtonX));
+            Text importLabel = hasWorldTarget
+                    ? Text.translatable("customrecipe.button.add_all_from_library")
+                    : Text.translatable("customrecipe.button.select_world_to_import");
+            ButtonWidget addAll = ButtonWidget.builder(importLabel, b -> {
+                if (hasWorldTarget) {
+                    client.setScreen(new ImportGlobalLibraryScreen(parent, this, importable));
+                } else {
+                    client.setScreen(new RecipeTargetSelectScreen(parent,
+                            selected -> new CustomRecipesScreen(selected, true)));
+                }
+            }).dimensions(importButtonX, 4, importButtonW, 20).build();
+            addAll.active = !hasWorldTarget || importable > 0;
+            if (hasWorldTarget && !addAll.active) addAll.setTooltip(net.minecraft.client.gui.tooltip.Tooltip.of(
+                    Text.translatable("customrecipe.import.nothing_to_add")));
+            addDrawableChild(addAll);
         } else if (parent.target().isWorld()) {
+            String worldLabel = "Recipes from " + parent.target().displayName();
             addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
-                    parent.target(), "Recipes from " + parent.target().displayName()));
+                    parent.target(), worldLabel));
         } else {
             addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
                     parent.target(), "Global Library"));
+            int libraryActionW = 118;
         }
 
         // ── Lignes de recettes ────────────────────────────────────────────
@@ -969,8 +993,6 @@ public class CustomRecipesScreen extends Screen {
     }
 
     private boolean isActiveForThisScreen(CustomRecipeEntry entry) {
-        // The Global Library is always available; enabled flags only belong to a world copy.
-        if (!parent.target().isWorld()) return true;
         return !Boolean.FALSE.equals(entry.enabled)
                 && !Boolean.FALSE.equals(entry.server_enabled)
                 && (!parent.isServerManaged() || parent.isAddedToCurrentWorld(entry));

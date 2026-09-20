@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.2+1.21.1
+
+### Added
+
+- Added central full-configuration Import and Export actions below Save.
+- Added import confirmation details and world-name export filenames.
+
+### Changed
+
+- Global Library imports now preserve Vanilla settings and related recipe state.
+
+### Fixed
+
+- Added safe configuration writes, recovery copies, and improved legacy migration.
+
 ## 1.1.4+1.21.1
 
 - Added the **Known by default** option to recipe creation and editing; enabled recipes are silently added to every player's recipe book.

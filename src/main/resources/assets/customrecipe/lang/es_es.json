@@ -16,6 +16,16 @@
   "customrecipe.button.add_recipe": "Añadir receta",
   "customrecipe.button.add_recipe_new": "+ Añadir receta",
   "customrecipe.button.add_from_library": "Añadir desde la biblioteca",
+  "customrecipe.button.add_all_from_library": "Agregar todas las recetas globales",
+
+
+  "customrecipe.button.export": "Exportar",
+  "customrecipe.button.import": "Importar",
+  "customrecipe.button.select_world_to_import": "Seleccionar un mundo para importar",
+  "customrecipe.import.title": "Importar biblioteca global",
+  "customrecipe.import.confirm": "¿Agregar %s receta(s) global(es) a %s?",
+  "customrecipe.import.safe": "Las recetas existentes no se modificarán. Guarda después para aplicar.",
+  "customrecipe.import.nothing_to_add": "Todas las recetas globales ya están añadidas.",
   "customrecipe.button.back_to_recipes": "Volver a mis recetas",
   "customrecipe.button.duplicate": "Duplicar",
   "customrecipe.button.edit": "Editar",

@@ -7,9 +7,12 @@ import java.util.Map;
 
 public class ModConfig {
 
-    /** Schema 1 replaces shared recipe lists with independently editable targets. */
+    /** Schema 2 adds safe recovery of shared legacy recipes into the first opened world. */
     public int recipe_target_version = 0;
 
+    /** Versions that last wrote this configuration or export. */
+    public String saved_with_mod_version = "";
+    public String saved_with_minecraft_version = "";
     /** Reusable recipes. This target is intentionally not applied at runtime. */
     public WorldRecipeConfig global_library = new WorldRecipeConfig();
 
