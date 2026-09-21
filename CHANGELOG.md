@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.3+1.21.11
+
+### Fixed
+
+- Fixed the development launcher so it detects installed JDK 21 updates automatically.
+- Fixed save notifications being shown when saving from a Library or Vanilla Recipes sub-menu; only the main Save button announces the apply action.
+- Fixed the dedicated-server Library button opening Global Library instead of the current world.
+- Fixed Custom Recipe library templates appearing in the Vanilla Recipes browser.
+- Fixed Disabled, Enabled, and Special recipe filters returning inconsistent results depending on the search query.
+- Result-count input now clamps values above 64 to 64 immediately.
+
 ## 1.3.2+1.21.11
 
 ### Added

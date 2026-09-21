@@ -11,6 +11,8 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
+import java.util.List;
+
 /** Client-only sender for the OP server editor. */
 @Environment(EnvType.CLIENT)
 public final class ClientServerConfigNetworking {
@@ -24,16 +26,19 @@ public final class ClientServerConfigNetworking {
         ClientPlayNetworking.send(new ValidateServerConfigPayload(ConfigLoader.toJson(config)));
     }
 
-    public static void searchVanilla(String query, boolean matchIngredients, boolean matchOutput, int page) {
+    public static void searchVanilla(String query, boolean matchIngredients, boolean matchOutput,
+                                     String statusFilter, List<String> disabledRecipeIds, int page) {
         ClientPlayNetworking.send(new VanillaRecipeQueryPayload(
-                GSON.toJson(new RecipeQuery(query, matchIngredients, matchOutput, page))));
+                GSON.toJson(new RecipeQuery(query, matchIngredients, matchOutput,
+                        statusFilter, disabledRecipeIds, page))));
     }
 
     public static void requestVanillaDetails(String recipeId) {
         ClientPlayNetworking.send(new VanillaRecipeDetailsQueryPayload(recipeId));
     }
 
-    private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput, int page) {}
+    private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,
+                               String statusFilter, List<String> disabledRecipeIds, int page) {}
 
     private ClientServerConfigNetworking() {}
 }

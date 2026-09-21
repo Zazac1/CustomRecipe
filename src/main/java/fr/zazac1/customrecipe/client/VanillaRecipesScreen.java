@@ -207,7 +207,8 @@ public class VanillaRecipesScreen extends Screen {
             clearAndInit();
             return;
         }
-        ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput, 0);
+        ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput,
+                statusFilter.name(), parent.disabledRecipes, 0);
     }
 
     /** Refresh after a short pause so typing does not scan or query once per key. */
@@ -228,7 +229,8 @@ public class VanillaRecipesScreen extends Screen {
     private void loadMore() {
         if (localMode || loading || recipes.size() >= total) return;
         loading = true;
-        ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput, nextPage);
+        ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput,
+                statusFilter.name(), parent.disabledRecipes, nextPage);
     }
 
     private VanillaRecipePage findLocalRecipes() {
@@ -323,7 +325,9 @@ public class VanillaRecipesScreen extends Screen {
                                 || recipeStart + "recipe/".length() >= path.length() - ".json".length()) continue;
                         String recipeId = path.substring("data/".length(), namespaceEnd) + ":"
                                 + path.substring(recipeStart + "recipe/".length(), path.length() - ".json".length());
-                        if (recipeId.startsWith("customrecipe:custom/")) continue;
+                        // Do not scan this mod's bundled library templates as
+                        // regular vanilla/mod recipes.
+                        if (recipeId.startsWith("customrecipe:")) continue;
                         try (var input = jar.getInputStream(entry)) {
                             addLocalRecipe(matches, matchedIds, recipeId,
                                     new String(input.readAllBytes(), StandardCharsets.UTF_8), loweredQuery);
@@ -428,7 +432,9 @@ public class VanillaRecipesScreen extends Screen {
 
     private void toggle(String recipeId) {
         if (!parent.disabledRecipes.remove(recipeId)) parent.disabledRecipes.add(recipeId);
-        clearAndInit();
+        // The server receives the staged disabled IDs, so refresh its exact
+        // filtered page and total instead of filtering a stale local page.
+        resetSearch();
     }
 
     void requestDetails(VanillaRecipeDetailsScreen screen, String recipeId) {

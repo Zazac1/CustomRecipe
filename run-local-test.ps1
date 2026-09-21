@@ -1,10 +1,28 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
 
-$javaHome = 'C:\Program Files\Java\jdk-21.0.11'
-if (-not (Test-Path -LiteralPath (Join-Path $javaHome 'bin\java.exe'))) {
-    throw "JDK 21 introuvable : $javaHome"
+$javaCandidates = @(@(
+    $env:JAVA_HOME,
+    [Environment]::GetEnvironmentVariable('JAVA_HOME', 'Machine'),
+    [Environment]::GetEnvironmentVariable('JAVA_HOME', 'User')
+) | Where-Object { $_ })
+
+$adoptiumRoot = 'C:\Program Files\Eclipse Adoptium'
+if (Test-Path -LiteralPath $adoptiumRoot) {
+    $javaCandidates += @(Get-ChildItem -LiteralPath $adoptiumRoot -Directory |
+        Where-Object { $_.Name -like 'jdk-21*' } |
+        Sort-Object Name -Descending |
+        Select-Object -ExpandProperty FullName)
+}
+
+$javaHome = $javaCandidates |
+    ForEach-Object { $_.TrimEnd('\') } |
+    Where-Object { Test-Path -LiteralPath (Join-Path $_ 'bin\java.exe') } |
+    Select-Object -First 1
+
+if (-not $javaHome) {
+    throw 'JDK 21 introuvable. Installe un JDK 21 puis relance ce script.'
 }
 
 $env:JAVA_HOME = $javaHome
