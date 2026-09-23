@@ -310,7 +310,7 @@ public class RecipeBuilderScreen extends Screen {
 
         // ── Bottom buttons ────────────────────────────────────────────────
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.cancel"),
-                b -> minecraft.gui.setScreen(returnTo)
+                b -> minecraft.setScreen(returnTo)
         ).bounds(width / 2 - 102, height - 22, 98, 18).build());
 
         addRenderableWidget(Button.builder(Component.translatable(editingIndex >= 0
@@ -1013,7 +1013,7 @@ public class RecipeBuilderScreen extends Screen {
         if (editingIndex >= 0) parent.recipes.set(editingIndex, entry);
         else parent.recipes.add(entry);
         if (alsoSaveToLibrary && editingIndex < 0) parent.alsoSaveToLibrary(entry);
-        minecraft.gui.setScreen(returnTo);
+        minecraft.setScreen(returnTo);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────
@@ -1038,9 +1038,9 @@ public class RecipeBuilderScreen extends Screen {
     @Override
     public void onClose() {
         if (!draftFingerprint().equals(initialDraft)) {
-            minecraft.gui.setScreen(new SaveChangesScreen(this, this::confirm, () -> minecraft.gui.setScreen(returnTo)));
+            minecraft.setScreen(new SaveChangesScreen(this, this::confirm, () -> minecraft.setScreen(returnTo)));
         } else {
-            minecraft.gui.setScreen(returnTo);
+            minecraft.setScreen(returnTo);
         }
     }
 

@@ -61,7 +61,7 @@ final class RecipeTargetSelectScreen extends Screen {
 
     private void selectTarget(fr.zazac1.customrecipe.RecipeTarget target) {
         ConfigScreen next = parent.createTargetScreen(target);
-        minecraft.gui.setScreen(selectedScreen == null ? next : selectedScreen.apply(next));
+        minecraft.setScreen(selectedScreen == null ? next : selectedScreen.apply(next));
     }
 
     @Override
@@ -75,7 +75,7 @@ final class RecipeTargetSelectScreen extends Screen {
         search.setHint(Component.translatable("customrecipe.screen.search"));
         search.setResponder(value -> scroll = 0);
         addRenderableWidget(search);
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.gui.setScreen(parent))
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
                 .bounds(width / 2 - 55, height - 28, 110, 20).build());
     }
 
@@ -257,7 +257,7 @@ final class RecipeTargetSelectScreen extends Screen {
     public boolean isPauseScreen() { return true; }
 
     @Override
-    public void onClose() { minecraft.gui.setScreen(parent); }
+    public void onClose() { minecraft.setScreen(parent); }
 
     private record WorldIcon(Identifier id, int width, int height) {}
     private record WorldDetails(String name, String lastPlayed, long lastPlayedAt, String description) {}

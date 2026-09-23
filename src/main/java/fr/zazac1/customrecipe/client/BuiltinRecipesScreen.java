@@ -286,7 +286,7 @@ public class BuiltinRecipesScreen extends Screen {
 
         // ── Bouton Retour ─────────────────────────────────────────────────
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"),
-                b -> minecraft.gui.setScreen(parent)
+                b -> minecraft.setScreen(parent)
         ).bounds(width / 2 - 50, height - 24, 100, 18).build());
     }
 
@@ -348,5 +348,5 @@ public class BuiltinRecipesScreen extends Screen {
 
     @Override public boolean isPauseScreen() { return true; }
 
-    @Override public void onClose() { minecraft.gui.setScreen(parent); }
+    @Override public void onClose() { minecraft.setScreen(parent); }
 }

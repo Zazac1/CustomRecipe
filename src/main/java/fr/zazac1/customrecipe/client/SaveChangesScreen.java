@@ -25,13 +25,13 @@ final class SaveChangesScreen extends Screen {
                 .bounds(width / 2 - 102, y, 64, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.discard"), b -> discard.run())
                 .bounds(width / 2 - 32, y, 64, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.cancel"), b -> minecraft.gui.setScreen(returnTo))
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.cancel"), b -> minecraft.setScreen(returnTo))
                 .bounds(width / 2 + 38, y, 64, 20).build());
     }
 
     @Override
     public void onClose() {
-        minecraft.gui.setScreen(returnTo);
+        minecraft.setScreen(returnTo);
     }
 
     @Override

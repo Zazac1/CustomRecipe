@@ -34,7 +34,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
 
     @Override
     public void onClose() {
-        minecraft.gui.setScreen(parent);
+        minecraft.setScreen(parent);
     }
 
     @Override
@@ -43,7 +43,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
         addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, config.target(),
                 config.target().isWorld() ? config.target().displayName() : "Global Library"));
         if (details == null) parent.requestDetails(this, recipe.id());
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.gui.setScreen(parent))
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
                 .bounds(width / 2 - 50, height - 28, 100, 20).build());
 
         if (details != null) {

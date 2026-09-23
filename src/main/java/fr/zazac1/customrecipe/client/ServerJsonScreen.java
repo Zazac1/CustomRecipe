@@ -50,7 +50,7 @@ public class ServerJsonScreen extends Screen {
 
         addRenderableWidget(Button.builder(Component.literal("    Apply JSON"), b -> apply())
                 .bounds(width / 2 - 102, height - 28, 98, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("   Cancel"), b -> minecraft.gui.setScreen(parent))
+        addRenderableWidget(Button.builder(Component.literal("   Cancel"), b -> minecraft.setScreen(parent))
                 .bounds(width / 2 + 4, height - 28, 98, 20).build());
         addRenderableOnly((ctx, mx, my, d) -> {
             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.ACCEPT, width / 2 - 98, height - 27, 18, 18);
@@ -65,15 +65,15 @@ public class ServerJsonScreen extends Screen {
             return;
         }
         parent.replaceConfig(config);
-        minecraft.gui.setScreen(parent);
+        minecraft.setScreen(parent);
     }
 
     @Override
     public void onClose() {
         if (!initialJson.equals(jsonField.getValue())) {
-            minecraft.gui.setScreen(new SaveChangesScreen(this, this::apply, () -> minecraft.gui.setScreen(parent)));
+            minecraft.setScreen(new SaveChangesScreen(this, this::apply, () -> minecraft.setScreen(parent)));
         } else {
-            minecraft.gui.setScreen(parent);
+            minecraft.setScreen(parent);
         }
     }
 

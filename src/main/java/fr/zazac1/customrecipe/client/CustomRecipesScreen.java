@@ -286,9 +286,9 @@ public class CustomRecipesScreen extends Screen {
                     : Component.translatable("customrecipe.button.select_world_to_import");
             Button addAll = Button.builder(importLabel, b -> {
                 if (hasWorldTarget) {
-                    minecraft.gui.setScreen(new ImportGlobalLibraryScreen(parent, this, importable));
+                    minecraft.setScreen(new ImportGlobalLibraryScreen(parent, this, importable));
                 } else {
-                    minecraft.gui.setScreen(new RecipeTargetSelectScreen(parent,
+                    minecraft.setScreen(new RecipeTargetSelectScreen(parent,
                             selected -> new CustomRecipesScreen(selected, true)));
                 }
             }).bounds(importButtonX, 4, importButtonW, 20).build();
@@ -336,7 +336,7 @@ public class CustomRecipesScreen extends Screen {
                         if (isCorrupted(recipes.get(idx))) return;
                         if (libraryPicker) {
                             parent.addFromLibrary(recipes.get(idx));
-                            client.gui.setScreen(new CustomRecipesScreen(parent));
+                            client.setScreen(new CustomRecipesScreen(parent));
                             return;
                         }
                         if (parent.target().isWorld()) {
@@ -482,7 +482,7 @@ public class CustomRecipesScreen extends Screen {
                 addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.recipe.add_to", parent.target().displayName()), b -> {
                     if (isCorrupted(recipes.get(selected))) return;
                     parent.addFromLibrary(recipes.get(selected));
-                    client.gui.setScreen(new CustomRecipesScreen(parent));
+                    client.setScreen(new CustomRecipesScreen(parent));
                 }).dimensions(detailRight() - 202, detailY() + 4, 198, 18).build());
             } else if (corrupted) {
                 String mods = String.join(", ", RecipeIntegrity.requiredModIds(e));
@@ -500,10 +500,10 @@ public class CustomRecipesScreen extends Screen {
                 }).dimensions(detailRight() - 142, detailY() + 30, 138, 18).build());
             } else {
                 addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.duplicate"),
-                        b -> client.gui.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), -1)))
+                        b -> client.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), -1)))
                         .dimensions(detailRight() - 204, detailY() + 4, 96, 18).build());
                 addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.edit"),
-                        b -> client.gui.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), selected)))
+                        b -> client.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), selected)))
                         .dimensions(detailRight() - 102, detailY() + 4, 96, 18).build());
                 int typeX = detailActionX();
                 int knownX = detailKnownX();
@@ -576,19 +576,19 @@ public class CustomRecipesScreen extends Screen {
                 clearAndInit();
             }).dimensions(width / 2 + 2, height - 88, 98, 18).build());
             addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.add_from_library"),
-                    b -> client.gui.setScreen(new CustomRecipesScreen(parent, true))
+                    b -> client.setScreen(new CustomRecipesScreen(parent, true))
             ).dimensions(width / 2 - 100, height - 66, 200, 18).build());
         }
 
         if (!libraryPicker) {
             addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.add_recipe_new"),
-                    b -> client.gui.setScreen(new RecipeBuilderScreen(parent, this, null, -1))
+                    b -> client.setScreen(new RecipeBuilderScreen(parent, this, null, -1))
             ).dimensions(width / 2 - 100, height - 44, 200, 18).build());
         }
 
         if (libraryPicker) {
             addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.back_to_recipes"),
-                    b -> client.gui.setScreen(new CustomRecipesScreen(parent))
+                    b -> client.setScreen(new CustomRecipesScreen(parent))
             ).dimensions(width / 2 - 75, height - 22, 150, 18).build());
         } else {
             String saveLabel = Text.translatable("customrecipe.button.save").getString();
@@ -1087,7 +1087,7 @@ public class CustomRecipesScreen extends Screen {
 
     /** Escape leaves Recipe Creator, so let its owner protect pending edits. */
     @Override public void onClose() {
-        if (libraryPicker) client.gui.setScreen(new CustomRecipesScreen(parent));
-        else client.gui.setScreen(parent);
+        if (libraryPicker) client.setScreen(new CustomRecipesScreen(parent));
+        else client.setScreen(parent);
     }
 }

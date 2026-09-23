@@ -182,7 +182,7 @@ public class VanillaRecipesScreen extends Screen {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
             int y = ROWS_Y + i * ROW;
             boolean disabled = parent.disabledRecipes.contains(recipe.id());
-            addRenderableWidget(Button.builder(recipeLabel(recipe), b -> minecraft.gui.setScreen(new VanillaRecipeDetailsScreen(this, recipe)))
+            addRenderableWidget(Button.builder(recipeLabel(recipe), b -> minecraft.setScreen(new VanillaRecipeDetailsScreen(this, recipe)))
                     .bounds(30, y + 1, width - 122, 18).build());
             addRenderableWidget(Button.builder(disabled ? Component.translatable("customrecipe.state.disabled").withColor(0xFF5555)
                             : Component.translatable("customrecipe.state.enabled").withColor(0x55FF55), b -> toggle(recipe.id()))
@@ -700,5 +700,5 @@ public class VanillaRecipesScreen extends Screen {
     @Override public boolean isPauseScreen() { return true; }
 
     /** Recipe states belong to ConfigScreen and are only persisted from there. */
-    @Override public void onClose() { minecraft.gui.setScreen(parent); }
+    @Override public void onClose() { minecraft.setScreen(parent); }
 }

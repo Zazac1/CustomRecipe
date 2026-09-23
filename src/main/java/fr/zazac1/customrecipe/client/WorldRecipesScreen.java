@@ -70,7 +70,7 @@ final class WorldRecipesScreen extends Screen {
             y += 22;
         }
 
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.gui.setScreen(parent))
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
                 .bounds(width / 2 - 55, height - 28, 110, 20).build());
     }
 
@@ -136,5 +136,5 @@ final class WorldRecipesScreen extends Screen {
     public boolean isPauseScreen() { return true; }
 
     @Override
-    public void onClose() { minecraft.gui.setScreen(parent); }
+    public void onClose() { minecraft.setScreen(parent); }
 }

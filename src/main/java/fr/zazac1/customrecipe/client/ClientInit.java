@@ -47,7 +47,7 @@ public class ClientInit implements ClientModInitializer {
                     // This client-only helper is for the clickable new-world tip.
                     // Never expose the local editor while connected to a remote server.
                     if (client.getSingleplayerServer() == null) return 0;
-                    client.execute(() -> client.gui.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true))));
+                    client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true))));
                     return 1;
                 })
         ));
@@ -104,18 +104,18 @@ public class ClientInit implements ClientModInitializer {
                 context.player().sendSystemMessage(Component.translatable("customrecipe.chat.invalid_server_validation"));
                 return;
             }
-            context.client().gui.setScreen(new ConfigScreen(context.client().gui.screen(), config,
+            context.client().setScreen(new ConfigScreen(context.client().screen, config,
                     "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipePagePayload.ID, (payload, context) -> {
             VanillaRecipePage page = GSON.fromJson(payload.json(), VanillaRecipePage.class);
-            if (page != null && context.client().gui.screen() instanceof VanillaRecipesScreen screen) {
+            if (page != null && context.client().screen instanceof VanillaRecipesScreen screen) {
                 screen.applyResult(page);
             }
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsPayload.ID, (payload, context) -> {
             VanillaRecipeDetails details = GSON.fromJson(payload.json(), VanillaRecipeDetails.class);
-            if (details != null && context.client().gui.screen() instanceof VanillaRecipeDetailsScreen screen) {
+            if (details != null && context.client().screen instanceof VanillaRecipeDetailsScreen screen) {
                 screen.applyDetails(details);
             }
         });

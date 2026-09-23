@@ -31,7 +31,7 @@ public abstract class GameMenuScreenMixin extends Screen {
         int buttonX = width - 28;
         int buttonY = height - 28;
         addRenderableWidget(Button.builder(Component.empty(),
-                button -> minecraft.gui.setScreen(ConfigScreen.fromPauseMenu((Screen) (Object) this)))
+                button -> minecraft.setScreen(ConfigScreen.fromPauseMenu((Screen) (Object) this)))
                 .tooltip(Tooltip.create(Component.translatable("customrecipe.tooltip.open")))
                 .bounds(buttonX, buttonY, 20, 20).build());
         addRenderableOnly((context, mouseX, mouseY, delta) -> context.blit(

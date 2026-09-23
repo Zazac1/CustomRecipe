@@ -26,17 +26,17 @@ final class ImportGlobalLibraryScreen extends Screen {
         int y = height / 2 + 22;
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.add"), b -> apply())
                 .bounds(width / 2 - 82, y, 76, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.cancel"), b -> minecraft.gui.setScreen(returnTo))
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.cancel"), b -> minecraft.setScreen(returnTo))
                 .bounds(width / 2 + 6, y, 76, 20).build());
     }
 
     private void apply() {
         config.addAllFromGlobalLibrary();
-        minecraft.gui.setScreen(new CustomRecipesScreen(config));
+        minecraft.setScreen(new CustomRecipesScreen(config));
     }
 
     @Override
-    public void onClose() { minecraft.gui.setScreen(returnTo); }
+    public void onClose() { minecraft.setScreen(returnTo); }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
