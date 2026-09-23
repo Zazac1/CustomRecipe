@@ -27,10 +27,10 @@ public final class ClientServerConfigNetworking {
     }
 
     public static void searchVanilla(String query, boolean matchIngredients, boolean matchOutput,
-                                     String statusFilter, List<String> disabledRecipeIds, int page) {
+                                     String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {
         ClientPlayNetworking.send(new VanillaRecipeQueryPayload(
                 GSON.toJson(new RecipeQuery(query, matchIngredients, matchOutput,
-                        statusFilter, disabledRecipeIds, page))));
+                        statusFilter, sourceFilter, disabledRecipeIds, page))));
     }
 
     public static void requestVanillaDetails(String recipeId) {
@@ -38,7 +38,7 @@ public final class ClientServerConfigNetworking {
     }
 
     private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,
-                               String statusFilter, List<String> disabledRecipeIds, int page) {}
+                               String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {}
 
     private ClientServerConfigNetworking() {}
 }

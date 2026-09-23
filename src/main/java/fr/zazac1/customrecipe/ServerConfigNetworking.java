@@ -419,6 +419,7 @@ public final class ServerConfigNetworking {
         Set<String> disabledRecipeIds = request.disabledRecipeIds() == null
                 ? Set.of() : new HashSet<>(request.disabledRecipeIds());
         String statusFilter = request.statusFilter() == null ? "ALL" : request.statusFilter();
+        String sourceFilter = request.sourceFilter() == null ? "ALL" : request.sourceFilter();
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
 
         for (RecipeEntry<?> entry : server.getRecipeManager().values()) {
@@ -466,7 +467,12 @@ public final class ServerConfigNetworking {
                 case "SPECIAL" -> special;
                 default -> true;
             };
-            if (statusMatch && (query.isEmpty() || outputMatch || ingredientMatch)) {
+            boolean sourceMatch = switch (sourceFilter) {
+                case "MODDED" -> !recipeId.getNamespace().equals("minecraft");
+                case "VANILLA" -> recipeId.getNamespace().equals("minecraft");
+                default -> true;
+            };
+            if (statusMatch && sourceMatch && (query.isEmpty() || outputMatch || ingredientMatch)) {
                 matches.add(new VanillaRecipePage.VanillaRecipeInfo(
                         entry.id().getValue().toString(), resultId,
                         toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
@@ -561,7 +567,7 @@ public final class ServerConfigNetworking {
     }
 
     private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,
-                               String statusFilter, List<String> disabledRecipeIds, int page) {}
+                               String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {}
 
     private ServerConfigNetworking() {}
 }
