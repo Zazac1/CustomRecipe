@@ -108,7 +108,7 @@ final class RecipeTargetSelectScreen extends Screen {
     /** Reads only the save metadata, never opens or locks a world. */
     private WorldDetails readWorldDetails(Path directory, String fallbackName) {
         try {
-            NbtCompound data = NbtIo.readCompressed(directory.resolve("level.dat"), NbtSizeTracker.forLevel())
+            NbtCompound data = NbtIo.readCompressed(directory.resolve("level.dat"), NbtSizeTracker.of(104_857_600L))
                     .getCompoundOrEmpty("Data");
             String name = data.getString("LevelName", fallbackName);
             long lastPlayed = data.getLong("LastPlayed", 0L);
@@ -202,7 +202,6 @@ final class RecipeTargetSelectScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        renderBackground(context, mouseX, mouseY, delta);
         context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 8, 0xFFFFFF);
         super.render(context, mouseX, mouseY, delta);
         List<LocalWorld> shown = visibleWorlds();

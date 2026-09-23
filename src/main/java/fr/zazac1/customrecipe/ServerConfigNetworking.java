@@ -8,8 +8,6 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.minecraft.command.permission.Permission;
-import net.minecraft.command.permission.PermissionLevel;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.item.ItemStack;
@@ -71,14 +69,14 @@ public final class ServerConfigNetworking {
             if (!environment.dedicated) return;
             dispatcher.register(
                     literal("customrecipe")
-                            .requires(source -> source.getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                            .requires(source -> source.hasPermissionLevel(2))
                             .executes(context -> openEditor(context.getSource()))
             );
         });
 
         ServerPlayNetworking.registerGlobalReceiver(SaveServerConfigPayload.ID, (payload, context) -> {
             ServerPlayerEntity player = context.player();
-            if (!player.getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS))) {
+            if (!player.hasPermissionLevel(2)) {
                 player.sendMessage(Text.translatable("customrecipe.chat.permission_denied"), false);
                 return;
             }
@@ -103,7 +101,7 @@ public final class ServerConfigNetworking {
 
         ServerPlayNetworking.registerGlobalReceiver(ValidateServerConfigPayload.ID, (payload, context) -> {
             ServerPlayerEntity player = context.player();
-            if (!player.getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS))
+            if (!player.hasPermissionLevel(2)
                     || payload.json().length() > MAX_JSON_CHARS) return;
             ModConfig config = ConfigLoader.fromJson(payload.json());
             if (config == null) return;
@@ -116,7 +114,7 @@ public final class ServerConfigNetworking {
         });
 
         ServerPlayNetworking.registerGlobalReceiver(VanillaRecipeQueryPayload.ID, (payload, context) -> {
-            if (!context.player().getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS))) {
+            if (!context.player().hasPermissionLevel(2)) {
                 return;
             }
             RecipeQuery query = GSON.fromJson(payload.json(), RecipeQuery.class);
@@ -129,7 +127,7 @@ public final class ServerConfigNetworking {
         });
 
         ServerPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsQueryPayload.ID, (payload, context) -> {
-            if (!context.player().getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS))) return;
+            if (!context.player().hasPermissionLevel(2)) return;
             VanillaRecipeDetails details = findVanillaRecipeDetails(context.server(), payload.recipeId());
             String json = GSON.toJson(details);
             if (json.length() <= MAX_JSON_CHARS) {

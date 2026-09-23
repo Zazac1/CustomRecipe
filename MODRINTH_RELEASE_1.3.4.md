@@ -10,7 +10,7 @@ Release
 
 ## Version subtitle
 
-v1.3.4 for Minecraft 1.21.11
+v1.3.4 for Minecraft 1.21.10
 
 ## Loader
 
@@ -18,13 +18,18 @@ Fabric
 
 ## Game version
 
-1.21.11
+1.21.10
 
 ## File
 
-`build/libs/customrecipe-1.3.4+1.21.11.jar`
+`build/libs/customrecipe-1.3.4+1.21.10.jar`
 
 ## Version changelog
+
+### Minecraft 1.21.10 support
+
+- Added full support for Minecraft 1.21.10.
+- Preserved the complete RecipesCreator 1.3.4 feature set.
 
 ### Default Recipes filters
 
