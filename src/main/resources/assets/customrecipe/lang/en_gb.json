@@ -5,8 +5,8 @@
   "customrecipe.home.global": "(Global)",
   "customrecipe.home.library": "Library",
   "customrecipe.home.create": "Create Recipes",
-  "customrecipe.home.vanilla": "Vanilla Recipes",
-  "customrecipe.home.vanilla.tooltip": "Select a world to access its Vanilla recipes.",
+  "customrecipe.home.vanilla": "Default Recipes",
+  "customrecipe.home.vanilla.tooltip": "Select a world to access its default recipes.",
   "customrecipe.home.current_world_locked": "The current world is locked when opened from the pause menu.",
   "customrecipe.button.back": "Back",
   "customrecipe.button.cancel": "Cancel",
@@ -16,6 +16,15 @@
   "customrecipe.button.add_recipe": "Add recipe",
   "customrecipe.button.add_recipe_new": "+ Add Recipe",
   "customrecipe.button.add_from_library": "Add From Library",
+  "customrecipe.button.add_all_from_library": "Add All Global Library Recipes",
+
+  "customrecipe.button.export": "Export",
+  "customrecipe.button.import": "Import",
+  "customrecipe.button.select_world_to_import": "Select a World to Import",
+  "customrecipe.import.title": "Import Global Library",
+  "customrecipe.import.confirm": "Add %s Global Library recipe(s) to %s?",
+  "customrecipe.import.safe": "Existing recipes will not be changed. Save afterwards to apply.",
+  "customrecipe.import.nothing_to_add": "All Global Library recipes are already added.",
   "customrecipe.button.back_to_recipes": "Back to My Recipes",
   "customrecipe.button.duplicate": "Duplicate",
   "customrecipe.button.edit": "Edit",
@@ -79,10 +88,13 @@
   ,"customrecipe.chat.invalid_server_validation": "[Custom Recipe] Invalid server validation received."
   ,"customrecipe.tooltip.open": "Open Custom Recipe"
   ,"customrecipe.vanilla.title": "Vanilla Recipes"
+  ,"customrecipe.vanilla.status_all": "Status: All"
+  ,"customrecipe.vanilla.status_enabled": "Status: Enabled"
+  ,"customrecipe.vanilla.status_disabled": "Status: Disabled"
+  ,"customrecipe.vanilla.status_special": "Status: Special"
   ,"customrecipe.vanilla.show_all": "Show: All"
-  ,"customrecipe.vanilla.show_enabled": "Show: Enabled"
-  ,"customrecipe.vanilla.show_disabled": "Show: Disabled"
-  ,"customrecipe.vanilla.show_special": "Show: Special"
+  ,"customrecipe.vanilla.show_modded": "Show: Modded"
+  ,"customrecipe.vanilla.show_vanilla": "Show: Vanilla"
   ,"customrecipe.vanilla.search_hint": "Search item or recipe ID"
   ,"customrecipe.vanilla.search": "Search"
   ,"customrecipe.vanilla.ingredient": "Ingredient: %s"

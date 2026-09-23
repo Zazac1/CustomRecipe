@@ -260,12 +260,19 @@ public class RecipeBuilderScreen extends Screen {
                 Component.translatable("customrecipe.builder.result_count").getString(), 0xCCCCCC));
         resultCountField = addRenderableWidget(new EditBox(font, settingsX() + 70, countY - 2,
                 34, 18, Component.translatable("customrecipe.builder.result_count")));
-        resultCountField.setMaxLength(2);
-        resultCountField.addFormatter((value, cursor) -> FormattedCharSequence.forward(value.isEmpty() || (value.matches("\\d{1,2}")
-                && Integer.parseInt(value) >= 1 && Integer.parseInt(value) <= 64) ? value : "", Style.EMPTY));
+        // Permit a three-digit attempt so values above a stack are immediately
+        // normalized to 64 instead of silently rejecting the latest key press.
+        resultCountField.setMaxLength(3);
+        resultCountField.addFormatter((value, cursor) -> FormattedCharSequence.forward(value.isEmpty() || value.matches("\\d{1,3}")
+                ? value : "", Style.EMPTY));
         resultCountField.setValue(String.valueOf(resultCount));
         resultCountField.setResponder(value -> {
-            if (!value.isEmpty()) resultCount = Integer.parseInt(value);
+            if (value.isEmpty()) return;
+            int normalized = Math.max(1, Math.min(64, Integer.parseInt(value)));
+            resultCount = normalized;
+            if (!value.equals(String.valueOf(normalized))) {
+                resultCountField.setValue(String.valueOf(normalized));
+            }
         });
 
         // Shaped / Shapeless toggle

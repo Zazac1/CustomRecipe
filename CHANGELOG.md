@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.3.4+26.2
+
+### Added
+
+- Added a Show filter for All, Modded, and Vanilla recipes in Default Recipes.
+- Added Enable All and Disable All actions for a world's custom recipes.
+
+### Changed
+
+- Renamed the Default Recipes state filter to Status.
+- Default Recipes now filters recipe source and status consistently in local and server editors.
+
+### Fixed
+
+- Fixed the server Library button opening Global Library instead of the selected world.
+- Fixed library templates appearing in Default Recipes.
+- Fixed stale legacy recipe state when adding or enabling recipes from Global Library.
+- Result counts above 64 now clamp immediately to 64.
+
 ## 1.3.2+26.2
 
 ### Added
