@@ -129,7 +129,9 @@ public class ConfigScreen extends Screen {
 
         int libraryY = top + buttonHeight + gap;
         addRenderableWidget(Button.builder(Component.empty(),
-                b -> minecraft.gui.setScreen(new CustomRecipesScreen(this, serverManaged)))
+                // The library button always opens the recipes for the selected target.
+                // On a dedicated server that target is the current server world.
+                b -> minecraft.gui.setScreen(new CustomRecipesScreen(this)))
                 .bounds(x, libraryY, buttonWidth, buttonHeight).build());
         addHomeButton(libraryY, buttonWidth, Component.translatable("customrecipe.home.library").getString(), null, Items.BOOKSHELF, true);
 
@@ -402,6 +404,8 @@ public class ConfigScreen extends Screen {
             // must not disable the independent copy created for this world.
             copy.enabled = null;
             copy.server_enabled = null;
+        }
+        if (copy != null && recipes.stream().noneMatch(existing -> ConfigLoader.sameRecipe(existing, copy))) {
             recipes.add(copy);
         }
     }

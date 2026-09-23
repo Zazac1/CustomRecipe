@@ -4,8 +4,8 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ServerRecipeManagerMixin",
-    "HolderReferenceInvoker",
-    "CraftingScreenHandlerMixin"
+    "CraftingScreenHandlerMixin",
+    "HolderReferenceInvoker"
   ],
   "client": [
     "client.GameMenuScreenMixin"

@@ -35,7 +35,6 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
 
 @Environment(EnvType.CLIENT)
 public class ClientInit implements ClientModInitializer {
-
     private static String activeClientWorldId = "";
     private static final Gson GSON = new Gson();
 

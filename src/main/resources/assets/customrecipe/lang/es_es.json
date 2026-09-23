@@ -5,8 +5,8 @@
   "customrecipe.home.global": "(Global)",
   "customrecipe.home.library": "Biblioteca",
   "customrecipe.home.create": "Crear recetas",
-  "customrecipe.home.vanilla": "Recetas vanilla",
-  "customrecipe.home.vanilla.tooltip": "Selecciona un mundo para acceder a sus recetas vanilla.",
+  "customrecipe.home.vanilla": "Recetas predeterminadas",
+  "customrecipe.home.vanilla.tooltip": "Selecciona un mundo para acceder a sus recetas predeterminadas.",
   "customrecipe.home.current_world_locked": "El mundo actual queda bloqueado al abrir el editor desde el menú de pausa.",
   "customrecipe.button.back": "Volver",
   "customrecipe.button.cancel": "Cancelar",
@@ -16,6 +16,15 @@
   "customrecipe.button.add_recipe": "Añadir receta",
   "customrecipe.button.add_recipe_new": "+ Añadir receta",
   "customrecipe.button.add_from_library": "Añadir desde la biblioteca",
+  "customrecipe.button.add_all_from_library": "Agregar todas las recetas globales",
+
+  "customrecipe.button.export": "Exportar",
+  "customrecipe.button.import": "Importar",
+  "customrecipe.button.select_world_to_import": "Seleccionar un mundo para importar",
+  "customrecipe.import.title": "Importar biblioteca global",
+  "customrecipe.import.confirm": "¿Agregar %s receta(s) global(es) a %s?",
+  "customrecipe.import.safe": "Las recetas existentes no se modificarán. Guarda después para aplicar.",
+  "customrecipe.import.nothing_to_add": "Todas las recetas globales ya están añadidas.",
   "customrecipe.button.back_to_recipes": "Volver a mis recetas",
   "customrecipe.button.duplicate": "Duplicar",
   "customrecipe.button.edit": "Editar",
@@ -79,10 +88,13 @@
   ,"customrecipe.chat.invalid_server_validation": "[Custom Recipe] Validación del servidor recibida no válida."
   ,"customrecipe.tooltip.open": "Abrir Custom Recipe"
   ,"customrecipe.vanilla.title": "Recetas vanilla"
+  ,"customrecipe.vanilla.status_all": "Estado: todas"
+  ,"customrecipe.vanilla.status_enabled": "Estado: activadas"
+  ,"customrecipe.vanilla.status_disabled": "Estado: desactivadas"
+  ,"customrecipe.vanilla.status_special": "Estado: especiales"
   ,"customrecipe.vanilla.show_all": "Mostrar: todas"
-  ,"customrecipe.vanilla.show_enabled": "Mostrar: activadas"
-  ,"customrecipe.vanilla.show_disabled": "Mostrar: desactivadas"
-  ,"customrecipe.vanilla.show_special": "Mostrar: especiales"
+  ,"customrecipe.vanilla.show_modded": "Mostrar: mods"
+  ,"customrecipe.vanilla.show_vanilla": "Mostrar: vanilla"
   ,"customrecipe.vanilla.search_hint": "Buscar objeto o ID de receta"
   ,"customrecipe.vanilla.search": "Buscar"
   ,"customrecipe.vanilla.ingredient": "Ingrediente: %s"
