@@ -2,15 +2,19 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
 
-$javaHome = 'C:\Users\isaac\AppData\Local\Programs\Eclipse Adoptium\jdk-21.0.9.10-hotspot'
+$javaHome = $env:JAVA_HOME
+if ([string]::IsNullOrWhiteSpace($javaHome) -or -not (Test-Path -LiteralPath (Join-Path $javaHome 'bin\java.exe'))) {
+    $javaHome = 'C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot'
+}
 if (-not (Test-Path -LiteralPath (Join-Path $javaHome 'bin\java.exe'))) {
-    throw "JDK 21 introuvable : $javaHome"
+    throw "JDK 21 ou supérieur introuvable : $javaHome"
 }
 
 $env:JAVA_HOME = $javaHome
-$env:GRADLE_USER_HOME = Join-Path $env:USERPROFILE '.gradle'
+$env:GRADLE_USER_HOME = Join-Path $projectRoot '.gradle-user'
 
 $serverPidFile = Join-Path $projectRoot 'run-server\.customrecipe-server-launcher.json'
+$clientPidFile = Join-Path $projectRoot 'run-client\.customrecipe-client-launcher.json'
 if (Test-Path -LiteralPath $serverPidFile) {
     try {
         $previous = Get-Content -LiteralPath $serverPidFile -Raw | ConvertFrom-Json
@@ -23,6 +27,19 @@ if (Test-Path -LiteralPath $serverPidFile) {
         Write-Warning "Impossible de lire l'ancien processus serveur : $($_.Exception.Message)"
     }
     Remove-Item -LiteralPath $serverPidFile -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path -LiteralPath $clientPidFile) {
+    try {
+        $previous = Get-Content -LiteralPath $clientPidFile -Raw | ConvertFrom-Json
+        $oldProcess = Get-Process -Id $previous.processId -ErrorAction SilentlyContinue
+        if ($oldProcess -and $oldProcess.StartTime.ToFileTimeUtc() -eq [long]$previous.startTime) {
+            Write-Host "Arrêt de l'ancien client (PID $($previous.processId))..."
+            & taskkill.exe /PID $previous.processId /T /F | Out-Null
+        }
+    } catch {
+        Write-Warning "Impossible de lire l'ancien processus client : $($_.Exception.Message)"
+    }
+    Remove-Item -LiteralPath $clientPidFile -Force -ErrorAction SilentlyContinue
 }
 
 $lanIp = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -76,6 +93,10 @@ $serverLauncher = Start-Process -FilePath 'powershell.exe' -WorkingDirectory $pr
     startTime = $serverLauncher.StartTime.ToFileTimeUtc()
 } | ConvertTo-Json | Set-Content -LiteralPath $serverPidFile -NoNewline
 Start-Sleep -Seconds 6
-Start-Process -FilePath 'powershell.exe' -WorkingDirectory $projectRoot -ArgumentList '-NoExit', '-NoProfile', '-Command', $clientScript
+$clientLauncher = Start-Process -FilePath 'powershell.exe' -WorkingDirectory $projectRoot -ArgumentList '-NoExit', '-NoProfile', '-Command', $clientScript -PassThru
+@{
+    processId = $clientLauncher.Id
+    startTime = $clientLauncher.StartTime.ToFileTimeUtc()
+} | ConvertTo-Json | Set-Content -LiteralPath $clientPidFile -NoNewline
 
 Write-Host "Dans le client : Multijoueur > Ajouter un serveur > $lanIp`:$serverPort"

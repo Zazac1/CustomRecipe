@@ -6,8 +6,8 @@ import net.minecraft.inventory.CraftingResultInventory;
 import net.minecraft.inventory.RecipeInputInventory;
 import net.minecraft.recipe.CraftingRecipe;
 import net.minecraft.recipe.RecipeEntry;
-import net.minecraft.recipe.RecipeManager;
 import net.minecraft.recipe.RecipeType;
+import net.minecraft.recipe.RecipeManager;
 import net.minecraft.recipe.input.CraftingRecipeInput;
 import net.minecraft.recipe.input.RecipeInput;
 import net.minecraft.screen.CraftingScreenHandler;
@@ -43,7 +43,7 @@ public abstract class CraftingScreenHandlerMixin {
             PlayerEntity player, RecipeInputInventory inventory, CraftingResultInventory resultInventory,
             RecipeEntry<CraftingRecipe> currentRecipe) {
         RecipeEntry<CraftingRecipe> preferred = requested;
-        if (handler instanceof CraftingScreenHandler) {
+        if (preferred == null && handler instanceof CraftingScreenHandler) {
             CraftingScreenHandlerMixin mixin = (CraftingScreenHandlerMixin) (Object) handler;
             RecipeEntry<CraftingRecipe> saved = mixin.customrecipe$bookRecipe;
             if (saved != null && input instanceof CraftingRecipeInput craftingInput

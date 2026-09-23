@@ -7,7 +7,7 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.gui.widget.EditBoxWidget;
 import net.minecraft.client.gui.widget.MultilineTextWidget;
 import net.minecraft.text.Text;
 
@@ -18,7 +18,7 @@ public class ServerJsonScreen extends Screen {
 
     private final ConfigScreen parent;
     private final String initialJson;
-    private TextFieldWidget jsonField;
+    private EditBoxWidget jsonField;
     private String error = "";
 
     public ServerJsonScreen(ConfigScreen parent, ModConfig config) {
@@ -38,9 +38,10 @@ public class ServerJsonScreen extends Screen {
                 textRenderer));
 
         int editorTop = 44;
-        jsonField = addDrawableChild(new TextFieldWidget(textRenderer, margin, editorTop,
-                width - margin * 2, 20, Text.literal("Server config JSON")));
-        jsonField.setPlaceholder(Text.literal("{ \"custom_recipes\": [] }"));
+        int editorHeight = Math.max(70, height - editorTop - 52);
+        jsonField = addDrawableChild(new EditBoxWidget(textRenderer, margin, editorTop,
+                width - margin * 2, editorHeight, Text.literal("Server config JSON"),
+                Text.literal("{\n  \"custom_recipes\": []\n}")));
         jsonField.setMaxLength(MAX_JSON_CHARS);
         jsonField.setText(initialJson);
         setFocused(jsonField);

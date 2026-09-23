@@ -14,6 +14,7 @@ import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.RotationAxis;
 
 import java.util.*;
 
@@ -256,12 +257,18 @@ public class RecipeBuilderScreen extends Screen {
                 Text.translatable("customrecipe.builder.result_count").getString(), 0xCCCCCC));
         resultCountField = addDrawableChild(new TextFieldWidget(textRenderer, settingsX() + 70, countY - 2,
                 34, 18, Text.translatable("customrecipe.builder.result_count")));
-        resultCountField.setMaxLength(2);
-        resultCountField.setTextPredicate(value -> value.isEmpty() || (value.matches("\\d{1,2}")
-                && Integer.parseInt(value) >= 1 && Integer.parseInt(value) <= 64));
+        // Permit a three-digit attempt so values above a stack are immediately
+        // normalized to 64 instead of silently rejecting the latest key press.
+        resultCountField.setMaxLength(3);
+        resultCountField.setTextPredicate(value -> value.isEmpty() || value.matches("\\d{1,3}"));
         resultCountField.setText(String.valueOf(resultCount));
         resultCountField.setChangedListener(value -> {
-            if (!value.isEmpty()) resultCount = Integer.parseInt(value);
+            if (value.isEmpty()) return;
+            int normalized = Math.max(1, Math.min(64, Integer.parseInt(value)));
+            resultCount = normalized;
+            if (!value.equals(String.valueOf(normalized))) {
+                resultCountField.setText(String.valueOf(normalized));
+            }
         });
 
         // Shaped / Shapeless toggle
@@ -744,8 +751,7 @@ public class RecipeBuilderScreen extends Screen {
     // ── mouse events ──────────────────────────────────────────────────────
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        double mx = mouseX, my = mouseY;
+    public boolean mouseClicked(double mx, double my, int button) {
         // Right-clicking the preview area cancels the item currently carried
         // by the cursor; it never edits a recipe slot.
         if (button == 1
@@ -825,7 +831,7 @@ public class RecipeBuilderScreen extends Screen {
             }
             // Dispatch directly: Screen's child traversal could miss this first
             // click after the search field was rebuilt.
-            itemField.mouseClicked(mouseX, mouseY, button);
+            itemField.mouseClicked(mx, my, button);
             return true;
         }
 
@@ -864,7 +870,7 @@ public class RecipeBuilderScreen extends Screen {
             }
         }
 
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(mx, my, button);
     }
 
     @Override
@@ -902,13 +908,12 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        double my = mouseY;
+    public boolean mouseDragged(double mouseX, double my, int button, double deltaX, double deltaY) {
         if (draggingSuggestionScrollbar) {
             updateSuggestionScrollbar(my);
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+        return super.mouseDragged(mouseX, my, button, deltaX, deltaY);
     }
 
     @Override
@@ -1095,7 +1100,7 @@ public class RecipeBuilderScreen extends Screen {
         }
         ctx.getMatrices().push();
         ctx.getMatrices().translate(x + 16, y + 16, 0);
-        ctx.getMatrices().multiply(net.minecraft.util.math.RotationAxis.POSITIVE_Z.rotation((float) Math.PI));
+        ctx.getMatrices().multiply(RotationAxis.POSITIVE_Z.rotationDegrees(180));
         ctx.getMatrices().translate(-x - 16, -y - 16, 0);
         CustomRecipeSprites.draw(ctx, texture, x, y, 32, 32);
         ctx.getMatrices().pop();

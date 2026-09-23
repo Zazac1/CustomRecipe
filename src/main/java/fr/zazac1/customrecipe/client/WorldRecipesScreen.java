@@ -8,9 +8,6 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
-import net.minecraft.world.level.storage.LevelSummary;
-
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -20,20 +17,21 @@ import java.util.List;
 final class WorldRecipesScreen extends Screen {
     private final ConfigScreen config;
     private final RecipeWorldsScreen parent;
-    private final LevelSummary world;
-    private String worldId;
+    private final String worldId;
+    private final String worldName;
     private int scroll;
 
-    WorldRecipesScreen(ConfigScreen config, RecipeWorldsScreen parent, LevelSummary world) {
-        super(Text.translatable("customrecipe.world.recipes_in", world == null ? Text.translatable("customrecipe.world.default_name") : world.getDisplayName()));
+    WorldRecipesScreen(ConfigScreen config, RecipeWorldsScreen parent, String worldId, String worldName) {
+        super(Text.translatable("customrecipe.world.recipes_in", worldName == null || worldName.isBlank()
+                ? Text.translatable("customrecipe.world.default_name") : worldName));
         this.config = config;
         this.parent = parent;
-        this.world = world;
+        this.worldId = worldId;
+        this.worldName = worldName;
     }
 
     @Override
     protected void init() {
-        worldId = worldId(world);
         int x = width / 2 - 170;
         int y = 40;
         List<CustomRecipeEntry> recipes = orderedRecipes();
@@ -88,18 +86,8 @@ final class WorldRecipesScreen extends Screen {
 
     private void toggle(CustomRecipeEntry recipe) {
         if (worldId == null) return;
-        config.setWorldAssigned(recipe, worldId, world.getDisplayName(), !isEnabled(recipe));
+        config.setWorldAssigned(recipe, worldId, worldName, !isEnabled(recipe));
         config.persistLocalWorldAssignments();
-    }
-
-    private String worldId(LevelSummary summary) {
-        if (summary == null || summary.getName() == null || summary.getName().isBlank()) return null;
-        try {
-            Path saves = client == null ? null : client.getLevelStorage().getSavesDirectory();
-            return saves == null ? null : WorldRecipeAssignments.worldId(saves.resolve(summary.getName()));
-        } catch (RuntimeException ignored) {
-            return null;
-        }
     }
 
     private String recipeName(CustomRecipeEntry recipe) {

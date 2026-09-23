@@ -9,9 +9,9 @@ import net.minecraft.recipe.input.CraftingRecipeInput;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryWrapper;
 import net.minecraft.util.Identifier;
-import net.minecraft.util.collection.DefaultedList;
 import net.minecraft.world.World;
 
+import net.minecraft.util.collection.DefaultedList;
 import java.util.Set;
 
 /** Keeps the original recipe but rejects configured material variants at craft time. */
@@ -40,6 +40,11 @@ public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
     @Override public ItemStack getResult(RegistryWrapper.WrapperLookup registries) { return delegate.getResult(registries); }
     @Override public RecipeSerializer<?> getSerializer() { return delegate.getSerializer(); }
     @Override public CraftingRecipeCategory getCategory() { return delegate.getCategory(); }
+    /**
+     * The vanilla recipe book cannot express "this recipe except birch planks".
+     * Hiding it avoids its auto-fill selecting a blocked material and leaving a
+     * broken crafting grid behind.
+     */
     @Override public DefaultedList<Ingredient> getIngredients() { return delegate.getIngredients(); }
     @Override public String getGroup() { return delegate.getGroup(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }

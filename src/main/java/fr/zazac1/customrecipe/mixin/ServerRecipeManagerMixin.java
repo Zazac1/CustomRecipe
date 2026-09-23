@@ -5,9 +5,6 @@ import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
-import fr.zazac1.customrecipe.RecipeIntegrity;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.recipe.*;
@@ -26,22 +23,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.google.gson.JsonElement;
 import java.util.Collection;
 
+// In Minecraft 1.21.8 the shaped-recipe pattern class is RawShapedRecipe (not ShapedRecipePattern)
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Applies this mod's persistent recipe configuration after 1.21.1 has loaded datapack recipes. */
 @Mixin(RecipeManager.class)
 public abstract class ServerRecipeManagerMixin {
-
     @Shadow public abstract Collection<RecipeEntry<?>> values();
     @Shadow public abstract void setRecipes(Iterable<RecipeEntry<?>> recipes);
 
-    @Inject(
-            method = "apply(Ljava/util/Map;Lnet/minecraft/resource/ResourceManager;Lnet/minecraft/util/profiler/Profiler;)V",
-            at = @At("TAIL")
-    )
+    @Inject(method = "apply(Ljava/util/Map;Lnet/minecraft/resource/ResourceManager;Lnet/minecraft/util/profiler/Profiler;)V", at = @At("TAIL"))
     private void customrecipe$applyConfig(Map<Identifier, JsonElement> ignored, ResourceManager resourceManager,
                                           Profiler profiler, CallbackInfo ci) {
         ConfigLoader.invalidate();
@@ -62,45 +56,39 @@ public abstract class ServerRecipeManagerMixin {
             });
         }
 
-        // 1b. Non-crafting recipes can be removed. Crafting recipes stay in the manager
-        // so the server browser can still show and re-enable them after a restart.
+        // 1b. Non-crafting recipes can be removed. Crafting recipes must retain
+        // their concrete vanilla classes for the 1.21.1 recipe-network codec;
+        // RecipeManagerCraftingFilterMixin enforces their state at craft time.
         if (!config.disabled_recipes.isEmpty()) {
             recipes.removeIf(entry -> config.disabled_recipes.contains(entry.id().toString())
                     && !(entry.value() instanceof CraftingRecipe));
         }
 
-        // 1c. Crafting recipes must stay as their native Minecraft classes so their
-        // packet codecs can synchronize them to clients. Their disabled state is
-        // enforced by RecipeManagerCraftingFilterMixin when crafting is attempted.
-
         // 2. Inject user custom recipes
         int idx = 0;
         boolean recipeStateChanged = false;
         for (CustomRecipeEntry entry : config.custom_recipes) {
-            if (entry == null) continue;
-            boolean wasCorrupted = Boolean.TRUE.equals(entry.corrupted);
-            RecipeIntegrity.refresh(entry);
-            recipeStateChanged |= wasCorrupted != Boolean.TRUE.equals(entry.corrupted);
+            if (entry == null || Boolean.FALSE.equals(entry.enabled) || Boolean.FALSE.equals(entry.server_enabled)) {
+                idx++;
+                continue;
+            }
+            recipeStateChanged |= fr.zazac1.customrecipe.RecipeIntegrity.refresh(entry);
+            RecipeEntry<?> built = Boolean.TRUE.equals(entry.corrupted) ? null
+                    : buildCustomRecipe(entry, idx, recipeBookGroup(entry));
             if (Boolean.TRUE.equals(entry.corrupted)) {
-                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Skipping corrupted recipe {} (missing: {})",
-                        entry.result, entry.missing_items);
+                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Disabled corrupted recipe {}: missing {}. Reinstall required mods {} or delete the recipe.",
+                        entry.id, entry.missing_items, entry.required_mods);
                 idx++;
                 continue;
             }
-            // Local ModMenu recipes are drafts until an OP explicitly adds them
-            // to the server. Null preserves recipes from configurations made
-            // before the server publication state existed.
-            boolean dedicatedServer = FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER;
-            if ((dedicatedServer && Boolean.FALSE.equals(entry.server_enabled)) || Boolean.FALSE.equals(entry.enabled)) {
-                idx++;
-                continue;
-            }
-            RecipeEntry<?> built = buildCustomRecipe(entry, idx++, recipeBookGroup(entry));
+            idx++;
             if (built != null) recipes.add(built);
         }
+        if (recipeStateChanged) ConfigLoader.saveIntegrityState(ConfigLoader.get());
 
-        if (recipeStateChanged) ConfigLoader.saveIntegrityState(rootConfig);
-
+        // The recipe manager uses the first matching entry. Vanilla entries
+        // stay first, so a custom recipe only takes effect after the matching
+        // vanilla recipe has been disabled. Custom recipes still share groups.
         setRecipes(recipes);
     }
 
@@ -125,6 +113,21 @@ public abstract class ServerRecipeManagerMixin {
         } else {
             return buildShapeless(entry, result, key, recipeGroup);
         }
+    }
+
+
+    /** Gives recipes with the same custom input one green-book entry. */
+    private String recipeBookGroup(CustomRecipeEntry entry) {
+        return "customrecipe_" + Integer.toUnsignedString(recipeInputSignature(entry).hashCode(), 36);
+    }
+
+    private String recipeInputSignature(CustomRecipeEntry entry) {
+        if ("shaped".equalsIgnoreCase(entry.type)) {
+            return "shaped:" + entry.pattern + ":" + entry.keys;
+        }
+        List<String> ingredients = entry.ingredients == null ? List.of() : new ArrayList<>(entry.ingredients);
+        java.util.Collections.sort(ingredients);
+        return "shapeless:" + ingredients;
     }
 
     // ── shapeless ─────────────────────────────────────────────────────────
@@ -193,18 +196,5 @@ public abstract class ServerRecipeManagerMixin {
                 result
         );
         return new RecipeEntry<>(key, recipe);
-    }
-
-    private String recipeBookGroup(CustomRecipeEntry entry) {
-        String signature;
-        if ("shaped".equalsIgnoreCase(entry.type)) {
-            signature = "shaped:" + String.join("/", entry.pattern == null ? List.of() : entry.pattern)
-                    + ":" + (entry.keys == null ? Map.of() : new java.util.TreeMap<>(entry.keys));
-        } else {
-            List<String> ingredients = new ArrayList<>(entry.ingredients == null ? List.of() : entry.ingredients);
-            ingredients.sort(String::compareTo);
-            signature = "shapeless:" + String.join(",", ingredients);
-        }
-        return "customrecipe_" + Integer.toUnsignedString(signature.hashCode(), 36);
     }
 }

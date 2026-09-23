@@ -126,9 +126,9 @@ public class ConfigScreen extends Screen {
 
         int libraryY = top + buttonHeight + gap;
         addDrawableChild(ButtonWidget.builder(Text.empty(),
-                // The server editor is already scoped to its current world. Its Library
-                // therefore opens that server world instead of the reusable Global Library.
-                b -> client.setScreen(new CustomRecipesScreen(this, !serverManaged)))
+                // The library button always opens the recipes for the selected target.
+                // On a dedicated server that target is the current server world.
+                b -> client.setScreen(new CustomRecipesScreen(this)))
                 .dimensions(x, libraryY, buttonWidth, buttonHeight).build());
         addHomeButton(libraryY, buttonWidth, Text.translatable("customrecipe.home.library").getString(), null, Items.BOOKSHELF, true);
 
@@ -295,14 +295,14 @@ public class ConfigScreen extends Screen {
         client.setScreen(new ConfigScreen(parent, imported, title.getString(), serverManaged, saveAction, target, targetLocked));
     }
     void save() {
-        saveAndReturn(parent);
+        saveAndReturn(parent, true);
     }
 
     /** Saves without skipping the screen that opened a sub-menu. */
-    void saveAndReturn(Screen returnTo) {
+    private void saveAndReturn(Screen returnTo, boolean announceSave) {
         saveAction.accept(currentConfig());
         if (!serverManaged && client.getServer() != null) {
-            if (client.player != null) {
+            if (announceSave && client.player != null) {
                 client.player.sendMessage(Text.translatable("customrecipe.chat.applying"), false);
             }
             client.getServer().execute(() -> client.getServer().getCommandManager()
@@ -318,7 +318,7 @@ public class ConfigScreen extends Screen {
             client.setScreen(this);
             return;
         }
-        saveAndReturn(this);
+        saveAndReturn(this, false);
     }
 
     @Override
@@ -397,6 +397,11 @@ public class ConfigScreen extends Screen {
     void addFromLibrary(CustomRecipeEntry source) {
         if (!target.isWorld() || source == null) return;
         CustomRecipeEntry copy = ConfigLoader.copyRecipe(source);
+        // A library entry is a reusable template, never a disabled server copy.
+        if (copy != null) {
+            copy.enabled = null;
+            copy.server_enabled = null;
+        }
         if (copy != null && recipes.stream().noneMatch(existing -> ConfigLoader.sameRecipe(existing, copy))) recipes.add(copy);
     }
 

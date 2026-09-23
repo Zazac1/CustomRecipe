@@ -17,8 +17,6 @@ import net.minecraft.recipe.RecipeEntry;
 import net.minecraft.recipe.ShapedRecipe;
 import net.minecraft.recipe.input.CraftingRecipeInput;
 import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
 import net.minecraft.text.Text;
 import net.minecraft.text.Style;
 import net.minecraft.text.ClickEvent;
@@ -28,8 +26,10 @@ import net.minecraft.util.Formatting;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import static net.minecraft.server.command.CommandManager.literal;
 
@@ -58,6 +58,7 @@ public final class ServerConfigNetworking {
                 for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
                     awardDefaultRecipes(player, server, true);
                 }
+                ReiCompat.refreshAfterRecipeReload(server);
             }
         });
 
@@ -310,7 +311,9 @@ public final class ServerConfigNetworking {
             List<Ingredient> ingredientsB = b.getIngredients();
             if (ingredientsA.size() != ingredientsB.size()) return false;
             for (int i = 0; i < ingredientsA.size(); i++) {
-                if (!ingredientSignature(ingredientsA.get(i)).equals(ingredientSignature(ingredientsB.get(i)))) return false;
+                if (!ingredientSignature(ingredientsA.get(i)).equals(ingredientSignature(ingredientsB.get(i)))) {
+                    return false;
+                }
             }
             return true;
         }
@@ -407,12 +410,18 @@ public final class ServerConfigNetworking {
 
     private static VanillaRecipePage findVanillaRecipes(net.minecraft.server.MinecraftServer server, RecipeQuery request) {
         String query = request.query() == null ? "" : request.query().trim().toLowerCase(Locale.ROOT);
+        Set<String> disabledRecipeIds = request.disabledRecipeIds() == null
+                ? Set.of() : new HashSet<>(request.disabledRecipeIds());
+        String statusFilter = request.statusFilter() == null ? "ALL" : request.statusFilter();
+        String sourceFilter = request.sourceFilter() == null ? "ALL" : request.sourceFilter();
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
 
         for (RecipeEntry<?> entry : server.getRecipeManager().values()) {
             Identifier recipeId = entry.id();
             if (!(entry.value() instanceof CraftingRecipe wrappedRecipe)
-                    || (recipeId.getNamespace().equals(CustomRecipeMod.MOD_ID) && recipeId.getPath().startsWith("custom/"))) continue;
+                    // Recipes owned by Custom Recipe are library templates or generated
+                    // custom recipes, never entries in the vanilla/mod recipe browser.
+                    || recipeId.getNamespace().equals(CustomRecipeMod.MOD_ID)) continue;
             CraftingRecipe recipe = unwrap(wrappedRecipe);
 
             // Special recipes (for example decorated pots) require a real grid and throw on EMPTY.
@@ -445,7 +454,19 @@ public final class ServerConfigNetworking {
 
             boolean outputMatch = request.matchOutput() && resultId.contains(query);
             boolean ingredientMatch = request.matchIngredients() && ingredients.stream().anyMatch(id -> id.contains(query));
-            if (query.isEmpty() || outputMatch || ingredientMatch) {
+            boolean disabled = disabledRecipeIds.contains(recipeId.toString());
+            boolean statusMatch = switch (statusFilter) {
+                case "ENABLED" -> !disabled && !special;
+                case "DISABLED" -> disabled && !special;
+                case "SPECIAL" -> special;
+                default -> true;
+            };
+            boolean sourceMatch = switch (sourceFilter) {
+                case "MODDED" -> !recipeId.getNamespace().equals("minecraft");
+                case "VANILLA" -> recipeId.getNamespace().equals("minecraft");
+                default -> true;
+            };
+            if (statusMatch && sourceMatch && (query.isEmpty() || outputMatch || ingredientMatch)) {
                 matches.add(new VanillaRecipePage.VanillaRecipeInfo(
                         entry.id().toString(), resultId,
                         toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
@@ -539,7 +560,8 @@ public final class ServerConfigNetworking {
         return slots;
     }
 
-    private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput, int page) {}
+    private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,
+                               String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {}
 
     private ServerConfigNetworking() {}
 }

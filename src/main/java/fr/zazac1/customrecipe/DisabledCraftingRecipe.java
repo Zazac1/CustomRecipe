@@ -7,8 +7,9 @@ import net.minecraft.recipe.RecipeSerializer;
 import net.minecraft.recipe.book.CraftingRecipeCategory;
 import net.minecraft.recipe.input.CraftingRecipeInput;
 import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.util.collection.DefaultedList;
 import net.minecraft.world.World;
+
+import net.minecraft.util.collection.DefaultedList;
 
 /** Keeps a disabled crafting recipe visible to management screens while preventing it from matching. */
 public final class DisabledCraftingRecipe implements CraftingRecipe {

@@ -306,8 +306,7 @@ public class BuiltinRecipesScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        double mx = mouseX, my = mouseY;
+    public boolean mouseClicked(double mx, double my, int button) {
         int toggleStart = stateX();
         int vis = maxVisible();
         for (int i = scroll; i < Math.min(RECIPES.length, scroll + vis); i++) {
@@ -322,7 +321,7 @@ public class BuiltinRecipesScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(mx, my, button);
     }
 
     @Override

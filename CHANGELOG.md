@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.4+1.21.1
+
+### Added
+
+- Ported the 1.3.4 feature set to Minecraft 1.21.1.
+- Added the Default Recipes Show filter: All, Modded, and Vanilla.
+
+### Changed
+
+- Renamed the home-screen Vanilla Recipes entry to Default Recipes and the recipe-state filter to Status.
+
+### Fixed
+
+- Disabled crafting recipes and material variants now retain their native 1.21.1 network recipe format while being blocked during crafting.
+
 ## 1.3.2+1.21.1
 
 ### Added
