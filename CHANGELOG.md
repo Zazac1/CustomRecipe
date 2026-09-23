@@ -1,11 +1,5 @@
 # Changelog
 
-## 1.3.4+26.3
-
-### Fixed
-
-- Updated the local development launcher to detect installed JDK 25 updates automatically.
-
 ## 1.3.2+26.3
 
 ### Added
