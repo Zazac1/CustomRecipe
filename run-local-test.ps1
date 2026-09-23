@@ -60,12 +60,12 @@ if ($properties -match '(?m)^online-mode=') {
 Set-Content -LiteralPath $serverProperties -Value $properties -NoNewline
 
 Write-Host 'Compilation du mod...'
-& '.\gradlew.bat' build
+& '.\gradlew.bat' build --no-daemon
 if ($LASTEXITCODE -ne 0) { throw 'Compilation échouée : lancement annulé.' }
 
 # Le build unique évite une course entre runServer et runClient sur les classes du mod.
-$serverScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer -x compileJava -x processResources -x classes"
-$clientScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runClient -x compileJava -x processResources -x classes"
+$serverScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer --no-daemon -x compileJava -x processResources -x classes"
+$clientScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runClient --no-daemon -x compileJava -x processResources -x classes"
 
 Write-Host "Serveur : $lanIp`:25565"
 Write-Host 'Mode local de développement : online-mode=false.'

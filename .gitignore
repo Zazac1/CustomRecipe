@@ -1,4 +1,5 @@
 .gradle/
+.gradle-port*/
 .gradle-user/
 build/
 bin/
