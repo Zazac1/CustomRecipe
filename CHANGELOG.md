@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.3.4+1.20.1
+
+### Port and compatibility
+
+- Rebuilt the 1.20.1 Fabric version on the current Custom Recipe 1.3.4 architecture.
+- Old shared configurations are migrated safely to the active world; the original is retained in `.legacy-backup` and the preceding valid save in `.previous`.
+- Server-editor saves now wait for a durable server acknowledgement. A failed write leaves the confirmation window open and reports the failure instead of silently closing.
+- Increased the supported configuration transfer size for larger pre-migration recipe libraries.
+
+### Fixed
+
+- Fixed Default Recipes discovery for both Vanilla and installed-mod recipes on Minecraft 1.20.1 (`data/*/recipes`).
+- Fixed parsing of the legacy 1.20.1 `result.item` recipe format.
+- Removed the Heavy Core/Mace quick-add entry, which does not exist in Minecraft 1.20.1.
+- Fixed the unsaved-changes confirmation to use an opaque, readable overlay.
+
 ## 1.3.2+1.20.1
 
 ### Added
