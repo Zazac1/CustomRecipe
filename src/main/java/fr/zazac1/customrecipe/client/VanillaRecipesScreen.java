@@ -45,12 +45,16 @@ public class VanillaRecipesScreen extends Screen {
     private enum StatusFilter {
         ALL, ENABLED, DISABLED, SPECIAL
     }
+    private enum SourceFilter {
+        ALL, MODDED, VANILLA
+    }
     private final ConfigScreen parent;
     private final boolean localMode;
     private String query = "";
     private boolean matchIngredients = true;
     private boolean matchOutput = true;
     private StatusFilter statusFilter = StatusFilter.ALL;
+    private SourceFilter sourceFilter = SourceFilter.ALL;
     private final List<VanillaRecipePage.VanillaRecipeInfo> recipes = new ArrayList<>();
     private int total;
     private int nextPage;
@@ -79,10 +83,18 @@ public class VanillaRecipesScreen extends Screen {
 
     private Text statusFilterLabel() {
         return switch (statusFilter) {
+            case ALL -> Text.translatable("customrecipe.vanilla.status_all");
+            case ENABLED -> Text.translatable("customrecipe.vanilla.status_enabled").withColor(0x55FF55);
+            case DISABLED -> Text.translatable("customrecipe.vanilla.status_disabled").withColor(0xFF5555);
+            case SPECIAL -> Text.translatable("customrecipe.vanilla.status_special").withColor(0x77BBFF);
+        };
+    }
+
+    private Text sourceFilterLabel() {
+        return switch (sourceFilter) {
             case ALL -> Text.translatable("customrecipe.vanilla.show_all");
-            case ENABLED -> Text.translatable("customrecipe.vanilla.show_enabled").withColor(0x55FF55);
-            case DISABLED -> Text.translatable("customrecipe.vanilla.show_disabled").withColor(0xFF5555);
-            case SPECIAL -> Text.translatable("customrecipe.vanilla.show_special").withColor(0x77BBFF);
+            case MODDED -> Text.translatable("customrecipe.vanilla.show_modded");
+            case VANILLA -> Text.translatable("customrecipe.vanilla.show_vanilla");
         };
     }
 
@@ -95,6 +107,15 @@ public class VanillaRecipesScreen extends Screen {
         };
         scroll = 0;
         clearAndInit();
+    }
+
+    private void cycleSourceFilter() {
+        sourceFilter = switch (sourceFilter) {
+            case ALL -> SourceFilter.MODDED;
+            case MODDED -> SourceFilter.VANILLA;
+            case VANILLA -> SourceFilter.ALL;
+        };
+        resetSearch();
     }
 
     public VanillaRecipesScreen(ConfigScreen parent) {
@@ -116,7 +137,11 @@ public class VanillaRecipesScreen extends Screen {
         addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client, parent.target(),
                 parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
         int searchButtonW = Math.max(72, textRenderer.getWidth(Text.translatable("customrecipe.vanilla.search").getString()) + 16);
-        int searchButtonX = width - 268 - searchButtonW;
+        int sourceFilterX = width - 100;
+        int statusFilterX = sourceFilterX - 96;
+        int outputFilterX = statusFilterX - 74;
+        int ingredientFilterX = outputFilterX - 92;
+        int searchButtonX = ingredientFilterX - 4 - searchButtonW;
         int clearSearchX = searchButtonX - 20;
         searchField = addDrawableChild(new TextFieldWidget(textRenderer, 8, SEARCH_Y, clearSearchX - 8, 18,
                 Text.translatable("customrecipe.vanilla.search_hint")));
@@ -141,13 +166,15 @@ public class VanillaRecipesScreen extends Screen {
         addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.vanilla.ingredient", Text.translatable(matchIngredients ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), b -> {
             matchIngredients = !matchIngredients;
             resetSearch();
-        }).dimensions(width - 266, SEARCH_Y, 88, 18).build());
+        }).dimensions(ingredientFilterX, SEARCH_Y, 88, 18).build());
         addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.vanilla.output", Text.translatable(matchOutput ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), b -> {
             matchOutput = !matchOutput;
             resetSearch();
-        }).dimensions(width - 174, SEARCH_Y, 70, 18).build());
+        }).dimensions(outputFilterX, SEARCH_Y, 70, 18).build());
         addDrawableChild(ButtonWidget.builder(statusFilterLabel(), b -> cycleStatusFilter())
-                .dimensions(width - 100, SEARCH_Y, 92, 18).build());
+                .dimensions(statusFilterX, SEARCH_Y, 92, 18).build());
+        addDrawableChild(ButtonWidget.builder(sourceFilterLabel(), b -> cycleSourceFilter())
+                .dimensions(sourceFilterX, SEARCH_Y, 92, 18).build());
 
         int visibleRows = visibleRows();
         List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
@@ -207,7 +234,8 @@ public class VanillaRecipesScreen extends Screen {
             clearAndInit();
             return;
         }
-        ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput, 0);
+        ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput,
+                statusFilter.name(), sourceFilter.name(), parent.disabledRecipes, 0);
     }
 
     /** Refresh after a short pause so typing does not scan or query once per key. */
@@ -228,7 +256,8 @@ public class VanillaRecipesScreen extends Screen {
     private void loadMore() {
         if (localMode || loading || recipes.size() >= total) return;
         loading = true;
-        ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput, nextPage);
+        ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput,
+                statusFilter.name(), sourceFilter.name(), parent.disabledRecipes, nextPage);
     }
 
     private VanillaRecipePage findLocalRecipes() {
@@ -261,6 +290,9 @@ public class VanillaRecipesScreen extends Screen {
     private void addLocalRecipe(List<VanillaRecipePage.VanillaRecipeInfo> matches, Set<String> matchedIds,
                                 String recipeId, String json, String loweredQuery) {
         if (!json.contains("crafting_")) return;
+        boolean vanillaRecipe = recipeId.startsWith("minecraft:");
+        if ((sourceFilter == SourceFilter.VANILLA && !vanillaRecipe)
+                || (sourceFilter == SourceFilter.MODDED && vanillaRecipe)) return;
         String resultId = findResultId(json, recipeId);
         boolean outputMatch = matchOutput && resultId.toLowerCase(Locale.ROOT).contains(loweredQuery);
         boolean ingredientMatch = matchIngredients && json.toLowerCase(Locale.ROOT).contains(loweredQuery);
@@ -323,7 +355,9 @@ public class VanillaRecipesScreen extends Screen {
                                 || recipeStart + "recipe/".length() >= path.length() - ".json".length()) continue;
                         String recipeId = path.substring("data/".length(), namespaceEnd) + ":"
                                 + path.substring(recipeStart + "recipe/".length(), path.length() - ".json".length());
-                        if (recipeId.startsWith("customrecipe:custom/")) continue;
+                        // Do not scan this mod's bundled library templates as
+                        // regular vanilla/mod recipes.
+                        if (recipeId.startsWith("customrecipe:")) continue;
                         try (var input = jar.getInputStream(entry)) {
                             addLocalRecipe(matches, matchedIds, recipeId,
                                     new String(input.readAllBytes(), StandardCharsets.UTF_8), loweredQuery);
@@ -428,7 +462,9 @@ public class VanillaRecipesScreen extends Screen {
 
     private void toggle(String recipeId) {
         if (!parent.disabledRecipes.remove(recipeId)) parent.disabledRecipes.add(recipeId);
-        clearAndInit();
+        // The server receives the staged disabled IDs, so refresh its exact
+        // filtered page and total instead of filtering a stale local page.
+        resetSearch();
     }
 
     void requestDetails(VanillaRecipeDetailsScreen screen, String recipeId) {

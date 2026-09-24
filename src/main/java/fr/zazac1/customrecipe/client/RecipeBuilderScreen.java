@@ -256,12 +256,18 @@ public class RecipeBuilderScreen extends Screen {
                 Text.translatable("customrecipe.builder.result_count").getString(), 0xCCCCCC));
         resultCountField = addDrawableChild(new TextFieldWidget(textRenderer, settingsX() + 70, countY - 2,
                 34, 18, Text.translatable("customrecipe.builder.result_count")));
-        resultCountField.setMaxLength(2);
-        resultCountField.setTextPredicate(value -> value.isEmpty() || (value.matches("\\d{1,2}")
-                && Integer.parseInt(value) >= 1 && Integer.parseInt(value) <= 64));
+        // Permit a three-digit attempt so values above a stack are immediately
+        // normalized to 64 instead of silently rejecting the latest key press.
+        resultCountField.setMaxLength(3);
+        resultCountField.setTextPredicate(value -> value.isEmpty() || value.matches("\\d{1,3}"));
         resultCountField.setText(String.valueOf(resultCount));
         resultCountField.setChangedListener(value -> {
-            if (!value.isEmpty()) resultCount = Integer.parseInt(value);
+            if (value.isEmpty()) return;
+            int normalized = Math.max(1, Math.min(64, Integer.parseInt(value)));
+            resultCount = normalized;
+            if (!value.equals(String.valueOf(normalized))) {
+                resultCountField.setText(String.valueOf(normalized));
+            }
         });
 
         // Shaped / Shapeless toggle

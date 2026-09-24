@@ -201,7 +201,6 @@ final class RecipeTargetSelectScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        renderBackground(context, mouseX, mouseY, delta);
         context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 8, 0xFFFFFF);
         super.render(context, mouseX, mouseY, delta);
         List<LocalWorld> shown = visibleWorlds();

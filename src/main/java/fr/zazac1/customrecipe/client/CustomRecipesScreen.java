@@ -71,7 +71,7 @@ public class CustomRecipesScreen extends Screen {
     private int bottomReserve() {
         if (libraryPicker) return 30;
         // World mode has two action buttons before Back; keep the table above both.
-        return parent.target().isWorld() ? 70 : 48;
+        return parent.target().isWorld() ? 92 : 48;
     }
     private int rowsTop()     { return listTop() + HEADER_H; }
     private int maxVisible()  { return Math.max(1, (listH() - HEADER_H) / ROW); }
@@ -309,7 +309,11 @@ public class CustomRecipesScreen extends Screen {
                         }
                         if (parent.target().isWorld()) {
                             // Per-world recipes can be toggled directly from their State cell.
-                            recipes.get(idx).enabled = active ? Boolean.FALSE : Boolean.TRUE;
+                            CustomRecipeEntry recipe = recipes.get(idx);
+                            recipe.enabled = active ? Boolean.FALSE : Boolean.TRUE;
+                            // `server_enabled` was an old client publication cache. It
+                            // must not keep a locally re-enabled recipe disabled.
+                            if (!active) recipe.server_enabled = null;
                             clearAndInit();
                         }
                     }
@@ -531,6 +535,14 @@ public class CustomRecipesScreen extends Screen {
 
         // ── Boutons du bas ────────────────────────────────────────────────
         if (!libraryPicker && parent.target().isWorld()) {
+            addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.enable_all"), b -> {
+                setAllRecipeStates(true);
+                clearAndInit();
+            }).dimensions(width / 2 - 100, height - 88, 98, 18).build());
+            addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.disable_all"), b -> {
+                setAllRecipeStates(false);
+                clearAndInit();
+            }).dimensions(width / 2 + 2, height - 88, 98, 18).build());
             addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.add_from_library"),
                     b -> client.setScreen(new CustomRecipesScreen(parent, true))
             ).dimensions(width / 2 - 100, height - 66, 200, 18).build());
@@ -995,6 +1007,14 @@ public class CustomRecipesScreen extends Screen {
         return !Boolean.FALSE.equals(entry.enabled)
                 && !Boolean.FALSE.equals(entry.server_enabled)
                 && (!parent.isServerManaged() || parent.isAddedToCurrentWorld(entry));
+    }
+
+    private void setAllRecipeStates(boolean enabled) {
+        for (CustomRecipeEntry recipe : recipes) {
+            if (recipe == null || isCorrupted(recipe)) continue;
+            recipe.enabled = enabled ? Boolean.TRUE : Boolean.FALSE;
+            if (enabled) recipe.server_enabled = null;
+        }
     }
 
     private String toName(String id) {
