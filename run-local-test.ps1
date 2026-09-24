@@ -3,8 +3,9 @@ $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
 
 $javaHomes = @(
-    'C:\Program Files\Java\jdk-17',
-    'C:\Program Files\Java\jdk-21.0.11'
+    'C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot',
+    'C:\Program Files\Java\jdk-21.0.11',
+    'C:\Program Files\Java\jdk-17'
 )
 $javaHome = $javaHomes | Where-Object {
     Test-Path -LiteralPath (Join-Path $_ 'bin\java.exe')
