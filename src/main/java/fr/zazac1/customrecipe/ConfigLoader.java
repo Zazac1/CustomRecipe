@@ -59,10 +59,16 @@ public final class ConfigLoader {
         cached = null;
     }
 
-    public static void saveAndInvalidate(ModConfig config) {
+    /**
+     * Saves atomically and only invalidates the in-memory copy after the file
+     * has been committed.  Callers that edit a remote server use the boolean
+     * result to avoid reporting a save which never reached disk.
+     */
+    public static boolean saveAndInvalidate(ModConfig config) {
         normalize(config);
-        save(config);
-        invalidate();
+        boolean saved = save(config);
+        if (saved) invalidate();
+        return saved;
     }
 
     /** Persists an automatically detected integrity state without discarding the loaded config. */
@@ -184,7 +190,7 @@ public final class ConfigLoader {
     }
 
     /** Writes through a temporary file and preserves the last known-good config. */
-    private static void save(ModConfig config) {
+    private static boolean save(ModConfig config) {
         stampSaveMetadata(config);
         Path temporary = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
         Path previous = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".previous");
@@ -196,9 +202,11 @@ public final class ConfigLoader {
             } catch (AtomicMoveNotSupportedException ignored) {
                 Files.move(temporary, CONFIG_PATH, StandardCopyOption.REPLACE_EXISTING);
             }
+            return true;
         } catch (IOException e) {
             CustomRecipeMod.LOGGER.error("[CustomRecipe] Failed to write config safely: {}", e.getMessage());
             try { Files.deleteIfExists(temporary); } catch (IOException ignored) {}
+            return false;
         }
     }
     /** Keeps the original pre-target config recoverable before its first migration. */

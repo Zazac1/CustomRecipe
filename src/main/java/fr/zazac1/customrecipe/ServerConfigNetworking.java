@@ -30,7 +30,9 @@ import static net.minecraft.server.command.CommandManager.literal;
 
 /** Server-side command and permission-checked config synchronization. */
 public final class ServerConfigNetworking {
-    private static final int MAX_JSON_CHARS = 30_000;
+    // Older versions wrote every recipe in one shared list.  A migration can
+    // legitimately make the editor payload much larger than 30 KiB.
+    private static final int MAX_JSON_CHARS = 500_000;
     // Chunks are loaded transparently by the client while the list is scrolled.
     private static final int VANILLA_PAGE_SIZE = 40;
     private static final Gson GSON = new Gson();
@@ -59,17 +61,24 @@ public final class ServerConfigNetworking {
             server.execute(() -> {
             if (!player.getCommandSource().hasPermissionLevel(2)) {
                 player.sendMessage(Text.literal("[Custom Recipe] Permission denied."), false);
+                sendSaveResult(player, false, "Permission denied.");
                 return;
             }
             ModConfig config = ConfigLoader.fromJson(json);
             if (config == null) {
                 player.sendMessage(Text.literal("[Custom Recipe] Invalid JSON; nothing was changed."), false);
+                sendSaveResult(player, false, "The saved configuration is invalid.");
                 return;
             }
 
             RecipeConflictChecker.validate(server, config);
-            ConfigLoader.saveAndInvalidate(config);
+            if (!ConfigLoader.saveAndInvalidate(config)) {
+                player.sendMessage(Text.literal("[Custom Recipe] Could not write the server config; nothing was applied."), false);
+                sendSaveResult(player, false, "The server could not write its configuration.");
+                return;
+            }
             player.sendMessage(Text.literal("[Custom Recipe] Server config saved. Reloading recipes..."), false);
+            sendSaveResult(player, true, "");
             server.getCommandManager().executeWithPrefix(player.getCommandSource(), "reload");
             });
         });
@@ -84,7 +93,7 @@ public final class ServerConfigNetworking {
                 String checkedJson = ConfigLoader.toJson(config);
                 if (checkedJson.length() <= MAX_JSON_CHARS) {
                     ServerPlayNetworking.send(player, ValidatedServerConfigPayload.ID,
-                            PacketByteBufs.create().writeString(checkedJson));
+                            PacketByteBufs.create().writeString(checkedJson, MAX_JSON_CHARS));
                 }
             });
         });
@@ -156,7 +165,17 @@ public final class ServerConfigNetworking {
             player.sendMessage(Text.literal("[Custom Recipe] The server config is too large to send to the editor."), false);
             return;
         }
-        ServerPlayNetworking.send(player, ServerConfigPayload.ID, PacketByteBufs.create().writeString(json));
+        ServerPlayNetworking.send(player, ServerConfigPayload.ID,
+                PacketByteBufs.create().writeString(json, MAX_JSON_CHARS));
+    }
+
+    /** The client keeps the confirmation dialog open until this acknowledgement arrives. */
+    private static void sendSaveResult(ServerPlayerEntity player, boolean saved, String reason) {
+        if (!ServerPlayNetworking.canSend(player, ServerConfigSaveResultPayload.ID)) return;
+        var payload = PacketByteBufs.create();
+        payload.writeBoolean(saved);
+        payload.writeString(reason == null ? "" : reason, 512);
+        ServerPlayNetworking.send(player, ServerConfigSaveResultPayload.ID, payload);
     }
 
     private static VanillaRecipePage findVanillaRecipes(net.minecraft.server.MinecraftServer server, RecipeQuery request) {

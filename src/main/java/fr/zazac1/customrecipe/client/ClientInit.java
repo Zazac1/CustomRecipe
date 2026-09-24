@@ -11,6 +11,7 @@ import fr.zazac1.customrecipe.VanillaRecipePagePayload;
 import fr.zazac1.customrecipe.VanillaRecipeDetails;
 import fr.zazac1.customrecipe.VanillaRecipeDetailsPayload;
 import fr.zazac1.customrecipe.ValidatedServerConfigPayload;
+import fr.zazac1.customrecipe.ServerConfigSaveResultPayload;
 import com.google.gson.Gson;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
@@ -87,7 +88,7 @@ public class ClientInit implements ClientModInitializer {
             CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
         });
         ClientPlayNetworking.registerGlobalReceiver(ServerConfigPayload.ID, (client, handler, buffer, responseSender) -> {
-            var config = ConfigLoader.fromJson(buffer.readString());
+            var config = ConfigLoader.fromJson(buffer.readString(500_000));
             client.execute(() -> {
                 if (config == null) {
                     if (client.player != null) client.player.sendMessage(Text.translatable("customrecipe.chat.invalid_server_config"), false);
@@ -100,7 +101,7 @@ public class ClientInit implements ClientModInitializer {
             });
         });
         ClientPlayNetworking.registerGlobalReceiver(ValidatedServerConfigPayload.ID, (client, handler, buffer, responseSender) -> {
-            var config = ConfigLoader.fromJson(buffer.readString());
+            var config = ConfigLoader.fromJson(buffer.readString(500_000));
             client.execute(() -> {
                 if (config == null) {
                     if (client.player != null) client.player.sendMessage(Text.translatable("customrecipe.chat.invalid_server_validation"), false);
@@ -109,6 +110,11 @@ public class ClientInit implements ClientModInitializer {
                 client.setScreen(new ConfigScreen(client.currentScreen, config,
                         "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
             });
+        });
+        ClientPlayNetworking.registerGlobalReceiver(ServerConfigSaveResultPayload.ID, (client, handler, buffer, responseSender) -> {
+            boolean saved = buffer.readBoolean();
+            String message = buffer.readString(512);
+            client.execute(() -> ClientServerConfigNetworking.completeSave(saved, message));
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipePagePayload.ID, (client, handler, buffer, responseSender) -> {
             VanillaRecipePage page = GSON.fromJson(buffer.readString(), VanillaRecipePage.class);

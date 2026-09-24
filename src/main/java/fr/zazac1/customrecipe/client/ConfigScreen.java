@@ -39,6 +39,7 @@ public class ConfigScreen extends Screen {
     private final RecipeTarget target;
     private final WorldRecipeConfig targetConfig;
     private String initialConfigJson;
+    private boolean serverSavePending;
 
     /** Shared state — modified by sub-screens, saved on Save. */
     final List<CustomRecipeEntry> recipes;
@@ -295,7 +296,33 @@ public class ConfigScreen extends Screen {
         client.setScreen(new ConfigScreen(parent, imported, title.getString(), serverManaged, saveAction, target, targetLocked));
     }
     void save() {
+        if (serverManaged) {
+            saveServerAndReturn();
+            return;
+        }
         saveAndReturn(parent, true);
+    }
+
+    /**
+     * A server editor must not disappear merely because a packet was queued:
+     * with old, migrated files the payload is often large and the write can
+     * fail after it leaves the client.  Leave the dialog in place until the
+     * server confirms its atomic write.
+     */
+    private void saveServerAndReturn() {
+        if (serverSavePending) return;
+        serverSavePending = true;
+        if (client.player != null) client.player.sendMessage(Text.translatable("customrecipe.chat.server_applying"), false);
+        boolean queued = ClientServerConfigNetworking.save(currentConfig(), (saved, message) -> {
+            serverSavePending = false;
+            if (saved) {
+                initialConfigJson = ConfigLoader.toJson(currentConfig());
+                client.setScreen(parent);
+            } else if (client.player != null) {
+                client.player.sendMessage(Text.literal("[Custom Recipe] Save failed: " + message), false);
+            }
+        });
+        if (!queued) serverSavePending = false;
     }
 
     /** Saves without skipping the screen that opened a sub-menu. */
