@@ -264,14 +264,14 @@ public class VanillaRecipesScreen extends Screen {
         String loweredQuery = query.trim().toLowerCase(Locale.ROOT);
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
         Set<String> matchedIds = new HashSet<>();
-        Map<Identifier, Resource> resources = client.getResourceManager().findResources("recipe",
+        Map<Identifier, Resource> resources = client.getResourceManager().findResources("recipes",
                 id -> id.getPath().endsWith(".json"));
 
         for (Map.Entry<Identifier, Resource> resource : resources.entrySet()) {
             try (var input = resource.getValue().getInputStream()) {
                 String json = new String(input.readAllBytes(), StandardCharsets.UTF_8);
                 String recipeId = resource.getKey().getNamespace() + ":" + resource.getKey().getPath()
-                        .substring("recipe/".length(), resource.getKey().getPath().length() - ".json".length());
+                        .substring("recipes/".length(), resource.getKey().getPath().length() - ".json".length());
                 addLocalRecipe(matches, matchedIds, recipeId, json, loweredQuery);
             } catch (Exception ignored) {
                 // A malformed optional resource is simply omitted from the local browser.
@@ -312,10 +312,10 @@ public class VanillaRecipesScreen extends Screen {
             while (entries.hasMoreElements()) {
                 var entry = entries.nextElement();
                 String path = entry.getName();
-                if (!path.startsWith("data/minecraft/recipe/") || !path.endsWith(".json")) continue;
+                if (!path.startsWith("data/minecraft/recipes/") || !path.endsWith(".json")) continue;
                 try (var input = jar.getInputStream(entry)) {
                     String json = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-                    String recipeId = "minecraft:" + path.substring("data/minecraft/recipe/".length(), path.length() - ".json".length());
+                    String recipeId = "minecraft:" + path.substring("data/minecraft/recipes/".length(), path.length() - ".json".length());
                     addLocalRecipe(matches, matchedIds, recipeId, json, loweredQuery);
                 }
             }
@@ -346,15 +346,14 @@ public class VanillaRecipesScreen extends Screen {
                         var entry = entries.nextElement();
                         String path = entry.getName();
                         if (!path.startsWith("data/") || !path.endsWith(".json")) continue;
-                        // Accept only data/<namespace>/recipe/<id>.json. A loose
-                        // contains("/recipe/") also matched advancement/datapack paths.
+                        // 1.20.1 datapacks store recipes under data/<namespace>/recipes/<id>.json.
                         int namespaceEnd = path.indexOf('/', "data/".length());
                         int recipeStart = namespaceEnd + 1;
                         if (namespaceEnd <= "data/".length()
-                                || !path.startsWith("recipe/", recipeStart)
-                                || recipeStart + "recipe/".length() >= path.length() - ".json".length()) continue;
+                                || !path.startsWith("recipes/", recipeStart)
+                                || recipeStart + "recipes/".length() >= path.length() - ".json".length()) continue;
                         String recipeId = path.substring("data/".length(), namespaceEnd) + ":"
-                                + path.substring(recipeStart + "recipe/".length(), path.length() - ".json".length());
+                                + path.substring(recipeStart + "recipes/".length(), path.length() - ".json".length());
                         // Do not scan this mod's bundled library templates as
                         // regular vanilla/mod recipes.
                         if (recipeId.startsWith("customrecipe:")) continue;
@@ -376,8 +375,10 @@ public class VanillaRecipesScreen extends Screen {
             JsonElement result = root.get("result");
             if (result == null) return fallback;
             if (result.isJsonPrimitive()) return result.getAsString();
-            if (result.isJsonObject() && result.getAsJsonObject().has("id")) {
-                return result.getAsJsonObject().get("id").getAsString();
+            if (result.isJsonObject()) {
+                JsonObject object = result.getAsJsonObject();
+                if (object.has("item")) return object.get("item").getAsString();
+                if (object.has("id")) return object.get("id").getAsString();
             }
         } catch (Exception ignored) {}
         return fallback;
@@ -479,7 +480,7 @@ public class VanillaRecipesScreen extends Screen {
     private fr.zazac1.customrecipe.VanillaRecipeDetails findLocalRecipeDetails(String recipeId) {
         Identifier id = Identifier.tryParse(recipeId);
         if (id == null) return new fr.zazac1.customrecipe.VanillaRecipeDetails(recipeId, List.of());
-        Identifier resourceId = Identifier.of(id.getNamespace(), "recipe/" + id.getPath() + ".json");
+        Identifier resourceId = new Identifier(id.getNamespace(), "recipes/" + id.getPath() + ".json");
         Optional<String> json = readLocalRecipeJson(resourceId);
         if (json.isEmpty()) return new fr.zazac1.customrecipe.VanillaRecipeDetails(recipeId, List.of());
 

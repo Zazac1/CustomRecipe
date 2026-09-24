@@ -29,7 +29,6 @@ public class BuiltinRecipesScreen extends Screen {
             {"enchanted_golden_apple", "Enchanted Golden Apple", "minecraft:enchanted_golden_apple"},
             {"elytra",                 "Elytra",                 "minecraft:elytra"},
             {"experience_bottle",      "Bottle o' Enchanting",   "minecraft:experience_bottle"},
-            {"heavy_core",             "Heavy Core",             "minecraft:heavy_core"},
     };
 
     /** Ingredient grids [recipeIndex][row][col] — null = slot vide */
@@ -50,13 +49,9 @@ public class BuiltinRecipesScreen extends Screen {
         {{null, "minecraft:lapis_lazuli", null},
          {"minecraft:emerald", "minecraft:glass_bottle", "minecraft:emerald"},
          {null, "minecraft:lapis_lazuli", null}},
-        // 4 heavy_core: _N_ / NBN / _N_  N=netherite_ingot B=breeze_rod
-        {{null, "minecraft:netherite_ingot", null},
-         {"minecraft:netherite_ingot", "minecraft:breeze_rod", "minecraft:netherite_ingot"},
-         {null, "minecraft:netherite_ingot", null}},
     };
 
-    private static final int[] RESULT_COUNTS = {1, 1, 1, 1, 1};
+    private static final int[] RESULT_COUNTS = {1, 1, 1, 1};
 
     static int quickAddCount() { return RECIPES.length; }
     static String quickAddId(int index) { return RECIPES[index][0]; }

@@ -36,9 +36,7 @@ final class SaveChangesScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // Keep the editor visible: this screen behaves as a modal confirmation, not a new menu.
-        returnTo.render(context, mouseX, mouseY, delta);
-        context.fill(0, 0, width, height, 0x98000000);
+        context.fill(0, 0, width, height, 0xFF000000);
 
         int panelWidth = 250;
         int panelHeight = 92;
