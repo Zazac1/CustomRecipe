@@ -21,8 +21,10 @@ import net.minecraft.util.Identifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import static net.minecraft.server.command.CommandManager.literal;
 
@@ -48,6 +50,7 @@ public final class ServerConfigNetworking {
                 for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
                     awardDefaultRecipes(player, server);
                 }
+                ReiCompat.refreshAfterRecipeReload(server);
             }
         });
 
@@ -158,12 +161,21 @@ public final class ServerConfigNetworking {
 
     private static VanillaRecipePage findVanillaRecipes(net.minecraft.server.MinecraftServer server, RecipeQuery request) {
         String query = request.query() == null ? "" : request.query().trim().toLowerCase(Locale.ROOT);
+        Set<String> disabledRecipeIds = request.disabledRecipeIds() == null
+                ? Set.of() : new HashSet<>(request.disabledRecipeIds());
+        String statusFilter = request.statusFilter() == null ? "ALL" : request.statusFilter();
+        String sourceFilter = request.sourceFilter() == null ? "ALL" : request.sourceFilter();
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
 
         for (net.minecraft.recipe.Recipe<?> entry : server.getRecipeManager().values()) {
             if (!(entry instanceof CraftingRecipe wrappedRecipe)
-                    || (entry.getId().getNamespace().equals(CustomRecipeMod.MOD_ID) && entry.getId().getPath().startsWith("custom/"))) continue;
+                    // The namespace also contains bundled library templates;
+                    // none of this mod's recipes belongs in Default Recipes.
+                    || entry.getId().getNamespace().equals(CustomRecipeMod.MOD_ID)) continue;
             CraftingRecipe recipe = unwrap(wrappedRecipe);
+            // 1.20.1 exposes special crafting recipes through the recipe-book
+            // flag instead of the newer isSpecial API.
+            boolean special = recipe.isIgnoredInRecipeBook();
 
             // Special recipes (for example decorated pots) require a real grid and throw on EMPTY.
             ItemStack result = ItemStack.EMPTY;
@@ -194,11 +206,23 @@ public final class ServerConfigNetworking {
 
             boolean outputMatch = request.matchOutput() && resultId.contains(query);
             boolean ingredientMatch = request.matchIngredients() && ingredients.stream().anyMatch(id -> id.contains(query));
-            if (query.isEmpty() || outputMatch || ingredientMatch) {
+            boolean disabled = disabledRecipeIds.contains(entry.getId().toString());
+            boolean statusMatch = switch (statusFilter) {
+                case "ENABLED" -> !disabled && !special;
+                case "DISABLED" -> disabled && !special;
+                case "SPECIAL" -> special;
+                default -> true;
+            };
+            boolean sourceMatch = switch (sourceFilter) {
+                case "MODDED" -> !entry.getId().getNamespace().equals("minecraft");
+                case "VANILLA" -> entry.getId().getNamespace().equals("minecraft");
+                default -> true;
+            };
+            if (statusMatch && sourceMatch && (query.isEmpty() || outputMatch || ingredientMatch)) {
                 matches.add(new VanillaRecipePage.VanillaRecipeInfo(
                         entry.getId().toString(), resultId,
                         toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
-                        gridWidth, gridHeight, shapeless));
+                        gridWidth, gridHeight, shapeless, special));
             }
         }
 
@@ -288,7 +312,8 @@ public final class ServerConfigNetworking {
         return slots;
     }
 
-    private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput, int page) {}
+    private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,
+                               String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {}
 
     private ServerConfigNetworking() {}
 }

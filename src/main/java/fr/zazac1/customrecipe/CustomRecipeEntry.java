@@ -1,12 +1,10 @@
 package fr.zazac1.customrecipe;
 
-import net.minecraft.util.Identifier;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Locale;
+import net.minecraft.util.Identifier;
 
 /**
  * Represents a single user-created custom crafting recipe.
@@ -55,7 +53,7 @@ public class CustomRecipeEntry {
     /** Human-readable world names for the assignment editor. */
     public Map<String, String> world_names;
 
-    /** Whether every player should know this recipe as soon as they join. */
+    /** Whether every player learns this recipe automatically. */
     public Boolean known_by_default;
 
     /** Shows this saved recipe in the Quick Add sidebar. */
@@ -67,20 +65,20 @@ public class CustomRecipeEntry {
     /** Set automatically when an output or ingredient item no longer exists. */
     public Boolean corrupted;
 
-    /** Missing item IDs that caused this recipe to be marked corrupted. */
+    /** Missing item IDs that caused {@link #corrupted} to be set. */
     public List<String> missing_items = new ArrayList<>();
 
-    /** Default crafting recipe IDs with identical inputs and output item. */
+    /** Default crafting recipe IDs with the same inputs and the same output item. */
     public List<String> conflicting_recipes = new ArrayList<>();
 
-    /** Default crafting recipe IDs with identical inputs but a different output item. */
+    /** Default crafting recipe IDs with the same inputs but a different output item. */
     public List<String> same_shape_recipes = new ArrayList<>();
 
-    /** Stable recipe ID shared by reloads and recipe-book unlocks. */
+    /** Stable server key used for recipe loading and automatic recipe-book unlocks. */
     public Identifier serverRecipeId() {
         String source = id == null || id.isBlank() ? result : id;
         String safeId = source == null ? "recipe"
-                : source.replaceAll("[^a-zA-Z0-9_./-]", "_").toLowerCase(Locale.ROOT);
-        return new Identifier(CustomRecipeMod.MOD_ID, "custom/" + safeId);
+                : source.replaceAll("[^a-zA-Z0-9_./-]", "_").toLowerCase(java.util.Locale.ROOT);
+        return Identifier.of(CustomRecipeMod.MOD_ID, "custom/" + safeId);
     }
 }

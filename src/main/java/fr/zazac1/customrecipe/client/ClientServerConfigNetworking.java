@@ -12,6 +12,8 @@ import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 
+import java.util.List;
+
 /** Client-only sender for the OP server editor. */
 @Environment(EnvType.CLIENT)
 public final class ClientServerConfigNetworking {
@@ -25,16 +27,19 @@ public final class ClientServerConfigNetworking {
                 PacketByteBufs.create().writeString(ConfigLoader.toJson(config)));
     }
 
-    public static void searchVanilla(String query, boolean matchIngredients, boolean matchOutput, int page) {
+    public static void searchVanilla(String query, boolean matchIngredients, boolean matchOutput,
+                                     String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {
         ClientPlayNetworking.send(VanillaRecipeQueryPayload.ID,
-                PacketByteBufs.create().writeString(GSON.toJson(new RecipeQuery(query, matchIngredients, matchOutput, page))));
+                PacketByteBufs.create().writeString(GSON.toJson(new RecipeQuery(query, matchIngredients, matchOutput,
+                        statusFilter, sourceFilter, disabledRecipeIds, page))));
     }
 
     public static void requestVanillaDetails(String recipeId) {
         ClientPlayNetworking.send(VanillaRecipeDetailsQueryPayload.ID, PacketByteBufs.create().writeString(recipeId));
     }
 
-    private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput, int page) {}
+    private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,
+                               String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {}
 
     private ClientServerConfigNetworking() {}
 }

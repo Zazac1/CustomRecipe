@@ -1,7 +1,10 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
+import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.ModConfig;
+import fr.zazac1.customrecipe.WorldRecipeConfig;
+import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import fr.zazac1.customrecipe.ServerConfigPayload;
 import fr.zazac1.customrecipe.VanillaRecipePage;
 import fr.zazac1.customrecipe.VanillaRecipePagePayload;
@@ -12,41 +15,95 @@ import com.google.gson.Gson;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.gui.screen.TitleScreen;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.GameMenuScreen;
+import net.minecraft.text.ClickEvent;
+import net.minecraft.text.HoverEvent;
+import net.minecraft.text.Style;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
+import net.minecraft.util.WorldSavePath;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
 @Environment(EnvType.CLIENT)
 public class ClientInit implements ClientModInitializer {
-
-    private static boolean shown = false;
+    private static String activeClientWorldId = "";
     private static final Gson GSON = new Gson();
 
     @Override
     public void onInitializeClient() {
-        restoreLocalRecipeStates();
-        ClientPlayNetworking.registerGlobalReceiver(ServerConfigPayload.ID, (client, handler, buffer, responseSender) -> {
-            String json = buffer.readString();
-            client.execute(() -> {
-            var config = ConfigLoader.fromJson(json);
-            if (config == null) {
-                client.player.sendMessage(net.minecraft.text.Text.literal("[Custom Recipe] Invalid server config received."), false);
+        // Used only by the clickable local-world tip; it never reaches a server.
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
+                literal("customrecipe_open_local").executes(context -> {
+                    MinecraftClient client = MinecraftClient.getInstance();
+                    // This client-only helper is for the clickable new-world tip.
+                    // Never expose the local editor while connected to a remote server.
+                    if (client.getServer() == null) return 0;
+                    client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new GameMenuScreen(true))));
+                    return 1;
+                })
+        ));
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (client.getServer() == null) {
+                activeClientWorldId = "";
                 return;
             }
-            int imported = mergeLocalRecipes(config);
-            if (imported > 0) {
-                client.player.sendMessage(net.minecraft.text.Text.literal(
-                        "[Custom Recipe] " + imported + " local recipe(s) ready to add to the server."), false);
+            if (client.player == null) return;
+            String worldId = currentLocalWorldId(client);
+            if (worldId.equals(activeClientWorldId)) return;
+            activeClientWorldId = worldId;
+            // Minecraft starts a freshly created save on day 0. Existing saves
+            // are never candidates, even if they have no tip flag yet.
+            String levelName = client.getServer().getSaveProperties().getLevelName();
+            long day = client.getServer().getOverworld().getTimeOfDay() / 24000L;
+            String worldInstanceId = currentLocalWorldInstanceId(client);
+            WorldRecipeConfig savedWorldConfig = ConfigLoader.get().findWorldConfig(worldId);
+            boolean alreadyShown = savedWorldConfig != null && savedWorldConfig.shown_editor_tip
+                    && worldInstanceId.equals(savedWorldConfig.editor_tip_world_instance);
+            CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip check: world='{}', id='{}', instance='{}', day={}, alreadyShown={}",
+                    levelName, worldId, worldInstanceId, day, alreadyShown);
+            if (day != 0L) {
+                CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip skipped: world is no longer on day 0.");
+                return;
             }
-            ClientServerConfigNetworking.validate(config);
+            if (!WorldRecipeAssignments.markEditorTipShown(worldId, levelName, worldInstanceId)) {
+                CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip skipped: this world is already marked as shown.");
+                return;
+            }
+            Text editorLink = Text.translatable("customrecipe.chat.world_tip.link")
+                    .setStyle(Style.EMPTY.withColor(Formatting.AQUA).withUnderline(true)
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_open_local"))
+                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                    Text.translatable("customrecipe.chat.world_tip.hover"))));
+            client.player.sendMessage(Text.translatable("customrecipe.chat.world_tip", editorLink), false);
+            CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
+        });
+        ClientPlayNetworking.registerGlobalReceiver(ServerConfigPayload.ID, (client, handler, buffer, responseSender) -> {
+            var config = ConfigLoader.fromJson(buffer.readString());
+            client.execute(() -> {
+                if (config == null) {
+                    if (client.player != null) client.player.sendMessage(Text.translatable("customrecipe.chat.invalid_server_config"), false);
+                    return;
+                }
+                int imported = mergeLocalRecipes(config);
+                if (imported > 0 && client.player != null) client.player.sendMessage(
+                        Text.translatable("customrecipe.chat.local_recipes_ready", imported), false);
+                ClientServerConfigNetworking.validate(config);
             });
         });
         ClientPlayNetworking.registerGlobalReceiver(ValidatedServerConfigPayload.ID, (client, handler, buffer, responseSender) -> {
-            String json = buffer.readString();
+            var config = ConfigLoader.fromJson(buffer.readString());
             client.execute(() -> {
-                var config = ConfigLoader.fromJson(json);
                 if (config == null) {
-                    client.player.sendMessage(net.minecraft.text.Text.literal("[Custom Recipe] Invalid validated server config."), false);
+                    if (client.player != null) client.player.sendMessage(Text.translatable("customrecipe.chat.invalid_server_validation"), false);
                     return;
                 }
                 client.setScreen(new ConfigScreen(client.currentScreen, config,
@@ -55,42 +112,45 @@ public class ClientInit implements ClientModInitializer {
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipePagePayload.ID, (client, handler, buffer, responseSender) -> {
             VanillaRecipePage page = GSON.fromJson(buffer.readString(), VanillaRecipePage.class);
-            client.execute(() -> { if (page != null && client.currentScreen instanceof VanillaRecipesScreen120 screen) {
-                screen.applyResult(page);
-            }});
+            client.execute(() -> { if (page != null && client.currentScreen instanceof VanillaRecipesScreen screen) screen.applyResult(page); });
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsPayload.ID, (client, handler, buffer, responseSender) -> {
             VanillaRecipeDetails details = GSON.fromJson(buffer.readString(), VanillaRecipeDetails.class);
-            client.execute(() -> { if (details != null && client.currentScreen instanceof VanillaRecipeDetailsScreen120 screen) {
-                screen.applyDetails(details);
-            }});
-        });
-        ScreenEvents.AFTER_INIT.register((client, screen, sw, sh) -> {
-            if (!shown && screen instanceof TitleScreen && !ConfigLoader.get().seen_welcome) {
-                shown = true;
-                client.execute(() -> client.setScreen(new WelcomeScreen(screen)));
-            }
+            client.execute(() -> { if (details != null && client.currentScreen instanceof VanillaRecipeDetailsScreen screen) screen.applyDetails(details); });
         });
     }
 
     /**
-     * Local ModMenu recipes are active in singleplayer.  The false value is
-     * reserved for a draft temporarily shown by the server editor, so older
-     * client configs created by the first 1.20.1 build must be restored.
+     * An integrated server can report its save root as ".". Resolve the level
+     * directory through the client save list so two different solo worlds never
+     * share the same first-entry message state.
      */
-    private static void restoreLocalRecipeStates() {
-        ModConfig localConfig = ConfigLoader.get();
-        boolean changed = false;
-        for (var recipe : localConfig.custom_recipes) {
-            if (Boolean.FALSE.equals(recipe.server_enabled)) {
-                recipe.server_enabled = null;
-                changed = true;
-            }
-        }
-        if (changed) ConfigLoader.saveAndInvalidate(localConfig);
+    private static String currentLocalWorldId(MinecraftClient client) {
+        return WorldRecipeAssignments.worldId(currentLocalWorldDirectory(client));
     }
 
-    /** Stages local ModMenu recipes in the server editor without duplicating existing ones. */
+    private static String currentLocalWorldInstanceId(MinecraftClient client) {
+        Path worldDirectory = currentLocalWorldDirectory(client);
+        try {
+            long created = Files.readAttributes(worldDirectory, BasicFileAttributes.class)
+                    .creationTime().toMillis();
+            return "created-" + created;
+        } catch (Exception ignored) {
+            return "seed-" + client.getServer().getOverworld().getSeed();
+        }
+    }
+
+    private static Path currentLocalWorldDirectory(MinecraftClient client) {
+        String levelName = client.getServer().getSaveProperties().getLevelName();
+        if (levelName != null && !levelName.isBlank()) {
+            Path saves = client.getLevelStorage().getSavesDirectory();
+            Path worldDirectory = saves.resolve(levelName);
+            if (Files.isDirectory(worldDirectory)) return worldDirectory;
+        }
+        return client.getServer().getSavePath(WorldSavePath.ROOT);
+    }
+
+    /** Stages local ModMenu recipes in the server editor without sending them automatically. */
     private static int mergeLocalRecipes(fr.zazac1.customrecipe.ModConfig serverConfig) {
         int added = 0;
         for (var localRecipe : ConfigLoader.get().custom_recipes) {
@@ -114,14 +174,11 @@ public class ClientInit implements ClientModInitializer {
         copy.keys = new java.util.LinkedHashMap<>(source.keys);
         copy.result = source.result;
         copy.count = source.count;
-        copy.enabled = source.enabled;
-        copy.server_enabled = Boolean.FALSE;
+        copy.enabled = null;
+        copy.server_enabled = null;
+        copy.world_ids = new java.util.ArrayList<>();
+        copy.world_names = new java.util.LinkedHashMap<>();
         copy.known_by_default = source.known_by_default;
-        copy.required_mods = new java.util.LinkedHashMap<>(source.required_mods);
-        copy.corrupted = source.corrupted;
-        copy.missing_items = new java.util.ArrayList<>(source.missing_items);
-        copy.conflicting_recipes = new java.util.ArrayList<>(source.conflicting_recipes);
-        copy.same_shape_recipes = new java.util.ArrayList<>(source.same_shape_recipes);
         return copy;
     }
 }

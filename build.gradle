@@ -60,6 +60,10 @@ tasks.withType(JavaCompile).configureEach {
     it.options.release = 21
 }
 
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
 jar {
     from('LICENSE') {
         rename { "${it}_${project.mod_id}" }

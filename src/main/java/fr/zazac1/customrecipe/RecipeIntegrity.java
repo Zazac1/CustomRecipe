@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Validates saved item IDs without deleting recipes when a required mod disappears. */
+/** Validates saved item IDs without deleting the recipe that references them. */
 public final class RecipeIntegrity {
     private RecipeIntegrity() {}
 
@@ -20,7 +20,8 @@ public final class RecipeIntegrity {
         rememberRequiredMods(recipe);
         List<String> missing = missingItems(recipe);
         boolean corrupted = !missing.isEmpty();
-        boolean changed = corrupted != Boolean.TRUE.equals(recipe.corrupted) || !missing.equals(recipe.missing_items);
+        boolean changed = corrupted != Boolean.TRUE.equals(recipe.corrupted)
+                || !missing.equals(recipe.missing_items);
         recipe.corrupted = corrupted ? Boolean.TRUE : null;
         recipe.missing_items = missing;
         return changed;
@@ -30,11 +31,14 @@ public final class RecipeIntegrity {
         List<String> missing = new ArrayList<>();
         for (String rawId : referencedItemIds(recipe)) {
             Identifier id = Identifier.tryParse(rawId);
-            if (id == null || !Registries.ITEM.containsId(id) || Registries.ITEM.get(id) == Items.AIR) missing.add(rawId);
+            if (id == null || !Registries.ITEM.containsId(id) || Registries.ITEM.get(id) == Items.AIR) {
+                missing.add(rawId);
+            }
         }
         return missing;
     }
 
+    /** Records non-vanilla mod IDs and their versions when the recipe is created or saved. */
     public static void rememberRequiredMods(CustomRecipeEntry recipe) {
         if (recipe.required_mods == null) recipe.required_mods = new LinkedHashMap<>();
         for (String rawId : referencedItemIds(recipe)) {
@@ -56,7 +60,8 @@ public final class RecipeIntegrity {
 
     private static String installedVersion(String modId) {
         return FabricLoader.getInstance().getModContainer(modId)
-                .map(container -> container.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
+                .map(container -> container.getMetadata().getVersion().getFriendlyString())
+                .orElse("unknown");
     }
 
     private static List<String> referencedItemIds(CustomRecipeEntry recipe) {
