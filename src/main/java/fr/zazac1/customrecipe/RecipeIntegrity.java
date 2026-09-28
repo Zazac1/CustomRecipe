@@ -1,9 +1,9 @@
 package fr.zazac1.customrecipe;
 
-import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
+import net.minecraftforge.fml.ModList;
+import net.minecraft.world.item.Items;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -30,8 +30,8 @@ public final class RecipeIntegrity {
     public static List<String> missingItems(CustomRecipeEntry recipe) {
         List<String> missing = new ArrayList<>();
         for (String rawId : referencedItemIds(recipe)) {
-            Identifier id = Identifier.tryParse(rawId);
-            if (id == null || !Registries.ITEM.containsId(id) || Registries.ITEM.get(id) == Items.AIR) {
+            ResourceLocation id = ResourceLocation.tryParse(rawId);
+            if (id == null || !BuiltInRegistries.ITEM.containsKey(id) || BuiltInRegistries.ITEM.get(id) == Items.AIR) {
                 missing.add(rawId);
             }
         }
@@ -42,7 +42,7 @@ public final class RecipeIntegrity {
     public static void rememberRequiredMods(CustomRecipeEntry recipe) {
         if (recipe.required_mods == null) recipe.required_mods = new LinkedHashMap<>();
         for (String rawId : referencedItemIds(recipe)) {
-            Identifier itemId = Identifier.tryParse(rawId);
+            ResourceLocation itemId = ResourceLocation.tryParse(rawId);
             if (itemId == null || "minecraft".equals(itemId.getNamespace())) continue;
             recipe.required_mods.computeIfAbsent(itemId.getNamespace(), RecipeIntegrity::installedVersion);
         }
@@ -52,15 +52,15 @@ public final class RecipeIntegrity {
         LinkedHashSet<String> ids = new LinkedHashSet<>();
         if (recipe.required_mods != null) ids.addAll(recipe.required_mods.keySet());
         for (String rawId : referencedItemIds(recipe)) {
-            Identifier itemId = Identifier.tryParse(rawId);
+            ResourceLocation itemId = ResourceLocation.tryParse(rawId);
             if (itemId != null && !"minecraft".equals(itemId.getNamespace())) ids.add(itemId.getNamespace());
         }
         return ids;
     }
 
     private static String installedVersion(String modId) {
-        return FabricLoader.getInstance().getModContainer(modId)
-                .map(container -> container.getMetadata().getVersion().getFriendlyString())
+        return ModList.get().getModContainerById(modId)
+                .map(container -> container.getModInfo().getVersion().toString())
                 .orElse("unknown");
     }
 

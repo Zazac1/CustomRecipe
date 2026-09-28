@@ -1,6 +1,6 @@
 package fr.zazac1.customrecipe;
 
-import net.fabricmc.loader.api.FabricLoader;
+import net.minecraftforge.fml.ModList;
 import net.minecraft.server.MinecraftServer;
 
 import java.lang.reflect.Method;
@@ -10,7 +10,7 @@ final class ReiCompat {
     private ReiCompat() {}
 
     static void refreshAfterRecipeReload(MinecraftServer server) {
-        if (!FabricLoader.getInstance().isModLoaded("roughlyenoughitems")) return;
+        if (!ModList.get().isLoaded("roughlyenoughitems")) return;
         // REI's normal data-pack listener runs before ServerRecipeManager receives
         // our injected recipes. Run its own reload once the server reload is done.
         server.execute(() -> {

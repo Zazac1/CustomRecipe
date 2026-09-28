@@ -6,25 +6,20 @@ import fr.zazac1.customrecipe.SaveServerConfigPayload;
 import fr.zazac1.customrecipe.VanillaRecipeQueryPayload;
 import fr.zazac1.customrecipe.VanillaRecipeDetailsQueryPayload;
 import fr.zazac1.customrecipe.ValidateServerConfigPayload;
+import fr.zazac1.customrecipe.ModNetworking;
 import com.google.gson.Gson;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 
 import java.util.List;
 import java.util.function.BiConsumer;
 
 /** Client-only sender for the OP server editor. */
-@Environment(EnvType.CLIENT)
 public final class ClientServerConfigNetworking {
     private static final int MAX_CONFIG_CHARS = 500_000;
     private static final Gson GSON = new Gson();
     private static BiConsumer<Boolean, String> pendingSave;
 
     public static void save(ModConfig config) {
-        ClientPlayNetworking.send(SaveServerConfigPayload.ID,
-                PacketByteBufs.create().writeString(ConfigLoader.toJson(config), MAX_CONFIG_CHARS));
+        ModNetworking.sendSave(ConfigLoader.toJson(config));
     }
 
     /** Sends one save request and waits for the server's durable-write acknowledgement. */
@@ -36,7 +31,7 @@ public final class ClientServerConfigNetworking {
             return false;
         }
         pendingSave = completion;
-        ClientPlayNetworking.send(SaveServerConfigPayload.ID, PacketByteBufs.create().writeString(json, MAX_CONFIG_CHARS));
+        ModNetworking.sendSave(json);
         return true;
     }
 
@@ -47,19 +42,17 @@ public final class ClientServerConfigNetworking {
     }
 
     public static void validate(ModConfig config) {
-        ClientPlayNetworking.send(ValidateServerConfigPayload.ID,
-                PacketByteBufs.create().writeString(ConfigLoader.toJson(config), MAX_CONFIG_CHARS));
+        ModNetworking.sendValidate(ConfigLoader.toJson(config));
     }
 
     public static void searchVanilla(String query, boolean matchIngredients, boolean matchOutput,
                                      String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {
-        ClientPlayNetworking.send(VanillaRecipeQueryPayload.ID,
-                PacketByteBufs.create().writeString(GSON.toJson(new RecipeQuery(query, matchIngredients, matchOutput,
-                        statusFilter, sourceFilter, disabledRecipeIds, page))));
+        ModNetworking.sendVanillaQuery(GSON.toJson(new RecipeQuery(query, matchIngredients,
+                matchOutput, statusFilter, sourceFilter, disabledRecipeIds, page)));
     }
 
     public static void requestVanillaDetails(String recipeId) {
-        ClientPlayNetworking.send(VanillaRecipeDetailsQueryPayload.ID, PacketByteBufs.create().writeString(recipeId));
+        ModNetworking.sendVanillaDetailsQuery(recipeId);
     }
 
     private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,

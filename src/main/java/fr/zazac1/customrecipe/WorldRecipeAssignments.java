@@ -1,8 +1,11 @@
 package fr.zazac1.customrecipe;
 
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.server.ServerStartedEvent;
+import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.WorldSavePath;
+import net.minecraft.world.level.storage.LevelResource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -16,27 +19,36 @@ public final class WorldRecipeAssignments {
     private static String activeWorldName = "";
 
     public static void initialize() {
-        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
-            activeWorldId = worldId(server.getSavePath(WorldSavePath.ROOT));
+        MinecraftForge.EVENT_BUS.addListener(WorldRecipeAssignments::onServerStarting);
+        MinecraftForge.EVENT_BUS.addListener(WorldRecipeAssignments::onServerStarted);
+        MinecraftForge.EVENT_BUS.addListener(WorldRecipeAssignments::onServerStopped);
+    }
+
+    private static void onServerStarting(ServerStartingEvent event) {
+            MinecraftServer server = event.getServer();
+            activeWorldId = worldId(server.getWorldPath(LevelResource.ROOT));
             // The save root may be reported as "." by an integrated server.
             // Its level name is the name the player actually sees in Minecraft.
-            activeWorldName = server.getSaveProperties().getLevelName();
+            activeWorldName = server.getWorldData().getLevelName();
             if (activeWorldName == null || activeWorldName.isBlank()) {
                 activeWorldName = "Current world";
             }
             migrateLegacyRecipes();
-        });
+    }
         // The first data-pack recipe load happens before SERVER_STARTING, so it
         // cannot yet know the active save target. Reapply once the world target
         // is known; this is the same reload path used by the in-game Save button.
-        ServerLifecycleEvents.SERVER_STARTED.register(server -> server.execute(() -> {
+    private static void onServerStarted(ServerStartedEvent event) {
+        MinecraftServer server = event.getServer();
+        server.execute(() -> {
             ConfigLoader.invalidate();
-            server.getCommandManager().executeWithPrefix(server.getCommandSource().withSilent(), "reload");
-        }));
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSuppressedOutput(), "reload");
+        });
+    }
+
+    private static void onServerStopped(ServerStoppedEvent event) {
             activeWorldId = "";
             activeWorldName = "";
-        });
     }
 
     public static String activeWorldId() {

@@ -3,7 +3,8 @@ package fr.zazac1.customrecipe;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
-import net.fabricmc.loader.api.FabricLoader;
+import net.minecraftforge.fml.ModList;
+import net.minecraftforge.fml.loading.FMLPaths;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -23,8 +24,8 @@ import java.util.UUID;
 public final class ConfigLoader {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path CONFIG_PATH = FabricLoader.getInstance()
-            .getConfigDir().resolve("customrecipe.json");
+    // Keep Fabric's filename and config-directory layout so existing files are reusable.
+    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("customrecipe.json");
 
     private static ModConfig cached = null;
 
@@ -273,10 +274,14 @@ public final class ConfigLoader {
     }
 
     private static void stampSaveMetadata(ModConfig config) {
-        config.saved_with_mod_version = FabricLoader.getInstance().getModContainer(CustomRecipeMod.MOD_ID)
-                .map(container -> container.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
-        config.saved_with_minecraft_version = FabricLoader.getInstance().getModContainer("minecraft")
-                .map(container -> container.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
+        config.saved_with_mod_version = installedVersion(CustomRecipeMod.MOD_ID);
+        config.saved_with_minecraft_version = installedVersion("minecraft");
+    }
+
+    private static String installedVersion(String modId) {
+        return ModList.get().getModContainerById(modId)
+                .map(container -> container.getModInfo().getVersion().toString())
+                .orElse("unknown");
     }
     /** Deep copy used when a library recipe is added to a world. */
     public static CustomRecipeEntry copyRecipe(CustomRecipeEntry source) {

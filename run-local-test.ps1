@@ -37,7 +37,7 @@ $lanIp = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
     Select-Object -First 1 -ExpandProperty IPAddress
 if (-not $lanIp) { $lanIp = '127.0.0.1' }
 
-$serverEula = Join-Path $projectRoot 'run-server\eula.txt'
+$serverEula = Join-Path $projectRoot 'run\eula.txt'
 if (-not (Test-Path -LiteralPath $serverEula) -or (Get-Content -LiteralPath $serverEula -Raw) -notmatch '(?m)^eula=true\s*$') {
     $accept = Read-Host 'Le serveur Minecraft exige EULA=true. Tape OUI pour accepter'
     if ($accept -ne 'OUI') { throw 'EULA non acceptée : lancement annulé.' }
@@ -45,9 +45,9 @@ if (-not (Test-Path -LiteralPath $serverEula) -or (Get-Content -LiteralPath $ser
     Set-Content -LiteralPath $serverEula -Value 'eula=true' -NoNewline
 }
 
-# Le client de développement Fabric n'a pas de session Microsoft authentifiée.
+# Le client de développement Forge n'a pas de session Microsoft authentifiée.
 # Ce réglage ne concerne que run-server, jamais un serveur de production.
-$serverProperties = Join-Path $projectRoot 'run-server\server.properties'
+$serverProperties = Join-Path $projectRoot 'run\server.properties'
 $properties = if (Test-Path -LiteralPath $serverProperties) {
     Get-Content -LiteralPath $serverProperties -Raw
 } else {
@@ -58,14 +58,41 @@ if ($properties -match '(?m)^online-mode=') {
 } else {
     $properties += "`r`nonline-mode=false`r`n"
 }
+if ($properties -match '(?m)^white-list=') {
+    $properties = $properties -replace '(?m)^white-list=.*$', 'white-list=false'
+} else {
+    $properties += "white-list=false`r`n"
+}
+if ($properties -match '(?m)^enforce-whitelist=') {
+    $properties = $properties -replace '(?m)^enforce-whitelist=.*$', 'enforce-whitelist=false'
+} else {
+    $properties += "enforce-whitelist=false`r`n"
+}
 Set-Content -LiteralPath $serverProperties -Value $properties -NoNewline
+
+# Le client de développement utilise le compte hors ligne \"Dev\". Il doit être
+# opérateur pour exécuter les tests de recettes sans authentification Microsoft.
+$devOperator = [pscustomobject]@{
+    uuid = '380df991-f603-344c-a090-369bad2a924a'
+    name = 'Dev'
+    level = 4
+    bypassesPlayerLimit = $false
+}
+$opsPath = Join-Path $projectRoot 'run\ops.json'
+$operators = if (Test-Path -LiteralPath $opsPath) {
+    @(Get-Content -LiteralPath $opsPath -Raw | ConvertFrom-Json)
+} else {
+    @()
+}
+$operators = @($operators | Where-Object { $_ -and $_.name -ne 'Dev' }) + $devOperator
+ConvertTo-Json -InputObject $operators | Set-Content -LiteralPath $opsPath -NoNewline
 
 Write-Host 'Compilation du mod...'
 & '.\gradlew.bat' build --no-daemon
 if ($LASTEXITCODE -ne 0) { throw 'Compilation échouée : lancement annulé.' }
 
 # Le build unique évite une course entre runServer et runClient sur les classes du mod.
-$serverScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer --no-daemon -x compileJava -x processResources -x classes"
+$serverScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer --console=plain --no-daemon -x compileJava -x processResources -x classes"
 $clientScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runClient --no-daemon -x compileJava -x processResources -x classes"
 
 Write-Host "Serveur : $lanIp`:25565"

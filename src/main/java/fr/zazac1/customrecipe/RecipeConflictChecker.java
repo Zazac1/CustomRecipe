@@ -1,13 +1,13 @@
 package fr.zazac1.customrecipe;
 
-import net.minecraft.item.ItemStack;
-import net.minecraft.recipe.CraftingRecipe;
-import net.minecraft.recipe.Ingredient;
-import net.minecraft.recipe.Recipe;
-import net.minecraft.recipe.ShapedRecipe;
-import net.minecraft.registry.Registries;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.ShapedRecipe;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,8 +31,8 @@ public final class RecipeConflictChecker {
             List<String> conflicts = new ArrayList<>();
             List<String> sameShape = new ArrayList<>();
             RecipeSignature signature = Boolean.TRUE.equals(entry.corrupted) ? null : signatureOf(entry);
-            if (signature != null) for (Recipe<?> candidate : server.getRecipeManager().values()) {
-                Identifier id = candidate.getId();
+            if (signature != null) for (Recipe<?> candidate : server.getRecipeManager().getRecipes()) {
+                ResourceLocation id = candidate.getId();
                 if (!(candidate instanceof CraftingRecipe wrapped)
                         || (id.getNamespace().equals(CustomRecipeMod.MOD_ID) && id.getPath().startsWith("custom/"))) continue;
                 CraftingRecipe existing = unwrap(wrapped);
@@ -95,11 +95,11 @@ public final class RecipeConflictChecker {
     }
 
     private static boolean sameOutputItem(CustomRecipeEntry entry, CraftingRecipe recipe, MinecraftServer server) {
-        Identifier expected = Identifier.tryParse(entry.result);
+        ResourceLocation expected = ResourceLocation.tryParse(entry.result);
         if (expected == null) return false;
         try {
-            ItemStack result = recipe.getOutput(server.getRegistryManager());
-            return !result.isEmpty() && expected.equals(Registries.ITEM.getId(result.getItem()));
+            ItemStack result = recipe.getResultItem(server.registryAccess());
+            return !result.isEmpty() && expected.equals(BuiltInRegistries.ITEM.getKey(result.getItem()));
         } catch (RuntimeException ignored) { return false; }
     }
 
@@ -112,8 +112,8 @@ public final class RecipeConflictChecker {
     }
 
     private static String ingredientSignature(Ingredient ingredient) {
-        return Arrays.stream(ingredient.getMatchingStacks())
-                .map(stack -> Registries.ITEM.getId(stack.getItem()).toString()).sorted()
+        return Arrays.stream(ingredient.getItems())
+                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()).sorted()
                 .collect(Collectors.joining(","));
     }
 

@@ -118,7 +118,7 @@
   ,"customrecipe.builder.shapeless_ingredients": "Ingredientes sin forma (%s/9)"
   ,"customrecipe.builder.result_count": "Resultado ×:"
   ,"customrecipe.builder.save": "Guardar"
-  ,"customrecipe.chat.world_tip": "Puedes modificar las recetas personalizadas de este mundo desde el menú de pausa (Esc), haciendo clic en %s o mediante Mod Menu."
+  ,"customrecipe.chat.world_tip": "Puedes modificar las recetas personalizadas de este mundo desde el menú de pausa (Esc), haciendo clic en %s o mediante el menú Mods."
   ,"customrecipe.chat.world_tip.link": "Custom Recipe"
   ,"customrecipe.chat.world_tip.hover": "Abrir el editor de Custom Recipe"
   ,"customrecipe.screen.built_in": "Recetas integradas"

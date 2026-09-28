@@ -3,27 +3,32 @@ package fr.zazac1.customrecipe.client;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import fr.zazac1.customrecipe.CustomRecipeMod;
+import fr.zazac1.customrecipe.DisabledCraftingRecipe;
+import fr.zazac1.customrecipe.VariantFilteredCraftingRecipe;
 import fr.zazac1.customrecipe.VanillaRecipePage;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.tag.TagKey;
-import net.minecraft.resource.Resource;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraftforge.fml.ModList;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.ShapedRecipe;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.tags.TagKey;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.TreeSet;
@@ -35,8 +40,16 @@ import java.util.Optional;
 import java.util.jar.JarFile;
 
 /** Server-filtered default crafting recipe browser for OPs, including installed mods. */
-@Environment(EnvType.CLIENT)
 public class VanillaRecipesScreen extends Screen {
+    /** Vanilla 1.20.1 has 836 crafting recipes (shaped, shapeless and special). */
+    private static final int COMPLETE_VANILLA_CRAFTING_RECIPE_MINIMUM = 800;
+    /** Small enough to keep the screen responsive while the bar visibly advances. */
+    private static final int LOCAL_RECIPES_PER_TICK = 12;
+    /** Reused for searches/reopening the screen; it is invalidated when the world recipe set changes. */
+    private static List<VanillaRecipePage.VanillaRecipeInfo> localRecipeCache = List.of();
+    private static Map<String, String> localRecipeJsonCache = Map.of();
+    private static net.minecraft.server.MinecraftServer localRecipeCacheServer;
+    private static int localRecipeCacheFingerprint;
     private static final int ROW = 20;
     private static final int HEADER_Y = 34;
     private static final int SEARCH_Y = 52;
@@ -63,7 +76,17 @@ public class VanillaRecipesScreen extends Screen {
     private boolean searchStarted;
     private int pendingSearchTicks = -1;
     private boolean restoreSearchFocus;
-    private TextFieldWidget searchField;
+    private EditBox searchField;
+    private final List<LocalRecipeSource> localScanQueue = new ArrayList<>();
+    private final Set<JarFile> localScanArchives = new HashSet<>();
+    private final Set<String> scheduledLocalRecipeIds = new HashSet<>();
+    private List<VanillaRecipePage.VanillaRecipeInfo> localScanMatches = List.of();
+    private Set<String> localScanMatchedIds = Set.of();
+    private net.minecraft.server.MinecraftServer localScanServer;
+    private String localScanQuery = "";
+    private int localScanProcessed;
+    private boolean localScanCanPopulateCache;
+    private Map<String, String> localScanJsonById = Map.of();
 
     /** Applies the local status/special view without changing the server search result. */
     private List<VanillaRecipePage.VanillaRecipeInfo> filteredRecipes() {
@@ -81,20 +104,20 @@ public class VanillaRecipesScreen extends Screen {
         return filtered;
     }
 
-    private Text statusFilterLabel() {
+    private Component statusFilterLabel() {
         return switch (statusFilter) {
-            case ALL -> Text.translatable("customrecipe.vanilla.status_all");
-            case ENABLED -> Text.translatable("customrecipe.vanilla.status_enabled").setStyle(net.minecraft.text.Style.EMPTY.withColor(0x55FF55));
-            case DISABLED -> Text.translatable("customrecipe.vanilla.status_disabled").setStyle(net.minecraft.text.Style.EMPTY.withColor(0xFF5555));
-            case SPECIAL -> Text.translatable("customrecipe.vanilla.status_special").setStyle(net.minecraft.text.Style.EMPTY.withColor(0x77BBFF));
+            case ALL -> Component.translatable("customrecipe.vanilla.status_all");
+            case ENABLED -> Component.translatable("customrecipe.vanilla.status_enabled").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x55FF55));
+            case DISABLED -> Component.translatable("customrecipe.vanilla.status_disabled").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF5555));
+            case SPECIAL -> Component.translatable("customrecipe.vanilla.status_special").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x77BBFF));
         };
     }
 
-    private Text sourceFilterLabel() {
+    private Component sourceFilterLabel() {
         return switch (sourceFilter) {
-            case ALL -> Text.translatable("customrecipe.vanilla.show_all");
-            case MODDED -> Text.translatable("customrecipe.vanilla.show_modded");
-            case VANILLA -> Text.translatable("customrecipe.vanilla.show_vanilla");
+            case ALL -> Component.translatable("customrecipe.vanilla.show_all");
+            case MODDED -> Component.translatable("customrecipe.vanilla.show_modded");
+            case VANILLA -> Component.translatable("customrecipe.vanilla.show_vanilla");
         };
     }
 
@@ -106,7 +129,7 @@ public class VanillaRecipesScreen extends Screen {
             case SPECIAL -> StatusFilter.ALL;
         };
         scroll = 0;
-        clearAndInit();
+        rebuildWidgets();
     }
 
     private void cycleSourceFilter() {
@@ -122,9 +145,9 @@ public class VanillaRecipesScreen extends Screen {
         this(parent, false);
     }
 
-    /** Local ModMenu mode reads the default recipe data already loaded by the client. */
+    /** Local ModMenu mode reads the default recipe data already loaded by the minecraft. */
     public VanillaRecipesScreen(ConfigScreen parent, boolean localMode) {
-        super(Text.translatable("customrecipe.vanilla.title"));
+        super(Component.translatable("customrecipe.vanilla.title"));
         this.parent = parent;
         this.localMode = localMode;
     }
@@ -134,47 +157,47 @@ public class VanillaRecipesScreen extends Screen {
     @Override
     protected void init() {
 
-        addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client, parent.target(),
+        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, parent.target(),
                 parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
-        int searchButtonW = Math.max(72, textRenderer.getWidth(Text.translatable("customrecipe.vanilla.search").getString()) + 16);
+        int searchButtonW = Math.max(72, font.width(Component.translatable("customrecipe.vanilla.search").getString()) + 16);
         int sourceFilterX = width - 100;
         int statusFilterX = sourceFilterX - 96;
         int outputFilterX = statusFilterX - 74;
         int ingredientFilterX = outputFilterX - 92;
         int searchButtonX = ingredientFilterX - 4 - searchButtonW;
         int clearSearchX = searchButtonX - 20;
-        searchField = addDrawableChild(new TextFieldWidget(textRenderer, 8, SEARCH_Y, clearSearchX - 8, 18,
-                Text.translatable("customrecipe.vanilla.search_hint")));
-        searchField.setText(query);
-        searchField.setChangedListener(this::onQueryChanged);
+        searchField = addRenderableWidget(new EditBox(font, 8, SEARCH_Y, clearSearchX - 8, 18,
+                Component.translatable("customrecipe.vanilla.search_hint")));
+        searchField.setValue(query);
+        searchField.setResponder(this::onQueryChanged);
         if (restoreSearchFocus) {
             setFocused(searchField);
             restoreSearchFocus = false;
         }
 
-        addDrawableChild(ButtonWidget.builder(Text.empty(), b -> {
+        addRenderableWidget(Button.builder(Component.empty(), b -> {
             query = "";
-            searchField.setText("");
+            searchField.setValue("");
             pendingSearchTicks = -1;
             resetSearch();
-        }).dimensions(clearSearchX, SEARCH_Y, 18, 18).build());
-        addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+        }).bounds(clearSearchX, SEARCH_Y, 18, 18).build());
+        addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                 CustomRecipeSprites.REJECT, clearSearchX, SEARCH_Y, 18, 18));
 
-        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.vanilla.search"), b -> resetSearch())
-                .dimensions(searchButtonX, SEARCH_Y, searchButtonW, 18).build());
-        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.vanilla.ingredient", Text.translatable(matchIngredients ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), b -> {
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.vanilla.search"), b -> resetSearch())
+                .bounds(searchButtonX, SEARCH_Y, searchButtonW, 18).build());
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.vanilla.ingredient", Component.translatable(matchIngredients ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), b -> {
             matchIngredients = !matchIngredients;
             resetSearch();
-        }).dimensions(ingredientFilterX, SEARCH_Y, 88, 18).build());
-        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.vanilla.output", Text.translatable(matchOutput ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), b -> {
+        }).bounds(ingredientFilterX, SEARCH_Y, 88, 18).build());
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.vanilla.output", Component.translatable(matchOutput ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), b -> {
             matchOutput = !matchOutput;
             resetSearch();
-        }).dimensions(outputFilterX, SEARCH_Y, 70, 18).build());
-        addDrawableChild(ButtonWidget.builder(statusFilterLabel(), b -> cycleStatusFilter())
-                .dimensions(statusFilterX, SEARCH_Y, 92, 18).build());
-        addDrawableChild(ButtonWidget.builder(sourceFilterLabel(), b -> cycleSourceFilter())
-                .dimensions(sourceFilterX, SEARCH_Y, 92, 18).build());
+        }).bounds(outputFilterX, SEARCH_Y, 70, 18).build());
+        addRenderableWidget(Button.builder(statusFilterLabel(), b -> cycleStatusFilter())
+                .bounds(statusFilterX, SEARCH_Y, 92, 18).build());
+        addRenderableWidget(Button.builder(sourceFilterLabel(), b -> cycleSourceFilter())
+                .bounds(sourceFilterX, SEARCH_Y, 92, 18).build());
 
         int visibleRows = visibleRows();
         List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
@@ -182,21 +205,21 @@ public class VanillaRecipesScreen extends Screen {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
             int y = ROWS_Y + i * ROW;
             boolean disabled = parent.disabledRecipes.contains(recipe.id());
-            addDrawableChild(ButtonWidget.builder(recipeLabel(recipe), b -> client.setScreen(new VanillaRecipeDetailsScreen(this, recipe)))
-                    .dimensions(30, y + 1, width - 122, 18).build());
-            addDrawableChild(ButtonWidget.builder(disabled ? Text.translatable("customrecipe.state.disabled").setStyle(net.minecraft.text.Style.EMPTY.withColor(0xFF5555))
-                            : Text.translatable("customrecipe.state.enabled").setStyle(net.minecraft.text.Style.EMPTY.withColor(0x55FF55)), b -> toggle(recipe.id()))
-                    .dimensions(width - 84, y + 1, 76, 18).build());
+            addRenderableWidget(Button.builder(recipeLabel(recipe), b -> minecraft.setScreen(new VanillaRecipeDetailsScreen(this, recipe)))
+                    .bounds(30, y + 1, width - 122, 18).build());
+            addRenderableWidget(Button.builder(disabled ? Component.translatable("customrecipe.state.disabled").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF5555))
+                            : Component.translatable("customrecipe.state.enabled").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x55FF55)), b -> toggle(recipe.id()))
+                    .bounds(width - 84, y + 1, 76, 18).build());
         }
 
         int bottom = height - 26;
-        String saveLabel = Text.translatable("customrecipe.button.save").getString();
-        addDrawableChild(ButtonWidget.builder(Text.empty(), b -> parent.saveFromSubmenu())
-                .dimensions(width / 2 - 100, bottom, 200, 22).build());
-        addDrawable((ctx, mouseX, mouseY, delta) -> {
-            int iconX = width / 2 - textRenderer.getWidth(saveLabel) / 2 - 20;
+        String saveLabel = Component.translatable("customrecipe.button.save").getString();
+        addRenderableWidget(Button.builder(Component.empty(), b -> parent.saveFromSubmenu())
+                .bounds(width / 2 - 100, bottom, 200, 22).build());
+        addRenderableOnly((ctx, mouseX, mouseY, delta) -> {
+            int iconX = width / 2 - font.width(saveLabel) / 2 - 20;
             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, iconX, bottom + 3, 16, 16);
-            ctx.drawCenteredTextWithShadow(textRenderer, saveLabel, width / 2, bottom + 7, 0xFFFFFFFF);
+            ctx.drawCenteredString(font, saveLabel, width / 2, bottom + 7, 0xFFFFFFFF);
         });
 
         if (!searchStarted) resetSearch();
@@ -215,7 +238,7 @@ public class VanillaRecipesScreen extends Screen {
         total = page.total();
         nextPage = page.page() + 1;
         loading = false;
-        clearAndInit();
+        rebuildWidgets();
     }
 
     private void resetSearch() {
@@ -226,12 +249,7 @@ public class VanillaRecipesScreen extends Screen {
         recipes.clear();
         loading = true;
         if (localMode) {
-            VanillaRecipePage page = findLocalRecipes();
-            recipes.addAll(page.recipes());
-            total = page.total();
-            nextPage = 1;
-            loading = false;
-            clearAndInit();
+            startLocalSearch();
             return;
         }
         ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput,
@@ -251,6 +269,7 @@ public class VanillaRecipesScreen extends Screen {
         if (pendingSearchTicks > 0 && --pendingSearchTicks == 0) {
             resetSearch();
         }
+        if (localMode && loading) processLocalSearch();
     }
 
     private void loadMore() {
@@ -261,14 +280,28 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     private VanillaRecipePage findLocalRecipes() {
+        var localServer = minecraft.getSingleplayerServer();
+        // A loaded integrated server is the authoritative source: unlike the
+        // client resource manager it includes every vanilla, modded and
+        // datapack crafting recipe currently active in this world.
+        if (localServer != null && hasCompleteCraftingRecipeSet(localServer)) {
+            return findLoadedLocalRecipes(localServer);
+        }
+        if (localServer != null) {
+            // ForgeGradle's remapped development archive contains only a
+            // reduced recipe resource set. Fall back to the original vanilla
+            // client archive instead of presenting its incomplete list.
+            CustomRecipeMod.LOGGER.warn("[Custom Recipe] Integrated server exposes an incomplete crafting recipe set; using vanilla archive fallback.");
+        }
+
         String loweredQuery = query.trim().toLowerCase(Locale.ROOT);
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
         Set<String> matchedIds = new HashSet<>();
-        Map<Identifier, Resource> resources = client.getResourceManager().findResources("recipes",
+        Map<ResourceLocation, Resource> resources = minecraft.getResourceManager().listResources("recipes",
                 id -> id.getPath().endsWith(".json"));
 
-        for (Map.Entry<Identifier, Resource> resource : resources.entrySet()) {
-            try (var input = resource.getValue().getInputStream()) {
+        for (Map.Entry<ResourceLocation, Resource> resource : resources.entrySet()) {
+            try (var input = resource.getValue().open()) {
                 String json = new String(input.readAllBytes(), StandardCharsets.UTF_8);
                 String recipeId = resource.getKey().getNamespace() + ":" + resource.getKey().getPath()
                         .substring("recipes/".length(), resource.getKey().getPath().length() - ".json".length());
@@ -278,13 +311,339 @@ public class VanillaRecipesScreen extends Screen {
             }
         }
 
-        // At the title screen ModMenu has not mounted server-data resources yet.
-        // Vanilla recipes are still available in Minecraft's own JAR, so use it as a fallback.
-        if (matches.isEmpty()) loadBundledVanillaRecipes(matches, matchedIds, loweredQuery);
+        // The ForgeGradle remapped development archive can expose only 177
+        // crafting JSON files through the resource manager. Merge the original
+        // vanilla client archive even when resources are present; matchedIds
+        // keeps normal production launches free of duplicates.
+        loadBundledVanillaRecipes(matches, matchedIds, loweredQuery);
         loadInstalledModRecipes(matches, matchedIds, loweredQuery);
 
         matches.sort(java.util.Comparator.comparing(VanillaRecipePage.VanillaRecipeInfo::id));
         return new VanillaRecipePage(matches, 0, matches.size());
+    }
+
+    /**
+     * Queues local JSON/loaded recipes instead of parsing the whole archive in
+     * one frame. The progress bar can therefore update while the browser is
+     * being populated.
+     */
+    private void startLocalSearch() {
+        closeLocalScanArchives();
+        localScanQueue.clear();
+        scheduledLocalRecipeIds.clear();
+        localScanMatches = new ArrayList<>();
+        localScanMatchedIds = new HashSet<>();
+        localScanQuery = query.trim().toLowerCase(Locale.ROOT);
+        localScanProcessed = 0;
+        localScanServer = minecraft.getSingleplayerServer();
+        int fingerprint = localRecipeFingerprint(localScanServer);
+        if (localRecipeCacheServer == localScanServer && localRecipeCacheFingerprint == fingerprint
+                && !localRecipeCache.isEmpty()) {
+            recipes.addAll(filterCachedLocalRecipes(localRecipeCache));
+            total = recipes.size();
+            nextPage = 1;
+            loading = false;
+            rebuildWidgets();
+            return;
+        }
+        localScanCanPopulateCache = localScanQuery.isEmpty() && matchIngredients && matchOutput
+                && sourceFilter == SourceFilter.ALL && statusFilter == StatusFilter.ALL;
+        localScanJsonById = localScanCanPopulateCache ? new HashMap<>() : Map.of();
+
+        if (localScanServer != null && hasCompleteCraftingRecipeSet(localScanServer)) {
+            for (net.minecraft.world.item.crafting.Recipe<?> recipe : localScanServer.getRecipeManager().getRecipes()) {
+                if (recipe instanceof CraftingRecipe && !recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID)) {
+                    localScanQueue.add(LocalRecipeSource.loaded(recipe));
+                }
+            }
+        } else {
+            if (localScanServer != null) {
+                CustomRecipeMod.LOGGER.warn("[Custom Recipe] Integrated server exposes an incomplete crafting recipe set; using vanilla archive fallback.");
+            }
+            queueResourceManagerRecipes();
+            try {
+                JarFile vanilla = minecraftJar();
+                if (vanilla != null) queueArchiveRecipes(vanilla, true);
+            } catch (Exception ignored) {
+                // The regular resource-manager list remains usable in unusual launchers.
+            }
+            queueInstalledModRecipes();
+        }
+        rebuildWidgets();
+    }
+
+    private int localRecipeFingerprint(net.minecraft.server.MinecraftServer server) {
+        if (server == null) return 0;
+        int fingerprint = 1;
+        for (net.minecraft.world.item.crafting.Recipe<?> recipe : server.getRecipeManager().getRecipes()) {
+            fingerprint = 31 * fingerprint + recipe.getId().hashCode();
+        }
+        return fingerprint;
+    }
+
+    /** Cached recipes are complete; query/source/status filters are reapplied instantly in memory. */
+    private List<VanillaRecipePage.VanillaRecipeInfo> filterCachedLocalRecipes(
+            List<VanillaRecipePage.VanillaRecipeInfo> cachedRecipes) {
+        String loweredQuery = query.trim().toLowerCase(Locale.ROOT);
+        List<VanillaRecipePage.VanillaRecipeInfo> filtered = new ArrayList<>();
+        for (VanillaRecipePage.VanillaRecipeInfo recipe : cachedRecipes) {
+            boolean sourceMatch = sourceFilter == SourceFilter.ALL
+                    || sourceFilter == SourceFilter.VANILLA && recipe.id().startsWith("minecraft:")
+                    || sourceFilter == SourceFilter.MODDED && !recipe.id().startsWith("minecraft:");
+            boolean disabled = parent.disabledRecipes.contains(recipe.id());
+            boolean statusMatch = switch (statusFilter) {
+                case ALL -> true;
+                case ENABLED -> !disabled && !recipe.special();
+                case DISABLED -> disabled && !recipe.special();
+                case SPECIAL -> recipe.special();
+            };
+            String cachedJson = localRecipeJsonCache.get(recipe.id());
+            boolean searchMatch = loweredQuery.isEmpty()
+                    || matchOutput && recipe.result().toLowerCase(Locale.ROOT).contains(loweredQuery)
+                    || matchIngredients && cachedJson != null && cachedJson.toLowerCase(Locale.ROOT).contains(loweredQuery)
+                    || matchIngredients && recipe.slots().stream()
+                    .anyMatch(ingredient -> ingredient.toLowerCase(Locale.ROOT).contains(loweredQuery));
+            if (sourceMatch && statusMatch && searchMatch) filtered.add(recipe);
+        }
+        return filtered;
+    }
+
+    private void queueResourceManagerRecipes() {
+        for (ResourceLocation resourceId : minecraft.getResourceManager().listResources("recipes",
+                id -> id.getPath().endsWith(".json")).keySet()) {
+            String path = resourceId.getPath();
+            String recipeId = resourceId.getNamespace() + ":" + path.substring("recipes/".length(), path.length() - ".json".length());
+            queueLocalRecipe(LocalRecipeSource.resource(recipeId, resourceId));
+        }
+    }
+
+    private void queueInstalledModRecipes() {
+        for (var modFile : ModList.get().getModFiles()) {
+            try {
+                Path archivePath = modFile.getFile().getFilePath().toAbsolutePath().normalize();
+                if (!Files.isRegularFile(archivePath) || !archivePath.getFileName().toString().endsWith(".jar")) continue;
+                queueArchiveRecipes(new JarFile(archivePath.toFile()), false);
+            } catch (Exception ignored) {
+                // Virtual and nested modules need not expose a readable archive.
+            }
+        }
+    }
+
+    private void queueArchiveRecipes(JarFile archive, boolean vanillaOnly) {
+        boolean used = false;
+        try {
+            Enumeration<java.util.jar.JarEntry> entries = archive.entries();
+            while (entries.hasMoreElements()) {
+                String path = entries.nextElement().getName();
+                if (!path.startsWith("data/") || !path.endsWith(".json")) continue;
+                int namespaceEnd = path.indexOf('/', "data/".length());
+                int recipeStart = namespaceEnd + 1;
+                if (namespaceEnd <= "data/".length() || !path.startsWith("recipes/", recipeStart)) continue;
+                String namespace = path.substring("data/".length(), namespaceEnd);
+                if (vanillaOnly && !namespace.equals("minecraft")) continue;
+                String recipeId = namespace + ":" + path.substring(recipeStart + "recipes/".length(), path.length() - ".json".length());
+                if (recipeId.startsWith(CustomRecipeMod.MOD_ID + ":")) continue;
+                if (queueLocalRecipe(LocalRecipeSource.archive(recipeId, archive, path))) used = true;
+            }
+            if (used) localScanArchives.add(archive); else archive.close();
+        } catch (Exception ignored) {
+            try { archive.close(); } catch (Exception ignoredClose) {}
+        }
+    }
+
+    private boolean queueLocalRecipe(LocalRecipeSource source) {
+        if (!scheduledLocalRecipeIds.add(source.recipeId())) return false;
+        localScanQueue.add(source);
+        return true;
+    }
+
+    private void processLocalSearch() {
+        int batchEnd = Math.min(localScanProcessed + LOCAL_RECIPES_PER_TICK, localScanQueue.size());
+        while (localScanProcessed < batchEnd) {
+            LocalRecipeSource source = localScanQueue.get(localScanProcessed++);
+            if (source.loadedRecipe() != null) {
+                addLoadedLocalRecipe(source.loadedRecipe(), localScanServer, localScanQuery, localScanMatches);
+                continue;
+            }
+            String json = readQueuedRecipe(source);
+            if (json != null) {
+                if (localScanCanPopulateCache) localScanJsonById.put(source.recipeId(), json);
+                addLocalRecipe(localScanMatches, localScanMatchedIds, source.recipeId(), json, localScanQuery);
+            }
+        }
+        recipes.clear();
+        recipes.addAll(localScanMatches);
+        total = recipes.size();
+        if (localScanProcessed >= localScanQueue.size()) {
+            recipes.sort(java.util.Comparator.comparing(VanillaRecipePage.VanillaRecipeInfo::id));
+            total = recipes.size();
+            if (localScanCanPopulateCache) {
+                localRecipeCache = List.copyOf(recipes);
+                localRecipeJsonCache = Map.copyOf(localScanJsonById);
+                localRecipeCacheServer = localScanServer;
+                localRecipeCacheFingerprint = localRecipeFingerprint(localScanServer);
+            }
+            nextPage = 1;
+            loading = false;
+            closeLocalScanArchives();
+            rebuildWidgets();
+        }
+    }
+
+    private String readQueuedRecipe(LocalRecipeSource source) {
+        try {
+            if (source.resourceId() != null) {
+                Resource resource = minecraft.getResourceManager().getResource(source.resourceId()).orElse(null);
+                if (resource == null) return null;
+                try (var input = resource.open()) { return new String(input.readAllBytes(), StandardCharsets.UTF_8); }
+            }
+            var entry = source.archive().getJarEntry(source.archivePath());
+            if (entry == null) return null;
+            try (var input = source.archive().getInputStream(entry)) { return new String(input.readAllBytes(), StandardCharsets.UTF_8); }
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void closeLocalScanArchives() {
+        for (JarFile archive : localScanArchives) {
+            try { archive.close(); } catch (Exception ignored) {}
+        }
+        localScanArchives.clear();
+    }
+
+    private boolean hasCompleteCraftingRecipeSet(net.minecraft.server.MinecraftServer server) {
+        long craftingRecipes = server.getRecipeManager().getRecipes().stream()
+                .filter(CraftingRecipe.class::isInstance)
+                .filter(recipe -> !recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID))
+                .count();
+        return craftingRecipes >= COMPLETE_VANILLA_CRAFTING_RECIPE_MINIMUM;
+    }
+
+    private void addLoadedLocalRecipe(net.minecraft.world.item.crafting.Recipe<?> entry,
+                                      net.minecraft.server.MinecraftServer server, String loweredQuery,
+                                      List<VanillaRecipePage.VanillaRecipeInfo> matches) {
+        if (!(entry instanceof CraftingRecipe wrappedRecipe)
+                || entry.getId().getNamespace().equals(CustomRecipeMod.MOD_ID)) return;
+
+        CraftingRecipe recipe = unwrap(wrappedRecipe);
+        boolean special = recipe.isSpecial();
+        ItemStack result = ItemStack.EMPTY;
+        try {
+            result = recipe.getResultItem(server.registryAccess());
+        } catch (RuntimeException ignored) {
+            // Some special recipes only resolve their output with a real grid.
+        }
+        String resultId = result.isEmpty() ? entry.getId().toString()
+                : BuiltInRegistries.ITEM.getKey(result.getItem()).toString();
+        int gridWidth = 0;
+        int gridHeight = 0;
+        boolean shapeless = !(recipe instanceof ShapedRecipe);
+        List<String> ingredients = new ArrayList<>();
+        if (recipe instanceof ShapedRecipe shaped) {
+            gridWidth = shaped.getWidth();
+            gridHeight = shaped.getHeight();
+            for (Ingredient ingredient : shaped.getIngredients()) ingredients.add(firstMatchingId(ingredient));
+        } else {
+            for (Ingredient ingredient : recipe.getIngredients()) ingredients.add(firstMatchingId(ingredient));
+        }
+
+        boolean outputMatch = matchOutput && resultId.toLowerCase(Locale.ROOT).contains(loweredQuery);
+        boolean ingredientMatch = matchIngredients && ingredients.stream()
+                .anyMatch(id -> id.toLowerCase(Locale.ROOT).contains(loweredQuery));
+        boolean disabled = parent.disabledRecipes.contains(entry.getId().toString());
+        boolean statusMatch = switch (statusFilter) {
+            case ENABLED -> !disabled && !special;
+            case DISABLED -> disabled && !special;
+            case SPECIAL -> special;
+            case ALL -> true;
+        };
+        boolean sourceMatch = switch (sourceFilter) {
+            case MODDED -> !entry.getId().getNamespace().equals("minecraft");
+            case VANILLA -> entry.getId().getNamespace().equals("minecraft");
+            case ALL -> true;
+        };
+        if (statusMatch && sourceMatch && (loweredQuery.isEmpty() || outputMatch || ingredientMatch)) {
+            matches.add(new VanillaRecipePage.VanillaRecipeInfo(entry.getId().toString(), resultId,
+                    toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
+                    gridWidth, gridHeight, shapeless, special));
+        }
+    }
+
+    private VanillaRecipePage findLoadedLocalRecipes(net.minecraft.server.MinecraftServer server) {
+        String loweredQuery = query.trim().toLowerCase(Locale.ROOT);
+        List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
+
+        for (net.minecraft.world.item.crafting.Recipe<?> entry : server.getRecipeManager().getRecipes()) {
+            if (!(entry instanceof CraftingRecipe wrappedRecipe)
+                    || entry.getId().getNamespace().equals(CustomRecipeMod.MOD_ID)) continue;
+
+            CraftingRecipe recipe = unwrap(wrappedRecipe);
+            boolean special = recipe.isSpecial();
+            ItemStack result = ItemStack.EMPTY;
+            try {
+                result = recipe.getResultItem(server.registryAccess());
+            } catch (RuntimeException ignored) {
+                // Some special recipes only resolve their output with a real grid.
+            }
+            String resultId = result.isEmpty() ? entry.getId().toString()
+                    : BuiltInRegistries.ITEM.getKey(result.getItem()).toString();
+            int gridWidth = 0;
+            int gridHeight = 0;
+            boolean shapeless = !(recipe instanceof ShapedRecipe);
+            List<String> ingredients = new ArrayList<>();
+            if (recipe instanceof ShapedRecipe shaped) {
+                gridWidth = shaped.getWidth();
+                gridHeight = shaped.getHeight();
+                for (Ingredient ingredient : shaped.getIngredients()) ingredients.add(firstMatchingId(ingredient));
+            } else {
+                for (Ingredient ingredient : recipe.getIngredients()) ingredients.add(firstMatchingId(ingredient));
+            }
+
+            boolean outputMatch = matchOutput && resultId.toLowerCase(Locale.ROOT).contains(loweredQuery);
+            boolean ingredientMatch = matchIngredients && ingredients.stream()
+                    .anyMatch(id -> id.toLowerCase(Locale.ROOT).contains(loweredQuery));
+            boolean disabled = parent.disabledRecipes.contains(entry.getId().toString());
+            boolean statusMatch = switch (statusFilter) {
+                case ENABLED -> !disabled && !special;
+                case DISABLED -> disabled && !special;
+                case SPECIAL -> special;
+                case ALL -> true;
+            };
+            boolean sourceMatch = switch (sourceFilter) {
+                case MODDED -> !entry.getId().getNamespace().equals("minecraft");
+                case VANILLA -> entry.getId().getNamespace().equals("minecraft");
+                case ALL -> true;
+            };
+            if (statusMatch && sourceMatch && (loweredQuery.isEmpty() || outputMatch || ingredientMatch)) {
+                matches.add(new VanillaRecipePage.VanillaRecipeInfo(entry.getId().toString(), resultId,
+                        toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
+                        gridWidth, gridHeight, shapeless, special));
+            }
+        }
+
+        matches.sort(java.util.Comparator.comparing(VanillaRecipePage.VanillaRecipeInfo::id));
+        CustomRecipeMod.LOGGER.info("[Custom Recipe] Found {} active local crafting recipes.", matches.size());
+        return new VanillaRecipePage(matches, 0, matches.size());
+    }
+
+    private CraftingRecipe unwrap(CraftingRecipe recipe) {
+        while (true) {
+            if (recipe instanceof VariantFilteredCraftingRecipe filtered) {
+                recipe = filtered.delegate();
+            } else if (recipe instanceof DisabledCraftingRecipe disabled) {
+                recipe = disabled.delegate();
+            } else {
+                return recipe;
+            }
+        }
+    }
+
+    private String firstMatchingId(Ingredient ingredient) {
+        for (ItemStack stack : ingredient.getItems()) {
+            return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        }
+        return "";
     }
 
     private void addLocalRecipe(List<VanillaRecipePage.VanillaRecipeInfo> matches, Set<String> matchedIds,
@@ -328,15 +687,14 @@ public class VanillaRecipesScreen extends Screen {
     private void loadInstalledModRecipes(List<VanillaRecipePage.VanillaRecipeInfo> matches, Set<String> matchedIds,
                                          String loweredQuery) {
         Set<Path> scannedArchives = new HashSet<>();
-        for (var mod : FabricLoader.getInstance().getAllMods()) {
-            List<Path> originPaths;
+        for (var modFile : ModList.get().getModFiles()) {
+            Path archivePath;
             try {
-                originPaths = mod.getOrigin().getPaths();
+                archivePath = modFile.getFile().getFilePath();
             } catch (RuntimeException ignored) {
-                // Nested Fabric modules do not always expose a filesystem archive.
+                // A virtual or nested Forge module has no directly readable archive.
                 continue;
             }
-            for (Path archivePath : originPaths) {
                 Path normalized = archivePath.toAbsolutePath().normalize();
                 if (!scannedArchives.add(normalized) || !Files.isRegularFile(normalized)
                         || !normalized.getFileName().toString().endsWith(".jar")) continue;
@@ -365,7 +723,6 @@ public class VanillaRecipesScreen extends Screen {
                 } catch (Exception ignored) {
                     // A non-archive mod origin simply has no local recipe files to browse.
                 }
-            }
         }
     }
 
@@ -419,7 +776,7 @@ public class VanillaRecipesScreen extends Screen {
 
     private String firstLocalIngredientId(JsonElement element) {
         List<String> choices = localIngredientChoices(element);
-        return choices.isEmpty() ? "" : choices.getFirst();
+        return choices.isEmpty() ? "" : choices.get(0);
     }
 
     private void collectIngredientIds(JsonElement element, List<String> ingredients) {
@@ -447,15 +804,19 @@ public class VanillaRecipesScreen extends Screen {
     private record RecipeLayout(List<String> ingredients, int width, int height, boolean shapeless) {}
 
     private List<String> toPreviewSlots(RecipeLayout layout) {
+        return toPreviewSlots(layout.ingredients(), layout.width(), layout.height(), layout.shapeless());
+    }
+
+    private List<String> toPreviewSlots(List<String> ingredients, int gridWidth, int gridHeight, boolean shapeless) {
         List<String> slots = new ArrayList<>(java.util.Collections.nCopies(9, ""));
-        if (layout.shapeless()) {
-            for (int i = 0; i < layout.ingredients().size() && i < 9; i++) slots.set(i, layout.ingredients().get(i));
+        if (shapeless) {
+            for (int i = 0; i < ingredients.size() && i < 9; i++) slots.set(i, ingredients.get(i));
             return slots;
         }
-        for (int row = 0; row < layout.height() && row < 3; row++) {
-            for (int column = 0; column < layout.width() && column < 3; column++) {
-                int source = row * layout.width() + column;
-                slots.set(row * 3 + column, source < layout.ingredients().size() ? layout.ingredients().get(source) : "");
+        for (int row = 0; row < gridHeight && row < 3; row++) {
+            for (int column = 0; column < gridWidth && column < 3; column++) {
+                int source = row * gridWidth + column;
+                slots.set(row * 3 + column, source < ingredients.size() ? ingredients.get(source) : "");
             }
         }
         return slots;
@@ -470,7 +831,7 @@ public class VanillaRecipesScreen extends Screen {
 
     void requestDetails(VanillaRecipeDetailsScreen screen, String recipeId) {
         if (localMode) {
-            client.execute(() -> screen.applyDetails(findLocalRecipeDetails(recipeId)));
+            minecraft.execute(() -> screen.applyDetails(findLocalRecipeDetails(recipeId)));
         } else {
             ClientServerConfigNetworking.requestVanillaDetails(recipeId);
         }
@@ -478,9 +839,9 @@ public class VanillaRecipesScreen extends Screen {
 
     /** Mirrors the server variant query using the vanilla JSON and client item tags. */
     private fr.zazac1.customrecipe.VanillaRecipeDetails findLocalRecipeDetails(String recipeId) {
-        Identifier id = Identifier.tryParse(recipeId);
+        ResourceLocation id = ResourceLocation.tryParse(recipeId);
         if (id == null) return new fr.zazac1.customrecipe.VanillaRecipeDetails(recipeId, List.of());
-        Identifier resourceId = new Identifier(id.getNamespace(), "recipes/" + id.getPath() + ".json");
+        ResourceLocation resourceId = new ResourceLocation(id.getNamespace(), "recipes/" + id.getPath() + ".json");
         Optional<String> json = readLocalRecipeJson(resourceId);
         if (json.isEmpty()) return new fr.zazac1.customrecipe.VanillaRecipeDetails(recipeId, List.of());
 
@@ -513,7 +874,7 @@ public class VanillaRecipesScreen extends Screen {
             List<fr.zazac1.customrecipe.VanillaRecipeDetails.VariantPreview> previews = new ArrayList<>();
             for (String material : variants.stream().limit(48).toList()) {
                 List<String> slots = new ArrayList<>(9);
-                for (List<String> choice : choices) slots.add(choice.contains(material) ? material : (choice.isEmpty() ? "" : choice.getFirst()));
+                for (List<String> choice : choices) slots.add(choice.contains(material) ? material : (choice.isEmpty() ? "" : choice.get(0)));
                 previews.add(new fr.zazac1.customrecipe.VanillaRecipeDetails.VariantPreview(material, slots));
             }
             return new fr.zazac1.customrecipe.VanillaRecipeDetails(recipeId, previews);
@@ -522,11 +883,11 @@ public class VanillaRecipesScreen extends Screen {
         }
     }
 
-    private Optional<String> readLocalRecipeJson(Identifier resourceId) {
+    private Optional<String> readLocalRecipeJson(ResourceLocation resourceId) {
         try {
-            var resource = client.getResourceManager().getResource(resourceId).orElse(null);
+            var resource = minecraft.getResourceManager().getResource(resourceId).orElse(null);
             if (resource != null) {
-                try (var input = resource.getInputStream()) {
+            try (var input = resource.open()) {
                     return Optional.of(new String(input.readAllBytes(), StandardCharsets.UTF_8));
                 }
             }
@@ -544,10 +905,38 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     private JarFile minecraftJar() throws Exception {
-        var source = client.getClass().getProtectionDomain().getCodeSource();
-        if (source == null) return null;
-        Path path = Path.of(source.getLocation().toURI());
-        return java.nio.file.Files.isRegularFile(path) ? new JarFile(path.toFile()) : null;
+        var source = minecraft.getClass().getProtectionDomain().getCodeSource();
+        if (source != null) {
+            Path path = Path.of(source.getLocation().toURI());
+            if (Files.isRegularFile(path) && vanillaRecipeFileCount(path) >= COMPLETE_VANILLA_CRAFTING_RECIPE_MINIMUM) {
+                return new JarFile(path.toFile());
+            }
+        }
+
+        // ForgeGradle remaps classes into a small development archive. Its
+        // original client.jar remains available in the local Gradle cache and
+        // retains all 1.20.1 vanilla recipe JSON files. This branch is only a
+        // development fallback; installed Forge clients use their game JAR.
+        Path gradleClient = Path.of(System.getProperty("user.home"), ".gradle", "caches", "forge_gradle",
+                "minecraft_repo", "versions", "1.20.1", "client.jar");
+        if (Files.isRegularFile(gradleClient)) return new JarFile(gradleClient.toFile());
+        return null;
+    }
+
+    private int vanillaRecipeFileCount(Path archivePath) {
+        try (JarFile archive = new JarFile(archivePath.toFile())) {
+            int count = 0;
+            Enumeration<java.util.jar.JarEntry> entries = archive.entries();
+            while (entries.hasMoreElements()) {
+                String path = entries.nextElement().getName();
+                if (path.startsWith("data/minecraft/recipes/") && path.endsWith(".json") && ++count >= COMPLETE_VANILLA_CRAFTING_RECIPE_MINIMUM) {
+                    return count;
+                }
+            }
+            return count;
+        } catch (Exception ignored) {
+            return 0;
+        }
     }
 
     private List<String> localIngredientChoices(JsonElement element) {
@@ -561,7 +950,7 @@ public class VanillaRecipesScreen extends Screen {
         if (element.isJsonPrimitive()) {
             String raw = element.getAsString();
             if (raw.startsWith("#")) {
-                Identifier tagId = Identifier.tryParse(raw.substring(1));
+                ResourceLocation tagId = ResourceLocation.tryParse(raw.substring(1));
                 if (tagId != null) collectLocalTagItems(tagId, choices, new HashSet<>());
             } else if (!raw.isBlank()) {
                 choices.add(raw);
@@ -579,23 +968,23 @@ public class VanillaRecipesScreen extends Screen {
             return;
         }
         if (object.has("tag")) {
-            Identifier tagId = Identifier.tryParse(object.get("tag").getAsString());
+            ResourceLocation tagId = ResourceLocation.tryParse(object.get("tag").getAsString());
             if (tagId != null) collectLocalTagItems(tagId, choices, new HashSet<>());
         }
     }
 
     /** Reads tag JSON too, so variants are available from ModMenu before joining a world. */
-    private void collectLocalTagItems(Identifier tagId, Set<String> choices, Set<Identifier> visited) {
+    private void collectLocalTagItems(ResourceLocation tagId, Set<String> choices, Set<ResourceLocation> visited) {
         if (!visited.add(tagId)) return;
         try {
-            for (var entry : Registries.ITEM.iterateEntries(TagKey.of(RegistryKeys.ITEM, tagId))) {
-                choices.add(Registries.ITEM.getId(entry.value()).toString());
+            for (var entry : BuiltInRegistries.ITEM.getTagOrEmpty(TagKey.create(Registries.ITEM, tagId))) {
+                choices.add(BuiltInRegistries.ITEM.getKey(entry.value()).toString());
             }
             if (!choices.isEmpty()) return;
         } catch (IllegalStateException ignored) {
             // At the title screen tags may not be bound yet; use their JSON below.
         }
-        Identifier tagResource = Identifier.of(tagId.getNamespace(), "tags/item/" + tagId.getPath() + ".json");
+        ResourceLocation tagResource = new ResourceLocation(tagId.getNamespace(), "tags/item/" + tagId.getPath() + ".json");
         Optional<String> json = readLocalRecipeJson(tagResource);
         if (json.isEmpty()) return;
         try {
@@ -606,7 +995,7 @@ public class VanillaRecipesScreen extends Screen {
                         : value.isJsonObject() && value.getAsJsonObject().has("id")
                         ? value.getAsJsonObject().get("id").getAsString() : "";
                 if (raw.startsWith("#")) {
-                    Identifier nested = Identifier.tryParse(raw.substring(1));
+                    ResourceLocation nested = ResourceLocation.tryParse(raw.substring(1));
                     if (nested != null) collectLocalTagItems(nested, choices, visited);
                 } else if (!raw.isBlank()) {
                     choices.add(raw);
@@ -640,36 +1029,51 @@ public class VanillaRecipesScreen extends Screen {
         return Math.max(1, (height - ROWS_Y - 32) / ROW);
     }
 
-    private Text recipeLabel(VanillaRecipePage.VanillaRecipeInfo recipe) {
+    private Component recipeLabel(VanillaRecipePage.VanillaRecipeInfo recipe) {
         if (recipe.special()) {
-            return Text.translatable("customrecipe.vanilla.special").setStyle(net.minecraft.text.Style.EMPTY.withColor(0x77BBFF))
-                    .append(Text.literal(shortId(recipe.id())).setStyle(net.minecraft.text.Style.EMPTY.withColor(0xCCCCCC)));
+            return Component.translatable("customrecipe.vanilla.special").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x77BBFF))
+                    .append(Component.literal(shortId(recipe.id())).setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xCCCCCC)));
         }
-        return Text.literal(itemName(recipe.result()))
-                .append(Text.literal("  " + shortId(recipe.id())).setStyle(net.minecraft.text.Style.EMPTY.withColor(0xAAAAAA)));
+        return Component.literal(itemName(recipe.result()))
+                .append(Component.literal("  " + shortId(recipe.id())).setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xAAAAAA)));
     }
 
     private String itemName(String id) {
-        var item = Registries.ITEM.get(Identifier.tryParse(id));
-        return item == null || item == Items.AIR ? shortId(id) : new ItemStack(item).getName().getString();
+        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
+        return item == null || item == Items.AIR ? shortId(id) : new ItemStack(item).getHoverName().getString();
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
         super.render(ctx, mouseX, mouseY, delta);
+        if (localMode && loading) {
+            int totalQueued = Math.max(1, localScanQueue.size());
+            int progressWidth = Math.min(240, width - 40);
+            int progressX = (width - progressWidth) / 2;
+            int progressY = ROWS_Y + 18;
+            int filled = Math.round(progressWidth * (localScanProcessed / (float) totalQueued));
+            ctx.drawCenteredString(font, Component.literal("Loading... " + localScanProcessed + " / " + totalQueued),
+                    width / 2, progressY - 14, 0xFFEEEEEE);
+            ctx.fill(progressX - 1, progressY - 1, progressX + progressWidth + 1, progressY + 11, 0xFF111111);
+            ctx.fill(progressX, progressY, progressX + progressWidth, progressY + 10, 0xFF444444);
+            ctx.fill(progressX, progressY, progressX + filled, progressY + 10, 0xFF55AA55);
+            ctx.drawCenteredString(font, Component.literal(recipes.size() + " recipes found"),
+                    width / 2, progressY + 16, 0xFFBBBBBB);
+            return;
+        }
         if (loading && recipes.isEmpty()) {
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.vanilla.loading"), 8, ROWS_Y + 2, 0xBBBBBB, false);
+            ctx.drawString(font, Component.translatable("customrecipe.vanilla.loading"), 8, ROWS_Y + 2, 0xBBBBBB, false);
             return;
         }
 
         List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
-        String countText = statusFilter == StatusFilter.ALL
+        String countComponent = statusFilter == StatusFilter.ALL
                 ? "Found " + total + " recipes"
                 : "Showing " + shownRecipes.size() + " " + statusFilter.name().toLowerCase(Locale.ROOT) + " recipes";
-        ctx.drawText(textRenderer, Text.translatable("customrecipe.vanilla.browse", countText), 8, HEADER_Y, 0xFFFFEE88, false);
+        ctx.drawString(font, Component.translatable("customrecipe.vanilla.browse", countComponent), 8, HEADER_Y, 0xFFFFEE88, false);
         if (shownRecipes.isEmpty()) {
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.vanilla.none"), 8, ROWS_Y + 2, 0xFFBBBBBB, false);
+            ctx.drawString(font, Component.translatable("customrecipe.vanilla.none"), 8, ROWS_Y + 2, 0xFFBBBBBB, false);
         }
         for (int i = 0; i < visibleRows() && scroll + i < shownRecipes.size(); i++) {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
@@ -677,10 +1081,10 @@ public class VanillaRecipesScreen extends Screen {
             int rowColor = recipe.special() ? 0x22335566
                     : parent.disabledRecipes.contains(recipe.id()) ? 0x44550000 : 0x22005500;
             ctx.fill(6, y, width - 88, y + ROW - 1, rowColor);
-            var item = Registries.ITEM.get(Identifier.tryParse(recipe.result()));
-            if (item != null && item != Items.AIR) ctx.drawItem(new ItemStack(item), 10, y + 2);
+            var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(recipe.result()));
+            if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), 10, y + 2);
         }
-        if (loading) ctx.drawText(textRenderer, Text.translatable("customrecipe.vanilla.loading_more"), 8, height - 42, 0xFFBBBBBB, false);
+        if (loading) ctx.drawString(font, Component.translatable("customrecipe.vanilla.loading_more"), 8, height - 42, 0xFFBBBBBB, false);
     }
 
     private String shortId(String id) {
@@ -693,13 +1097,29 @@ public class VanillaRecipesScreen extends Screen {
         int maxScroll = Math.max(0, shownRecipes.size() - visibleRows());
         int oldScroll = scroll;
         scroll = Math.max(0, Math.min(maxScroll, scroll - (int) Math.signum(verticalAmount)));
-        if (scroll != oldScroll) clearAndInit();
+        if (scroll != oldScroll) rebuildWidgets();
         if (scroll + visibleRows() >= shownRecipes.size() - 3) loadMore();
         return true;
     }
 
-    @Override public boolean shouldPause() { return true; }
+    @Override public boolean isPauseScreen() { return true; }
 
     /** Recipe states belong to ConfigScreen and are only persisted from there. */
-    @Override public void close() { client.setScreen(parent); }
+    @Override public void onClose() {
+        closeLocalScanArchives();
+        minecraft.setScreen(parent);
+    }
+
+    private record LocalRecipeSource(String recipeId, ResourceLocation resourceId, JarFile archive,
+                                     String archivePath, net.minecraft.world.item.crafting.Recipe<?> loadedRecipe) {
+        static LocalRecipeSource resource(String recipeId, ResourceLocation resourceId) {
+            return new LocalRecipeSource(recipeId, resourceId, null, null, null);
+        }
+        static LocalRecipeSource archive(String recipeId, JarFile archive, String archivePath) {
+            return new LocalRecipeSource(recipeId, null, archive, archivePath, null);
+        }
+        static LocalRecipeSource loaded(net.minecraft.world.item.crafting.Recipe<?> recipe) {
+            return new LocalRecipeSource(recipe.getId().toString(), null, null, null, recipe);
+        }
+    }
 }

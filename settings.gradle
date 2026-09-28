@@ -1,12 +1,9 @@
 pluginManagement {
     repositories {
-        maven {
-            name = 'Fabric'
-            url = 'https://maven.fabricmc.net/'
-        }
-        mavenCentral()
         gradlePluginPortal()
+        maven { url = 'https://maven.minecraftforge.net/' }
+        maven { url = 'https://maven.parchmentmc.org' }
     }
 }
 
-rootProject.name = 'customrecipe'
+rootProject.name = 'customrecipe-forge-1.20.1'

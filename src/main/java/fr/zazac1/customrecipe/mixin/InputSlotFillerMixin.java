@@ -1,20 +1,20 @@
 package fr.zazac1.customrecipe.mixin;
 
 import fr.zazac1.customrecipe.CustomRecipeMod;
-import net.minecraft.recipe.InputSlotFiller;
-import net.minecraft.recipe.Recipe;
-import net.minecraft.screen.AbstractRecipeScreenHandler;
-import net.minecraft.server.network.ServerRecipeBook;
+import net.minecraft.recipebook.ServerPlaceRecipe;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.inventory.RecipeBookMenu;
+import net.minecraft.stats.ServerRecipeBook;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 /** Lets a visible custom recipe be selected from a mixed vanilla/custom book group. */
-@Mixin(InputSlotFiller.class)
+@Mixin(ServerPlaceRecipe.class)
 public abstract class InputSlotFillerMixin {
     @Redirect(
-            method = "fillInputSlots(Lnet/minecraft/server/network/ServerPlayerEntity;Lnet/minecraft/recipe/Recipe;Z)V",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/server/network/ServerRecipeBook;contains(Lnet/minecraft/recipe/Recipe;)Z")
+            method = "recipeClicked(Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/world/item/crafting/Recipe;Z)V",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/stats/ServerRecipeBook;contains(Lnet/minecraft/world/item/crafting/Recipe;)Z")
     )
     private boolean customrecipe$allowVisibleCustomRecipe(ServerRecipeBook recipeBook, Recipe<?> recipe) {
         return recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID) || recipeBook.contains(recipe);
@@ -26,11 +26,11 @@ public abstract class InputSlotFillerMixin {
      * a refill to make the newly selected custom output take effect.
      */
     @Redirect(
-            method = "fillInputSlots(Lnet/minecraft/recipe/Recipe;Z)V",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/screen/AbstractRecipeScreenHandler;matches(Lnet/minecraft/recipe/Recipe;)Z")
+            method = "handleRecipeClicked(Lnet/minecraft/world/item/crafting/Recipe;Z)V",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/inventory/RecipeBookMenu;recipeMatches(Lnet/minecraft/world/item/crafting/Recipe;)Z")
     )
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private boolean customrecipe$refillSelectedCustomRecipe(AbstractRecipeScreenHandler handler, Recipe recipe) {
-        return !recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID) && handler.matches(recipe);
+    private boolean customrecipe$refillSelectedCustomRecipe(RecipeBookMenu handler, Recipe recipe) {
+        return !recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID) && handler.recipeMatches(recipe);
     }
 }

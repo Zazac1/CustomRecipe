@@ -1,13 +1,14 @@
 {
   "required": true,
+  "minVersion": "0.8.5",
   "package": "fr.zazac1.customrecipe.mixin",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "JAVA_17",
   "mixins": [
     "ServerRecipeManagerMixin",
     "RecipeManagerCraftingFilterMixin",
-    "AbstractRecipeScreenHandlerMixin",
+    "RecipeBookMenuMixin",
     "InputSlotFillerMixin",
-    "CraftingScreenHandlerMixin"
+    "CraftingMenuMixin"
   ],
   "injectors": {
     "defaultRequire": 1

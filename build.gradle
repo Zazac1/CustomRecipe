@@ -1,81 +1,87 @@
 plugins {
-    id 'fabric-loom' version "${loom_version}"
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
     id 'maven-publish'
 }
 
 version = project.mod_version
 group = project.maven_group
+base { archivesName = project.mod_id }
 
-base {
-    archivesName = project.mod_id
+minecraft {
+    mappings channel: 'official', version: project.minecraft_version
+    copyIdeResources = true
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            // The manifest registers this for packaged builds; userdev runs
+            // need the config explicitly so client mixins are applied too.
+            arg '-mixin.config=customrecipe.mixins.json'
+            mods { "${project.mod_id}" { source sourceSets.main } }
+        }
+        client { }
+        server { args '--nogui' }
+    }
 }
 
 repositories {
     maven {
-        name = 'Fabric'
-        url = 'https://maven.fabricmc.net/'
+        name = 'BlameJared Maven'
+        url = 'https://maven.blamejared.com/'
     }
     maven {
-        name = 'TerraformersMC'
-        url = 'https://maven.terraformersmc.com/releases/'
+        name = 'Shedaniel Maven'
+        url = 'https://maven.shedaniel.me/'
     }
     mavenCentral()
 }
 
-loom {
-    mods {
-        "${project.mod_id}" {
-            sourceSet sourceSets.main
-        }
-    }
-
-    runs {
-        client {
-            runDir = "run-client"
-        }
-        server {
-            runDir = "run-server"
-        }
-    }
-}
-
 dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
+    implementation fg.deobf("me.shedaniel.cloth:cloth-config-forge:${project.cloth_config_version}")
 
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-    modImplementation "com.terraformersmc:modmenu:${project.modmenu_version}"
+    // JEI is optional for players. The APIs compile the client plugin, while
+    // the full mod is present only in the development runtime and is remapped
+    // by ForgeGradle for Mojang mappings.
+    compileOnly fg.deobf("mezz.jei:jei-${project.minecraft_version}-common-api:${project.jei_version}")
+    compileOnly fg.deobf("mezz.jei:jei-${project.minecraft_version}-forge-api:${project.jei_version}")
+    runtimeOnly fg.deobf("mezz.jei:jei-${project.minecraft_version}-forge:${project.jei_version}")
 }
 
 processResources {
     inputs.property 'version', project.version
-
-    filesMatching('fabric.mod.json') {
-        expand 'version': project.version
-    }
+    filesMatching('META-INF/mods.toml') { expand 'version': project.version }
 }
 
 tasks.withType(JavaCompile).configureEach {
-    it.options.release = 21
+    options.release = 17
+    options.encoding = 'UTF-8'
 }
 
-java {
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
+// ForgeGradle otherwise gives runServer an empty input stream: commands typed
+// in the development terminal never reach Minecraft's dedicated-server console.
+tasks.withType(JavaExec).configureEach {
+    if (name == 'runServer') {
+        standardInput = System.in
+    }
 }
+java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
 
 jar {
-    from('LICENSE') {
-        rename { "${it}_${project.mod_id}" }
-    }
+    manifest { attributes([
+        'Specification-Title': project.mod_id,
+        'Specification-Vendor': 'zazac1',
+        'Specification-Version': '1',
+        'Implementation-Title': project.name,
+        'Implementation-Version': project.jar.archiveVersion,
+        'Implementation-Vendor': 'zazac1',
+        'MixinConfigs': 'customrecipe.mixins.json'
+    ]) }
+    from('LICENSE') { rename { "${it}_${project.mod_id}" } }
 }
 
 publishing {
-    publications {
-        create('mavenJava', MavenPublication) {
-            artifactId = project.mod_id
-            from components.java
-        }
-    }
-    repositories {}
+    publications { mavenJava(MavenPublication) { artifact jar } }
+    repositories { }
 }

@@ -1,190 +1,129 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
+import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.ModConfig;
-import fr.zazac1.customrecipe.WorldRecipeConfig;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
-import fr.zazac1.customrecipe.ServerConfigPayload;
-import fr.zazac1.customrecipe.VanillaRecipePage;
-import fr.zazac1.customrecipe.VanillaRecipePagePayload;
-import fr.zazac1.customrecipe.VanillaRecipeDetails;
-import fr.zazac1.customrecipe.VanillaRecipeDetailsPayload;
-import fr.zazac1.customrecipe.ValidatedServerConfigPayload;
-import fr.zazac1.customrecipe.ServerConfigSaveResultPayload;
-import com.google.gson.Gson;
-import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.GameMenuScreen;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.HoverEvent;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.WorldSavePath;
+import fr.zazac1.customrecipe.WorldRecipeConfig;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.PauseScreen;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.storage.LevelResource;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraftforge.client.event.RegisterClientCommandsEvent;
+import net.minecraftforge.event.TickEvent;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 
-import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
-
-@Environment(EnvType.CLIENT)
-public class ClientInit implements ClientModInitializer {
+/** Forge client lifecycle setup. Network endpoints live in {@link ClientPacketHandler}. */
+public final class ClientInit {
     private static String activeClientWorldId = "";
-    private static final Gson GSON = new Gson();
+    private static final ResourceLocation PAUSE_BUTTON_ICON = new ResourceLocation(CustomRecipeMod.MOD_ID,
+            "textures/gui/pause_button.png");
 
-    @Override
-    public void onInitializeClient() {
-        // Used only by the clickable local-world tip; it never reaches a server.
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
-                literal("customrecipe_open_local").executes(context -> {
-                    MinecraftClient client = MinecraftClient.getInstance();
-                    // This client-only helper is for the clickable new-world tip.
-                    // Never expose the local editor while connected to a remote server.
-                    if (client.getServer() == null) return 0;
-                    client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new GameMenuScreen(true))));
-                    return 1;
-                })
-        ));
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (client.getServer() == null) {
-                activeClientWorldId = "";
-                return;
-            }
-            if (client.player == null) return;
-            String worldId = currentLocalWorldId(client);
-            if (worldId.equals(activeClientWorldId)) return;
-            activeClientWorldId = worldId;
-            // Minecraft starts a freshly created save on day 0. Existing saves
-            // are never candidates, even if they have no tip flag yet.
-            String levelName = client.getServer().getSaveProperties().getLevelName();
-            long day = client.getServer().getOverworld().getTimeOfDay() / 24000L;
-            String worldInstanceId = currentLocalWorldInstanceId(client);
-            WorldRecipeConfig savedWorldConfig = ConfigLoader.get().findWorldConfig(worldId);
-            boolean alreadyShown = savedWorldConfig != null && savedWorldConfig.shown_editor_tip
-                    && worldInstanceId.equals(savedWorldConfig.editor_tip_world_instance);
-            CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip check: world='{}', id='{}', instance='{}', day={}, alreadyShown={}",
-                    levelName, worldId, worldInstanceId, day, alreadyShown);
-            if (day != 0L) {
-                CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip skipped: world is no longer on day 0.");
-                return;
-            }
-            if (!WorldRecipeAssignments.markEditorTipShown(worldId, levelName, worldInstanceId)) {
-                CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip skipped: this world is already marked as shown.");
-                return;
-            }
-            Text editorLink = Text.translatable("customrecipe.chat.world_tip.link")
-                    .setStyle(Style.EMPTY.withColor(Formatting.AQUA).withUnderline(true)
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_open_local"))
-                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                                    Text.translatable("customrecipe.chat.world_tip.hover"))));
-            client.player.sendMessage(Text.translatable("customrecipe.chat.world_tip", editorLink), false);
-            CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
-        });
-        ClientPlayNetworking.registerGlobalReceiver(ServerConfigPayload.ID, (client, handler, buffer, responseSender) -> {
-            var config = ConfigLoader.fromJson(buffer.readString(500_000));
-            client.execute(() -> {
-                if (config == null) {
-                    if (client.player != null) client.player.sendMessage(Text.translatable("customrecipe.chat.invalid_server_config"), false);
-                    return;
-                }
-                int imported = mergeLocalRecipes(config);
-                if (imported > 0 && client.player != null) client.player.sendMessage(
-                        Text.translatable("customrecipe.chat.local_recipes_ready", imported), false);
-                ClientServerConfigNetworking.validate(config);
-            });
-        });
-        ClientPlayNetworking.registerGlobalReceiver(ValidatedServerConfigPayload.ID, (client, handler, buffer, responseSender) -> {
-            var config = ConfigLoader.fromJson(buffer.readString(500_000));
-            client.execute(() -> {
-                if (config == null) {
-                    if (client.player != null) client.player.sendMessage(Text.translatable("customrecipe.chat.invalid_server_validation"), false);
-                    return;
-                }
-                client.setScreen(new ConfigScreen(client.currentScreen, config,
-                        "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
-            });
-        });
-        ClientPlayNetworking.registerGlobalReceiver(ServerConfigSaveResultPayload.ID, (client, handler, buffer, responseSender) -> {
-            boolean saved = buffer.readBoolean();
-            String message = buffer.readString(512);
-            client.execute(() -> ClientServerConfigNetworking.completeSave(saved, message));
-        });
-        ClientPlayNetworking.registerGlobalReceiver(VanillaRecipePagePayload.ID, (client, handler, buffer, responseSender) -> {
-            VanillaRecipePage page = GSON.fromJson(buffer.readString(), VanillaRecipePage.class);
-            client.execute(() -> { if (page != null && client.currentScreen instanceof VanillaRecipesScreen screen) screen.applyResult(page); });
-        });
-        ClientPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsPayload.ID, (client, handler, buffer, responseSender) -> {
-            VanillaRecipeDetails details = GSON.fromJson(buffer.readString(), VanillaRecipeDetails.class);
-            client.execute(() -> { if (details != null && client.currentScreen instanceof VanillaRecipeDetailsScreen screen) screen.applyDetails(details); });
-        });
+    public static void initialize() {
+        MinecraftForge.EVENT_BUS.addListener(ClientInit::onClientTick);
+        MinecraftForge.EVENT_BUS.addListener(ClientInit::registerClientCommands);
+        MinecraftForge.EVENT_BUS.addListener(ClientInit::onPauseScreenInit);
+        MinecraftForge.EVENT_BUS.addListener(ClientInit::onPauseScreenRender);
+        MinecraftForge.registerConfigScreen(ClothConfigIntegration::createScreen);
     }
 
-    /**
-     * An integrated server can report its save root as ".". Resolve the level
-     * directory through the client save list so two different solo worlds never
-     * share the same first-entry message state.
-     */
-    private static String currentLocalWorldId(MinecraftClient client) {
-        return WorldRecipeAssignments.worldId(currentLocalWorldDirectory(client));
+    /** Registers the local-only command used by the clickable new-world hint. */
+    private static void registerClientCommands(RegisterClientCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("customrecipe_open_local").executes(context -> {
+            Minecraft client = Minecraft.getInstance();
+            // This editor writes the local config, never a remote server config.
+            if (client.getSingleplayerServer() == null) return 0;
+            client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true))));
+            return 1;
+        }));
     }
 
-    private static String currentLocalWorldInstanceId(MinecraftClient client) {
-        Path worldDirectory = currentLocalWorldDirectory(client);
-        try {
-            long created = Files.readAttributes(worldDirectory, BasicFileAttributes.class)
-                    .creationTime().toMillis();
-            return "created-" + created;
-        } catch (Exception ignored) {
-            return "seed-" + client.getServer().getOverworld().getSeed();
+    /** Forge-native pause-menu hook; reliably runs after the 1.20.1 menu is built. */
+    private static void onPauseScreenInit(ScreenEvent.Init.Post event) {
+        if (!(event.getScreen() instanceof PauseScreen) || Minecraft.getInstance().getSingleplayerServer() == null) return;
+        int x = event.getScreen().width - 28;
+        int y = event.getScreen().height - 28;
+        event.addListener(Button.builder(Component.empty(), button ->
+                        Minecraft.getInstance().setScreen(ConfigScreen.fromPauseMenu(event.getScreen())))
+                .tooltip(Tooltip.create(Component.translatable("customrecipe.tooltip.open")))
+                .bounds(x, y, 20, 20).build());
+    }
+
+    private static void onPauseScreenRender(ScreenEvent.Render.Post event) {
+        if (!(event.getScreen() instanceof PauseScreen) || Minecraft.getInstance().getSingleplayerServer() == null) return;
+        int x = event.getScreen().width - 28;
+        int y = event.getScreen().height - 28;
+        event.getGuiGraphics().blit(PAUSE_BUTTON_ICON, x + 2, y + 2, 0, 0, 16, 16, 16, 16);
+    }
+
+    /** Same END tick used on Fabric: checks a local world once and sends its editor hint. */
+    private static void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        Minecraft client = Minecraft.getInstance();
+        var server = client.getSingleplayerServer();
+        if (server == null) {
+            activeClientWorldId = "";
+            return;
         }
+        if (client.player == null) return;
+        Path worldDirectory = server.getWorldPath(LevelResource.ROOT);
+        String worldId = WorldRecipeAssignments.worldId(worldDirectory);
+        if (worldId.equals(activeClientWorldId)) return;
+        activeClientWorldId = worldId;
+        String levelName = server.getWorldData().getLevelName();
+        long day = server.overworld().getDayTime() / 24000L;
+        String worldInstanceId = worldInstanceId(worldDirectory, server.overworld().getSeed());
+        WorldRecipeConfig config = ConfigLoader.get().findWorldConfig(worldId);
+        boolean alreadyShown = config != null && config.shown_editor_tip
+                && worldInstanceId.equals(config.editor_tip_world_instance);
+        if (day != 0L || alreadyShown || !WorldRecipeAssignments.markEditorTipShown(worldId, levelName, worldInstanceId)) return;
+        Component link = Component.translatable("customrecipe.chat.world_tip.link").setStyle(
+                Style.EMPTY.withColor(ChatFormatting.AQUA).withUnderlined(true)
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_open_local"))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                Component.translatable("customrecipe.chat.world_tip.hover"))));
+        client.player.sendSystemMessage(Component.translatable("customrecipe.chat.world_tip", link));
+        CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent for world '{}'.", levelName);
     }
 
-    private static Path currentLocalWorldDirectory(MinecraftClient client) {
-        String levelName = client.getServer().getSaveProperties().getLevelName();
-        if (levelName != null && !levelName.isBlank()) {
-            Path saves = client.getLevelStorage().getSavesDirectory();
-            Path worldDirectory = saves.resolve(levelName);
-            if (Files.isDirectory(worldDirectory)) return worldDirectory;
-        }
-        return client.getServer().getSavePath(WorldSavePath.ROOT);
+    private static String worldInstanceId(Path directory, long seed) {
+        try { return "created-" + Files.readAttributes(directory, BasicFileAttributes.class).creationTime().toMillis(); }
+        catch (Exception ignored) { return "seed-" + seed; }
     }
 
-    /** Stages local ModMenu recipes in the server editor without sending them automatically. */
-    private static int mergeLocalRecipes(fr.zazac1.customrecipe.ModConfig serverConfig) {
+    /** Stages local recipes in the server editor without automatically publishing them. */
+    public static int mergeLocalRecipes(ModConfig serverConfig) {
         int added = 0;
-        for (var localRecipe : ConfigLoader.get().custom_recipes) {
-            boolean alreadyOnServer = serverConfig.custom_recipes.stream()
-                    .anyMatch(serverRecipe -> ConfigLoader.sameRecipe(localRecipe, serverRecipe));
-            if (!alreadyOnServer) {
-                serverConfig.custom_recipes.add(copyLocalRecipeAsDraft(localRecipe));
-                added++;
-            }
+        for (CustomRecipeEntry localRecipe : ConfigLoader.get().custom_recipes) {
+            if (serverConfig.custom_recipes.stream().anyMatch(serverRecipe -> ConfigLoader.sameRecipe(localRecipe, serverRecipe))) continue;
+            serverConfig.custom_recipes.add(copyLocalRecipeAsDraft(localRecipe));
+            added++;
         }
         return added;
     }
 
-    private static fr.zazac1.customrecipe.CustomRecipeEntry copyLocalRecipeAsDraft(
-            fr.zazac1.customrecipe.CustomRecipeEntry source) {
-        var copy = new fr.zazac1.customrecipe.CustomRecipeEntry();
-        copy.id = source.id;
-        copy.type = source.type;
-        copy.ingredients = new java.util.ArrayList<>(source.ingredients);
-        copy.pattern = new java.util.ArrayList<>(source.pattern);
-        copy.keys = new java.util.LinkedHashMap<>(source.keys);
-        copy.result = source.result;
-        copy.count = source.count;
-        copy.enabled = null;
-        copy.server_enabled = null;
-        copy.world_ids = new java.util.ArrayList<>();
-        copy.world_names = new java.util.LinkedHashMap<>();
+    private static CustomRecipeEntry copyLocalRecipeAsDraft(CustomRecipeEntry source) {
+        CustomRecipeEntry copy = new CustomRecipeEntry();
+        copy.id = source.id; copy.type = source.type; copy.ingredients = new java.util.ArrayList<>(source.ingredients);
+        copy.pattern = new java.util.ArrayList<>(source.pattern); copy.keys = new java.util.LinkedHashMap<>(source.keys);
+        copy.result = source.result; copy.count = source.count; copy.enabled = null; copy.server_enabled = null;
+        copy.world_ids = new java.util.ArrayList<>(); copy.world_names = new java.util.LinkedHashMap<>();
         copy.known_by_default = source.known_by_default;
         return copy;
     }
+    private ClientInit() {}
 }

@@ -1,6 +1,6 @@
 package fr.zazac1.customrecipe.client;
 
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -32,7 +32,7 @@ final class WindowsFileDialogs {
                         .redirectErrorStream(true).start();
                 String result = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
                 int exit = process.waitFor();
-                MinecraftClient.getInstance().execute(() -> {
+                Minecraft.getInstance().execute(() -> {
                     if (exit != 0) {
                         failed.accept("Windows file dialog failed.");
                     } else if (!result.isBlank()) {
@@ -41,7 +41,7 @@ final class WindowsFileDialogs {
                 });
             } catch (IOException | InterruptedException e) {
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-                MinecraftClient.getInstance().execute(() -> failed.accept(e.getMessage()));
+                Minecraft.getInstance().execute(() -> failed.accept(e.getMessage()));
             }
         }, "CustomRecipe-WindowsFileDialog");
         dialogThread.setDaemon(true);

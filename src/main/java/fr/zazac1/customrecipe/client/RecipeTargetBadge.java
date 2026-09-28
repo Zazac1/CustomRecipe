@@ -3,13 +3,13 @@ package fr.zazac1.customrecipe.client;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.RecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.texture.NativeImageBackedTexture;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import com.mojang.blaze3d.platform.NativeImage;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.resources.ResourceLocation;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,7 +26,7 @@ final class RecipeTargetBadge {
     private static final Map<String, WorldIcon> WORLD_ICONS = new HashMap<>();
     private static final Set<String> MISSING_WORLD_ICONS = new HashSet<>();
 
-    static void draw(DrawContext context, MinecraftClient client, RecipeTarget target, String label) {
+    static void draw(GuiGraphics context, Minecraft client, RecipeTarget target, String label) {
         // Outer frame begins at x=8, exactly aligned with the recipe-table border.
         int x = 9;
         int y = 3;
@@ -34,25 +34,25 @@ final class RecipeTargetBadge {
         if (target.isWorld()) {
             WorldIcon icon = worldIcon(client, target);
             if (icon != null) {
-                context.drawTexture(icon.id(), x, y, 0, 0, 24, 24,
+                context.blit(icon.id(), x, y, 0, 0, 24, 24,
                         icon.width(), icon.height());
             } else {
-                context.drawItem(new ItemStack(Items.GRASS_BLOCK), x + 4, y + 4);
+                context.renderItem(new ItemStack(Items.GRASS_BLOCK), x + 4, y + 4);
             }
         } else {
-            Identifier globe = new Identifier(CustomRecipeMod.MOD_ID, "textures/gui/world_globe.png");
-            context.drawTexture(globe, x + 4, y + 4,
+            ResourceLocation globe = new ResourceLocation(CustomRecipeMod.MOD_ID, "textures/gui/world_globe.png");
+            context.blit(globe, x + 4, y + 4,
                     0, 0, 16, 16, 16, 16);
         }
-        context.drawText(client.textRenderer, label, x + 31, y + 8, 0xFFFFFFFF, true);
+        context.drawString(client.font, label, x + 31, y + 8, 0xFFFFFFFF, true);
     }
 
-    private static WorldIcon worldIcon(MinecraftClient client, RecipeTarget target) {
+    private static WorldIcon worldIcon(Minecraft client, RecipeTarget target) {
         if (client == null || MISSING_WORLD_ICONS.contains(target.id())) return null;
         WorldIcon cached = WORLD_ICONS.get(target.id());
         if (cached != null) return cached;
         try {
-            Path saves = client.getLevelStorage().getSavesDirectory();
+            Path saves = client.gameDirectory.toPath().resolve("saves");
             if (saves == null) return null;
             Path worldDirectory;
             try (Stream<Path> directories = Files.list(saves)) {
@@ -65,11 +65,11 @@ final class RecipeTargetBadge {
             if (!Files.isRegularFile(iconPath)) return missing(target.id());
             try (InputStream input = Files.newInputStream(iconPath)) {
                 NativeImage image = NativeImage.read(input);
-                Identifier id = new Identifier(CustomRecipeMod.MOD_ID,
+                ResourceLocation id = new ResourceLocation(CustomRecipeMod.MOD_ID,
                         "dynamic/world_icons/" + target.id().replaceAll("[^a-z0-9_./-]", "_"));
                 WorldIcon icon = new WorldIcon(id, image.getWidth(), image.getHeight());
-                client.getTextureManager().registerTexture(id,
-                        new NativeImageBackedTexture(image));
+                client.getTextureManager().register(id,
+                        new DynamicTexture(image));
                 WORLD_ICONS.put(target.id(), icon);
                 return icon;
             }
@@ -83,7 +83,7 @@ final class RecipeTargetBadge {
         return null;
     }
 
-    private record WorldIcon(Identifier id, int width, int height) {}
+    private record WorldIcon(ResourceLocation id, int width, int height) {}
 
     private RecipeTargetBadge() {}
 }

@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * Represents a single user-created custom crafting recipe.
@@ -75,10 +75,10 @@ public class CustomRecipeEntry {
     public List<String> same_shape_recipes = new ArrayList<>();
 
     /** Stable server key used for recipe loading and automatic recipe-book unlocks. */
-    public Identifier serverRecipeId() {
+    public ResourceLocation serverRecipeId() {
         String source = id == null || id.isBlank() ? result : id;
         String safeId = source == null ? "recipe"
                 : source.replaceAll("[^a-zA-Z0-9_./-]", "_").toLowerCase(java.util.Locale.ROOT);
-        return Identifier.of(CustomRecipeMod.MOD_ID, "custom/" + safeId);
+        return new ResourceLocation(CustomRecipeMod.MOD_ID, "custom/" + safeId);
     }
 }

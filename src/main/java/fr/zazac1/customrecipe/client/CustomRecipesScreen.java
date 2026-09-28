@@ -4,17 +4,15 @@ import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.RecipeIntegrity;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.MultilineTextWidget;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.MultiLineTextWidget;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -22,7 +20,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-@Environment(EnvType.CLIENT)
 public class CustomRecipesScreen extends Screen {
 
     private static final int PAD      = 8;
@@ -54,7 +51,7 @@ public class CustomRecipesScreen extends Screen {
     }
 
     CustomRecipesScreen(ConfigScreen parent, boolean libraryPicker) {
-        super(Text.translatable(libraryPicker ? "customrecipe.screen.global_library" : "customrecipe.screen.my_recipes"));
+        super(Component.translatable(libraryPicker ? "customrecipe.screen.global_library" : "customrecipe.screen.my_recipes"));
         this.parent  = parent;
         this.libraryPicker = libraryPicker;
         this.recipes = libraryPicker ? parent.currentConfig().global_library.custom_recipes : parent.recipes;
@@ -126,7 +123,7 @@ public class CustomRecipesScreen extends Screen {
     }
     private int detailActionX() { return PAD + 4; }
     private int detailActionY() { return detailY() + 26; }
-    private int detailKnownX() { return detailActionX() + 32 + textRenderer.getWidth("Shapeless"); }
+    private int detailKnownX() { return detailActionX() + 32 + font.width("Shapeless"); }
     private int detailH() {
         if (selectedQuickAdd >= 0) return QUICK_ADD_DETAIL_H;
         if (selectedRecipe < 0 || selectedRecipe >= recipes.size()) return DETAIL_H;
@@ -175,26 +172,26 @@ public class CustomRecipesScreen extends Screen {
         // Refresh first so stale persisted corruption flags never survive that recovery.
         for (CustomRecipeEntry recipe : recipes) RecipeIntegrity.refresh(recipe);
         if (!parent.isServerManaged()) {
-            LocalRecipeConflictDetector.refresh(recipes, client);
+            LocalRecipeConflictDetector.refresh(recipes, minecraft);
         } else {
-            LocalRecipeConflictDetector.refreshVanillaCraftingOutputs(client);
+            LocalRecipeConflictDetector.refreshVanillaCraftingOutputs(minecraft);
         }
         // ── Fills ────────────────────────────────────────────────────────
-        addDrawable((ctx, mx, my, d) -> {
+        addRenderableOnly((ctx, mx, my, d) -> {
             ctx.fill(PAD, listTop(), tableRight(), listTop() + listH(), 0x88101010);
             drawBox(ctx, PAD, listTop(), tableWidth(), listH(), 0xFF505050);
             // Spreadsheet-style column header: every icon has a named, fixed column.
             ctx.fill(PAD + 1, listTop() + 1, tableRight() - 1, rowsTop() - 1, 0xDD252B2A);
-            ctx.drawHorizontalLine(PAD + 1, tableRight() - 2, rowsTop() - 1, 0xFF596462);
+            ctx.fill(PAD + 1, rowsTop() - 1, tableRight() - 1, rowsTop(), 0xFF596462);
             int[] columns = {PAD + 45, PAD + 96, PAD + 138, statusX() - 4, deleteX() - 4};
             for (int column : columns)
-                ctx.drawVerticalLine(column, listTop() + 1, listTop() + listH() - 2, 0xFF39433F);
+                ctx.fill(column, listTop() + 1, column + 1, listTop() + listH() - 1, 0xFF39433F);
             int headerColor = 0xFFB8C7C1;
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.output"), PAD + 4, listTop() + 4, headerColor, false);
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.status"), PAD + 48, listTop() + 4, headerColor, false);
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.type"), PAD + 101, listTop() + 4, headerColor, false);
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.recipe"), recipeX(), listTop() + 4, headerColor, false);
-            ctx.drawText(textRenderer, Text.translatable(libraryPicker ? "customrecipe.table.add" : "customrecipe.table.state"), statusX() + 28, listTop() + 4, headerColor, false);
+            ctx.drawString(font, Component.translatable("customrecipe.table.output"), PAD + 4, listTop() + 4, headerColor, false);
+            ctx.drawString(font, Component.translatable("customrecipe.table.status"), PAD + 48, listTop() + 4, headerColor, false);
+            ctx.drawString(font, Component.translatable("customrecipe.table.type"), PAD + 101, listTop() + 4, headerColor, false);
+            ctx.drawString(font, Component.translatable("customrecipe.table.recipe"), recipeX(), listTop() + 4, headerColor, false);
+            ctx.drawString(font, Component.translatable(libraryPicker ? "customrecipe.table.add" : "customrecipe.table.state"), statusX() + 28, listTop() + 4, headerColor, false);
             if (hasRecipeScrollbar()) {
                 int trackX = recipeScrollTrackX();
                 int trackY = recipeScrollTrackY();
@@ -219,9 +216,9 @@ public class CustomRecipesScreen extends Screen {
                         rowColor, (rowColor & 0x00FFFFFF) | 0x18000000);
                 // Icône de l'item résultat
                 String resId = recipes.get(i).result;
-                Identifier resultId = resId == null ? null : Identifier.tryParse(resId);
-                if (resultId != null && Registries.ITEM.containsId(resultId)) {
-                    ctx.drawItem(new ItemStack(Registries.ITEM.get(resultId)), itemIconX(), y + 2);
+                ResourceLocation resultId = resId == null ? null : ResourceLocation.tryParse(resId);
+                if (resultId != null && BuiltInRegistries.ITEM.containsKey(resultId)) {
+                    ctx.renderItem(new ItemStack(BuiltInRegistries.ITEM.get(resultId)), itemIconX(), y + 2);
                 }
                 drawRecipeStatusIcon(ctx, warningIconX(), y + 2, corrupted, conflict);
                 boolean shapedType = "shaped".equalsIgnoreCase(recipes.get(i).type);
@@ -240,35 +237,35 @@ public class CustomRecipesScreen extends Screen {
         // ── Titre ─────────────────────────────────────────────────────────
         if (libraryPicker) {
             String libraryLabel = "Global Library";
-            addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
+            addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft,
                     GlobalRecipeTarget.INSTANCE, libraryLabel));
             boolean hasWorldTarget = parent.target().isWorld();
             int importable = hasWorldTarget ? parent.globalLibraryImportableCount() : 0;
-            int importButtonX = 52 + textRenderer.getWidth(libraryLabel);
+            int importButtonX = 52 + font.width(libraryLabel);
             int libraryActionW = 92;
             int libraryActionsX = width - PAD - libraryActionW * 2 - 4;
             int importButtonW = Math.max(1, Math.min(200, libraryActionsX - 8 - importButtonX));
-            Text importLabel = hasWorldTarget
-                    ? Text.translatable("customrecipe.button.add_all_from_library")
-                    : Text.translatable("customrecipe.button.select_world_to_import");
-            ButtonWidget addAll = ButtonWidget.builder(importLabel, b -> {
+            Component importLabel = hasWorldTarget
+                    ? Component.translatable("customrecipe.button.add_all_from_library")
+                    : Component.translatable("customrecipe.button.select_world_to_import");
+            Button addAll = Button.builder(importLabel, b -> {
                 if (hasWorldTarget) {
-                    client.setScreen(new ImportGlobalLibraryScreen(parent, this, importable));
+                    minecraft.setScreen(new ImportGlobalLibraryScreen(parent, this, importable));
                 } else {
-                    client.setScreen(new RecipeTargetSelectScreen(parent,
+                    minecraft.setScreen(new RecipeTargetSelectScreen(parent,
                             selected -> new CustomRecipesScreen(selected, true)));
                 }
-            }).dimensions(importButtonX, 4, importButtonW, 20).build();
+            }).bounds(importButtonX, 4, importButtonW, 20).build();
             addAll.active = !hasWorldTarget || importable > 0;
-            if (hasWorldTarget && !addAll.active) addAll.setTooltip(net.minecraft.client.gui.tooltip.Tooltip.of(
-                    Text.translatable("customrecipe.import.nothing_to_add")));
-            addDrawableChild(addAll);
+            if (hasWorldTarget && !addAll.active) addAll.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+                    Component.translatable("customrecipe.import.nothing_to_add")));
+            addRenderableWidget(addAll);
         } else if (parent.target().isWorld()) {
             String worldLabel = "Recipes from " + parent.target().displayName();
-            addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
+            addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft,
                     parent.target(), worldLabel));
         } else {
-            addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client,
+            addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft,
                     parent.target(), "Global Library"));
             int libraryActionW = 118;
         }
@@ -281,45 +278,45 @@ public class CustomRecipesScreen extends Screen {
             if (y < listTop() || y + ROW > listTop() + listH()) continue;
             boolean sel = selectedRecipe == idx;
 
-            MultilineTextWidget lbl = new MultilineTextWidget(
+            MultiLineTextWidget lbl = new MultiLineTextWidget(
                     recipeX(), y + (ROW - 8) / 2,
-                    Text.literal(formatEntry(recipes.get(i)))
-                            .setStyle(net.minecraft.text.Style.EMPTY.withColor(sel ? 0xFFEE88 : 0xDDDDDD)),
-                    textRenderer);
+                    Component.literal(formatEntry(recipes.get(i)))
+                            .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(sel ? 0xFFEE88 : 0xDDDDDD)),
+                    font);
             lbl.setMaxWidth(statusX() - recipeX() - 8);
             lbl.setMaxRows(1);
-            addDrawableChild(lbl);
+            addRenderableWidget(lbl);
 
             CustomRecipeEntry entry = recipes.get(idx);
             boolean corrupted = isCorrupted(entry);
             boolean active = isActiveForThisScreen(entry);
-            addDrawableChild(ButtonWidget.builder(
-                    corrupted ? Text.translatable("customrecipe.state.corrupted").setStyle(net.minecraft.text.Style.EMPTY.withColor(0xFF5555))
-                    : libraryPicker ? Text.translatable("customrecipe.button.add").setStyle(net.minecraft.text.Style.EMPTY.withColor(0x55FF55))
+            addRenderableWidget(Button.builder(
+                    corrupted ? Component.translatable("customrecipe.state.corrupted").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF5555))
+                    : libraryPicker ? Component.translatable("customrecipe.button.add").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x55FF55))
                     : parent.target().isWorld()
-                            ? Text.translatable(active ? "customrecipe.state.enabled" : "customrecipe.state.disabled")
-                                    .setStyle(net.minecraft.text.Style.EMPTY.withColor(active ? 0x55FF55 : 0xFF5555))
-                            : Text.translatable("customrecipe.state.library").setStyle(net.minecraft.text.Style.EMPTY.withColor(0x77BBFF)),
+                            ? Component.translatable(active ? "customrecipe.state.enabled" : "customrecipe.state.disabled")
+                                    .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(active ? 0x55FF55 : 0xFF5555))
+                            : Component.translatable("customrecipe.state.library").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x77BBFF)),
                     b -> {
                         if (isCorrupted(recipes.get(idx))) return;
                         if (libraryPicker) {
                             parent.addFromLibrary(recipes.get(idx));
-                            client.setScreen(new CustomRecipesScreen(parent));
+                            minecraft.setScreen(new CustomRecipesScreen(parent));
                             return;
                         }
                         if (parent.target().isWorld()) {
                             // Per-world recipes can be toggled directly from their State cell.
                             CustomRecipeEntry recipe = recipes.get(idx);
                             recipe.enabled = active ? Boolean.FALSE : Boolean.TRUE;
-                            // `server_enabled` was an old client publication cache. It
+                            // `server_enabled` was an old minecraft publication cache. It
                             // must not keep a locally re-enabled recipe disabled.
                             if (!active) recipe.server_enabled = null;
-                            clearAndInit();
+                            rebuildWidgets();
                         }
                     }
-            ).dimensions(statusX(), y + 2, 88, ROW - 4).build());
+            ).bounds(statusX(), y + 2, 88, ROW - 4).build());
 
-            if (!libraryPicker) addDrawableChild(ButtonWidget.builder(Text.empty(),
+            if (!libraryPicker) addRenderableWidget(Button.builder(Component.empty(),
                     b -> {
                         if (quickAddEditMode) {
                             CustomRecipeEntry snapshot = ConfigLoader.copyRecipe(recipes.get(idx));
@@ -329,16 +326,16 @@ public class CustomRecipesScreen extends Screen {
                             }
                             // Adding one shortcut completes this one-shot mode.
                             quickAddEditMode = false;
-                            clearAndInit();
+                            rebuildWidgets();
                             return;
                         }
                         if (selectedRecipe == idx) selectedRecipe = -1;
                         else if (selectedRecipe > idx) selectedRecipe--;
                         recipes.remove(idx);
-                        clearAndInit();
+                        rebuildWidgets();
                     }
-            ).dimensions(deleteX(), y + 1, 18, 18).build());
-            if (!libraryPicker) addDrawable((ctx, mx, my, d) -> {
+            ).bounds(deleteX(), y + 1, 18, 18).build());
+            if (!libraryPicker) addRenderableOnly((ctx, mx, my, d) -> {
                 if (quickAddEditMode) {
                     if (parent.target().isWorld()) drawBox(ctx, deleteX(), y + 1, 18, 18, 0xFFFFD447);
                     CustomRecipeSprites.draw(ctx, CustomRecipeSprites.ADD, deleteX() + 1, y + 2, 16, 16);
@@ -349,12 +346,12 @@ public class CustomRecipesScreen extends Screen {
         }
 
         if (hasQuickAdd()) {
-            addDrawableChild(ButtonWidget.builder(Text.empty(), b -> {
+            addRenderableWidget(Button.builder(Component.empty(), b -> {
                 quickAddEditMode = !quickAddEditMode;
                 selectedQuickAdd = -1;
-                clearAndInit();
-            }).dimensions(quickAddX() + 2, listTop() + 3, 20, 20).build());
-            addDrawable((ctx, mx, my, d) -> {
+                rebuildWidgets();
+            }).bounds(quickAddX() + 2, listTop() + 3, 20, 20).build());
+            addRenderableOnly((ctx, mx, my, d) -> {
                 if (quickAddEditMode) {
                     ctx.fill(quickAddX() + 3, listTop() + 4, quickAddX() + 21, listTop() + 22, 0xFF303030);
                 }
@@ -362,28 +359,28 @@ public class CustomRecipesScreen extends Screen {
             });
             for (int i = quickAddScroll; i < Math.min(quickAddCount(), quickAddScroll + quickAddVisible()); i++) {
                 final int quickIndex = i;
-                addDrawableChild(ButtonWidget.builder(Text.empty(), b -> {
+                addRenderableWidget(Button.builder(Component.empty(), b -> {
                     // A Quick Add always owns the detail panel, including snapshots from the library.
                     selectedRecipe = -1;
                     selectedQuickAdd = quickIndex;
-                    clearAndInit();
-                }).dimensions(quickAddX() + 2, quickAddY(i), 20, 20).build());
+                    rebuildWidgets();
+                }).bounds(quickAddX() + 2, quickAddY(i), 20, 20).build());
                 final int iconY = quickAddY(i);
-                addDrawable((ctx, mx, my, d) -> drawQuickAddIcon(ctx, quickIndex, quickAddX() + 4, iconY + 2));
+                addRenderableOnly((ctx, mx, my, d) -> drawQuickAddIcon(ctx, quickIndex, quickAddX() + 4, iconY + 2));
             }
         }
 
         // ── Message vide ──────────────────────────────────────────────────
         if (recipes.isEmpty()) {
             int emptyX = recipeX();
-            MultilineTextWidget empty = new MultilineTextWidget(
+            MultiLineTextWidget empty = new MultiLineTextWidget(
                     emptyX, rowsTop() + Math.max(4, (listH() - HEADER_H - 8) / 2),
-                    Text.translatable(libraryPicker ? "customrecipe.empty.library" : "customrecipe.empty.recipes")
-                            .setStyle(net.minecraft.text.Style.EMPTY.withColor(0x999999)),
-                    textRenderer);
+                    Component.translatable(libraryPicker ? "customrecipe.empty.library" : "customrecipe.empty.recipes")
+                            .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x999999)),
+                    font);
             empty.setMaxWidth(Math.max(20, statusX() - emptyX - 8));
             empty.setCentered(true);
-            addDrawableChild(empty);
+            addRenderableWidget(empty);
         }
 
         // ── Scroll hint ───────────────────────────────────────────────────
@@ -391,14 +388,14 @@ public class CustomRecipesScreen extends Screen {
         if (selectedQuickAdd >= 0) {
             CustomRecipeEntry e = quickAddRecipe(selectedQuickAdd);
             if (e == null) return;
-            MultilineTextWidget name = new MultilineTextWidget(PAD + 46, detailY() + 4,
-                    Text.translatable("customrecipe.quick.preview", quickAddName(selectedQuickAdd))
-                            .setStyle(net.minecraft.text.Style.EMPTY.withColor(0xFFEECC77)), textRenderer);
+            MultiLineTextWidget name = new MultiLineTextWidget(PAD + 46, detailY() + 4,
+                    Component.translatable("customrecipe.quick.preview", quickAddName(selectedQuickAdd))
+                            .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFFEECC77)), font);
             name.setMaxWidth(detailWidth() - 170);
             name.setMaxRows(1);
-            addDrawableChild(name);
+            addRenderableWidget(name);
             int quickIndex = selectedQuickAdd;
-            addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.add_recipe"), b -> {
+            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.add_recipe"), b -> {
                 CustomRecipeEntry added = ConfigLoader.copyRecipe(quickAddRecipe(quickIndex));
                 if (added == null) return;
                 added.id = java.util.UUID.randomUUID().toString();
@@ -406,9 +403,9 @@ public class CustomRecipesScreen extends Screen {
                 recipes.add(added);
                 selectedQuickAdd = -1;
                 selectedRecipe = recipes.size() - 1;
-                clearAndInit();
-            }).dimensions(detailRight() - 128, detailY() + 4, 102, 18).build());
-            addDrawableChild(ButtonWidget.builder(Text.empty(), b -> {
+                rebuildWidgets();
+            }).bounds(detailRight() - 128, detailY() + 4, 102, 18).build());
+            addRenderableWidget(Button.builder(Component.empty(), b -> {
                 if (quickAddIsBuiltin(quickIndex)) {
                     String builtinId = BuiltinRecipesScreen.quickAddId(quickAddBuiltinIndex(quickIndex));
                     if (!parent.hiddenQuickAddBuiltin.contains(builtinId)) parent.hiddenQuickAddBuiltin.add(builtinId);
@@ -418,115 +415,115 @@ public class CustomRecipesScreen extends Screen {
                 }
                 selectedQuickAdd = -1;
                 quickAddScroll = Math.min(quickAddScroll, quickAddMaxScroll());
-                clearAndInit();
-            }).dimensions(detailRight() - 22, detailY() + 4, 18, 18).build());
-            addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+                rebuildWidgets();
+            }).bounds(detailRight() - 22, detailY() + 4, 18, 18).build());
+            addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                     CustomRecipeSprites.REJECT, detailRight() - 22, detailY() + 4, 18, 18));
         } else if (selectedRecipe >= 0 && selectedRecipe < recipes.size()) {
             CustomRecipeEntry e = recipes.get(selectedRecipe);
             boolean corrupted = isCorrupted(e);
             String label = (corrupted ? "Corrupted: " : "") + toName(e.result) + (e.count > 1 ? " ×" + e.count : "");
-            MultilineTextWidget nameW = new MultilineTextWidget(
+            MultiLineTextWidget nameW = new MultiLineTextWidget(
                     PAD + 46, detailY() + 4,
-                    Text.literal(label).setStyle(net.minecraft.text.Style.EMPTY.withColor(corrupted ? 0xFF7777 : 0xFFEE77)), textRenderer);
+                    Component.literal(label).setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(corrupted ? 0xFF7777 : 0xFFEE77)), font);
             nameW.setMaxWidth(detailWidth() - 220);
             nameW.setMaxRows(1);
-            addDrawableChild(nameW);
+            addRenderableWidget(nameW);
 
             // Flèche →
             boolean shapedPreview = "shaped".equalsIgnoreCase(e.type);
             int previewResultX = shapedPreview ? detailGridX() + 3 * MINI + 14 : detailShapelessResultX(e);
             int previewResultY = shapedPreview ? detailGridY() + MINI
                     : detailShapelessResultY(e);
-            MultilineTextWidget arrow = new MultilineTextWidget(
+            MultiLineTextWidget arrow = new MultiLineTextWidget(
                     previewResultX - 11, previewResultY + (MINI - 8) / 2,
-                    Text.literal("→"), textRenderer);
+                    Component.literal("→"), font);
             arrow.setMaxWidth(12);
             arrow.setMaxRows(1);
-            addDrawableChild(arrow);
+            addRenderableWidget(arrow);
 
             final int selected = selectedRecipe;
             if (libraryPicker) {
-                addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.recipe.add_to", parent.target().displayName()), b -> {
+                addRenderableWidget(Button.builder(Component.translatable("customrecipe.recipe.add_to", parent.target().displayName()), b -> {
                     if (isCorrupted(recipes.get(selected))) return;
                     parent.addFromLibrary(recipes.get(selected));
-                    client.setScreen(new CustomRecipesScreen(parent));
-                }).dimensions(detailRight() - 202, detailY() + 4, 198, 18).build());
+                    minecraft.setScreen(new CustomRecipesScreen(parent));
+                }).bounds(detailRight() - 202, detailY() + 4, 198, 18).build());
             } else if (corrupted) {
                 String mods = String.join(", ", RecipeIntegrity.requiredModIds(e));
-                MultilineTextWidget warning = new MultilineTextWidget(PAD + 4, detailY() + 76,
-                        Text.translatable("customrecipe.recipe.missing", String.join(", ", missingItems(e))
+                MultiLineTextWidget warning = new MultiLineTextWidget(PAD + 4, detailY() + 76,
+                        Component.translatable("customrecipe.recipe.missing", String.join(", ", missingItems(e))
                                 + " — reinstall " + (mods.isBlank() ? "the required mod" : mods) + " or delete this recipe.")
-                                .setStyle(net.minecraft.text.Style.EMPTY.withColor(0xFF7777)), textRenderer);
+                                .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF7777)), font);
                 warning.setMaxWidth(detailWidth() - 8);
                 warning.setMaxRows(1);
-                addDrawableChild(warning);
-                addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.delete_corrupted").setStyle(net.minecraft.text.Style.EMPTY.withColor(0xFF7777)), b -> {
+                addRenderableWidget(warning);
+                addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.delete_corrupted").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF7777)), b -> {
                     recipes.remove(selected);
                     selectedRecipe = -1;
-                    clearAndInit();
-                }).dimensions(detailRight() - 142, detailY() + 30, 138, 18).build());
+                    rebuildWidgets();
+                }).bounds(detailRight() - 142, detailY() + 30, 138, 18).build());
             } else {
-                addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.duplicate"),
-                        b -> client.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), -1)))
-                        .dimensions(detailRight() - 204, detailY() + 4, 96, 18).build());
-                addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.edit"),
-                        b -> client.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), selected)))
-                        .dimensions(detailRight() - 102, detailY() + 4, 96, 18).build());
+                addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.duplicate"),
+                        b -> minecraft.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), -1)))
+                        .bounds(detailRight() - 204, detailY() + 4, 96, 18).build());
+                addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.edit"),
+                        b -> minecraft.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), selected)))
+                        .bounds(detailRight() - 102, detailY() + 4, 96, 18).build());
                 int typeX = detailActionX();
                 int knownX = detailKnownX();
                 boolean shaped = "shaped".equalsIgnoreCase(e.type);
-                addDrawableChild(ButtonWidget.builder(Text.empty(), b -> {
+                addRenderableWidget(Button.builder(Component.empty(), b -> {
                     toggleRecipeType(recipes.get(selected));
-                    clearAndInit();
-                }).dimensions(typeX, detailActionY(), 20, 20).build());
-                addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+                    rebuildWidgets();
+                }).bounds(typeX, detailActionY(), 20, 20).build());
+                addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                         shaped ? CustomRecipeSprites.LOCKED_BUTTON : CustomRecipeSprites.UNLOCKED_BUTTON,
                         typeX, detailActionY(), 20, 20));
                 boolean known = Boolean.TRUE.equals(e.known_by_default);
-                addDrawableChild(ButtonWidget.builder(Text.empty(),
+                addRenderableWidget(Button.builder(Component.empty(),
                         b -> {
                             CustomRecipeEntry recipe = recipes.get(selected);
                             recipe.known_by_default = !Boolean.TRUE.equals(recipe.known_by_default);
-                            clearAndInit();
+                            rebuildWidgets();
                         }
-                ).dimensions(knownX, detailActionY(), 20, 20).build());
-                addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+                ).bounds(knownX, detailActionY(), 20, 20).build());
+                addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                         known ? CustomRecipeSprites.KNOWN_BY_DEFAULT : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT,
                         knownX, detailActionY(), 20, 20));
                 String conflict = firstEnabledConflict(e);
                 if (conflict != null) {
-                    MultilineTextWidget warning = new MultilineTextWidget(PAD + 4, detailMessageY(),
-                            Text.translatable("customrecipe.recipe.conflict", shortRecipeId(conflict))
-                                    .setStyle(net.minecraft.text.Style.EMPTY.withColor(0xFFCC55)), textRenderer);
+                    MultiLineTextWidget warning = new MultiLineTextWidget(PAD + 4, detailMessageY(),
+                            Component.translatable("customrecipe.recipe.conflict", shortRecipeId(conflict))
+                                    .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFFCC55)), font);
                     warning.setMaxWidth(detailWidth() - 8);
                     warning.setMaxRows(1);
-                    addDrawableChild(warning);
-                    addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.disable_conflict").setStyle(net.minecraft.text.Style.EMPTY.withColor(0xFFCC55)), b -> {
+                    addRenderableWidget(warning);
+                    addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.disable_conflict").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFFCC55)), b -> {
                         if (!parent.disabledRecipes.contains(conflict)) parent.disabledRecipes.add(conflict);
-                        clearAndInit();
-                    }).dimensions(detailRight() - 204, detailY() + 26, 198, 18).build());
+                        rebuildWidgets();
+                    }).bounds(detailRight() - 204, detailY() + 26, 198, 18).build());
                 } else if (!known) {
                     if (LocalRecipeConflictDetector.hasVanillaCraftingOutput(e.result)) {
-                        MultilineTextWidget advice = new MultilineTextWidget(PAD + 4, detailMessageY(),
-                                Text.translatable("customrecipe.recipe.vanilla_conflict")
-                                        .setStyle(net.minecraft.text.Style.EMPTY.withColor(0x77BBFF)), textRenderer);
+                        MultiLineTextWidget advice = new MultiLineTextWidget(PAD + 4, detailMessageY(),
+                                Component.translatable("customrecipe.recipe.vanilla_conflict")
+                                        .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x77BBFF)), font);
                         advice.setMaxWidth(detailWidth() - 8);
                         advice.setMaxRows(1);
-                        addDrawableChild(advice);
+                        addRenderableWidget(advice);
                     } else {
                         String alternative = firstEnabledSameShapeRecipe(e);
                         if (alternative != null) {
-                        MultilineTextWidget advice = new MultilineTextWidget(PAD + 4, detailMessageY(),
-                                Text.translatable("customrecipe.recipe.same_inputs", alternative)
-                                        .setStyle(net.minecraft.text.Style.EMPTY.withColor(0x77BBFF)), textRenderer);
+                        MultiLineTextWidget advice = new MultiLineTextWidget(PAD + 4, detailMessageY(),
+                                Component.translatable("customrecipe.recipe.same_inputs", alternative)
+                                        .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x77BBFF)), font);
                         advice.setMaxWidth(detailWidth() - 8);
                         advice.setMaxRows(2);
-                        addDrawableChild(advice);
-                        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.set_known").setStyle(net.minecraft.text.Style.EMPTY.withColor(0x77BBFF)), b -> {
+                        addRenderableWidget(advice);
+                        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.set_known").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x77BBFF)), b -> {
                             recipes.get(selected).known_by_default = Boolean.TRUE;
-                            clearAndInit();
-                        }).dimensions(detailRight() - 142, detailY() + 52, 138, 18).build());
+                            rebuildWidgets();
+                        }).bounds(detailRight() - 142, detailY() + 52, 138, 18).build());
                         }
                     }
                 }
@@ -535,43 +532,43 @@ public class CustomRecipesScreen extends Screen {
 
         // ── Boutons du bas ────────────────────────────────────────────────
         if (!libraryPicker && parent.target().isWorld()) {
-            addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.enable_all"), b -> {
+            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.enable_all"), b -> {
                 setAllRecipeStates(true);
-                clearAndInit();
-            }).dimensions(width / 2 - 100, height - 88, 98, 18).build());
-            addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.disable_all"), b -> {
+                rebuildWidgets();
+            }).bounds(width / 2 - 100, height - 88, 98, 18).build());
+            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.disable_all"), b -> {
                 setAllRecipeStates(false);
-                clearAndInit();
-            }).dimensions(width / 2 + 2, height - 88, 98, 18).build());
-            addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.add_from_library"),
-                    b -> client.setScreen(new CustomRecipesScreen(parent, true))
-            ).dimensions(width / 2 - 100, height - 66, 200, 18).build());
+                rebuildWidgets();
+            }).bounds(width / 2 + 2, height - 88, 98, 18).build());
+            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.add_from_library"),
+                    b -> minecraft.setScreen(new CustomRecipesScreen(parent, true))
+            ).bounds(width / 2 - 100, height - 66, 200, 18).build());
         }
 
         if (!libraryPicker) {
-            addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.add_recipe_new"),
-                    b -> client.setScreen(new RecipeBuilderScreen(parent, this, null, -1))
-            ).dimensions(width / 2 - 100, height - 44, 200, 18).build());
+            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.add_recipe_new"),
+                    b -> minecraft.setScreen(new RecipeBuilderScreen(parent, this, null, -1))
+            ).bounds(width / 2 - 100, height - 44, 200, 18).build());
         }
 
         if (libraryPicker) {
-            addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.back_to_recipes"),
-                    b -> client.setScreen(new CustomRecipesScreen(parent))
-            ).dimensions(width / 2 - 75, height - 22, 150, 18).build());
+            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back_to_recipes"),
+                    b -> minecraft.setScreen(new CustomRecipesScreen(parent))
+            ).bounds(width / 2 - 75, height - 22, 150, 18).build());
         } else {
-            String saveLabel = Text.translatable("customrecipe.button.save").getString();
+            String saveLabel = Component.translatable("customrecipe.button.save").getString();
             int saveY = height - 26;
-            addDrawableChild(ButtonWidget.builder(Text.empty(), b -> parent.saveFromSubmenu())
-                    .dimensions(width / 2 - 100, saveY, 200, 22).build());
-            addDrawable((ctx, mouseX, mouseY, delta) -> {
-                int iconX = width / 2 - textRenderer.getWidth(saveLabel) / 2 - 20;
+            addRenderableWidget(Button.builder(Component.empty(), b -> parent.saveFromSubmenu())
+                    .bounds(width / 2 - 100, saveY, 200, 22).build());
+            addRenderableOnly((ctx, mouseX, mouseY, delta) -> {
+                int iconX = width / 2 - font.width(saveLabel) / 2 - 20;
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, iconX, saveY + 3, 16, 16);
-                ctx.drawCenteredTextWithShadow(textRenderer, saveLabel, width / 2, saveY + 7, 0xFFFFFFFF);
+                ctx.drawCenteredString(font, saveLabel, width / 2, saveY + 7, 0xFFFFFFFF);
             });
         }
     }
 
-    private void renderQuickAddPanel(DrawContext ctx) {
+    private void renderQuickAddPanel(GuiGraphics ctx) {
         int x = quickAddX();
         int h = listH();
         ctx.fill(x, listTop(), width - PAD, listTop() + h, 0x88101010);
@@ -592,16 +589,16 @@ public class CustomRecipesScreen extends Screen {
         }
     }
 
-    private void drawQuickAddIcon(DrawContext ctx, int quickIndex, int x, int y) {
+    private void drawQuickAddIcon(GuiGraphics ctx, int quickIndex, int x, int y) {
         String result = quickAddIsBuiltin(quickIndex)
                 ? BuiltinRecipesScreen.quickAddResult(quickAddBuiltinIndex(quickIndex))
                 : quickAddCustomRecipeIndex(quickIndex) < 0 ? "" : parent.quickAddRecipes.get(quickAddCustomRecipeIndex(quickIndex)).result;
-        Identifier id = Identifier.tryParse(result);
-        if (id != null && Registries.ITEM.containsId(id))
-            ctx.drawItem(new ItemStack(Registries.ITEM.get(id)), x, y);
+        ResourceLocation id = ResourceLocation.tryParse(result);
+        if (id != null && BuiltInRegistries.ITEM.containsKey(id))
+            ctx.renderItem(new ItemStack(BuiltInRegistries.ITEM.get(id)), x, y);
     }
 
-    private void renderDetailFills(DrawContext ctx, CustomRecipeEntry e, boolean quickAddPreview) {
+    private void renderDetailFills(GuiGraphics ctx, CustomRecipeEntry e, boolean quickAddPreview) {
         int dy = detailY();
         ctx.fill(PAD, dy, detailRight(), dy + renderedDetailH(), 0x88101010);
         drawBox(ctx, PAD, dy, detailWidth(), renderedDetailH(), 0xFF506070);
@@ -612,11 +609,11 @@ public class CustomRecipesScreen extends Screen {
             drawRecipeStatusIcon(ctx, PAD + 24, dy + 2, isCorrupted(e), firstEnabledConflict(e) != null);
         }
         boolean known = Boolean.TRUE.equals(e.known_by_default);
-        ctx.drawText(textRenderer, Text.translatable(shapedDetail ? "customrecipe.recipe.shaped" : "customrecipe.recipe.shapeless"), detailActionX() + 24, detailActionY() + 6,
+        ctx.drawString(font, Component.translatable(shapedDetail ? "customrecipe.recipe.shaped" : "customrecipe.recipe.shapeless"), detailActionX() + 24, detailActionY() + 6,
                 shapedDetail ? 0xFFFFD700 : 0xFF88FFFF, false);
-        ctx.drawText(textRenderer, Text.translatable("customrecipe.recipe.known", Text.translatable(known ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), detailKnownX() + 24,
+        ctx.drawString(font, Component.translatable("customrecipe.recipe.known", Component.translatable(known ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), detailKnownX() + 24,
                 detailActionY() + 6, known ? 0xFF55FF55 : 0xFFFF7777, false);
-        ctx.drawText(textRenderer, Text.translatable(shapedDetail
+        ctx.drawString(font, Component.translatable(shapedDetail
                 ? "customrecipe.recipe.shaped_ingredients" : "customrecipe.recipe.shapeless_ingredients",
                 detailIngredientCount(e)), PAD + 4, dy + 50, 0xFF8FC7E8, false);
 
@@ -636,9 +633,9 @@ public class CustomRecipesScreen extends Screen {
                 drawBox(ctx, sx, sy, MINI, MINI, 0xFF555555);
                 String id = grid[r][c];
                 if (id != null && !id.isEmpty()) {
-                    var item = Registries.ITEM.get(Identifier.tryParse(id));
+                    var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
                     if (item != null && item != Items.AIR)
-                        ctx.drawItem(new ItemStack(item), sx + 1, sy + 1);
+                        ctx.renderItem(new ItemStack(item), sx + 1, sy + 1);
                 }
             }
         }
@@ -649,9 +646,9 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
         drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
         if (e.result != null && !e.result.isEmpty()) {
-            var ri = Registries.ITEM.get(Identifier.tryParse(e.result));
+            var ri = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(e.result));
             if (ri != null && ri != Items.AIR)
-                ctx.drawItem(new ItemStack(ri), resultX + 1, resultY + 1);
+                ctx.renderItem(new ItemStack(ri), resultX + 1, resultY + 1);
         }
     }
 
@@ -693,7 +690,7 @@ public class CustomRecipesScreen extends Screen {
         return rows;
     }
 
-    private void renderShapelessDetail(DrawContext ctx, CustomRecipeEntry e) {
+    private void renderShapelessDetail(GuiGraphics ctx, CustomRecipeEntry e) {
         int x = detailShapelessListX();
         int y = detailShapelessListY();
         List<ShapelessIngredient> rows = shapelessIngredientRows(e);
@@ -704,24 +701,24 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
         drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
         if (e.result != null && !e.result.isEmpty()) {
-            var result = Registries.ITEM.get(Identifier.tryParse(e.result));
-            if (result != null && result != Items.AIR) ctx.drawItem(new ItemStack(result), resultX + 1, resultY + 1);
+            var result = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(e.result));
+            if (result != null && result != Items.AIR) ctx.renderItem(new ItemStack(result), resultX + 1, resultY + 1);
         }
     }
 
-    private void renderIngredientRows(DrawContext ctx, List<ShapelessIngredient> rows, int x, int y) {
+    private void renderIngredientRows(GuiGraphics ctx, List<ShapelessIngredient> rows, int x, int y) {
         for (int i = 0; i < rows.size(); i++) {
             ShapelessIngredient row = rows.get(i);
             int rowY = y + i * MINI;
-            var item = Registries.ITEM.get(Identifier.tryParse(row.itemId()));
-            if (item != null && item != Items.AIR) ctx.drawItem(new ItemStack(item), x, rowY + 1);
-            String name = textRenderer.trimToWidth(toName(row.itemId()), 104);
-            ctx.drawText(textRenderer, name, x + 20, rowY + 5, 0xFFDDDDDD, false);
-            ctx.drawText(textRenderer, "x" + row.count(), x + 126, rowY + 5, 0xFFEECC77, false);
+            var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(row.itemId()));
+            if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, rowY + 1);
+            String name = font.plainSubstrByWidth(toName(row.itemId()), 104);
+            ctx.drawString(font, name, x + 20, rowY + 5, 0xFFDDDDDD, false);
+            ctx.drawString(font, "x" + row.count(), x + 126, rowY + 5, 0xFFEECC77, false);
         }
     }
 
-    private void renderShapedIngredientColumns(DrawContext ctx, List<ShapelessIngredient> rows) {
+    private void renderShapedIngredientColumns(GuiGraphics ctx, List<ShapelessIngredient> rows) {
         for (int i = 0; i < rows.size(); i++) {
             int column = i / 3;
             int row = i % 3;
@@ -730,7 +727,7 @@ public class CustomRecipesScreen extends Screen {
         }
     }
 
-    private void renderShapelessIngredientColumns(DrawContext ctx, List<ShapelessIngredient> rows, int x, int y) {
+    private void renderShapelessIngredientColumns(GuiGraphics ctx, List<ShapelessIngredient> rows, int x, int y) {
         for (int i = 0; i < rows.size(); i++) {
             int column = i / 3;
             int row = i % 3;
@@ -738,12 +735,12 @@ public class CustomRecipesScreen extends Screen {
         }
     }
 
-    private void renderIngredientRow(DrawContext ctx, ShapelessIngredient row, int x, int y) {
-        var item = Registries.ITEM.get(Identifier.tryParse(row.itemId()));
-        if (item != null && item != Items.AIR) ctx.drawItem(new ItemStack(item), x, y + 1);
-        String name = textRenderer.trimToWidth(toName(row.itemId()), 104);
-        ctx.drawText(textRenderer, name, x + 20, y + 5, 0xFFDDDDDD, false);
-        ctx.drawText(textRenderer, "x" + row.count(), x + 126, y + 5, 0xFFEECC77, false);
+    private void renderIngredientRow(GuiGraphics ctx, ShapelessIngredient row, int x, int y) {
+        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(row.itemId()));
+        if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, y + 1);
+        String name = font.plainSubstrByWidth(toName(row.itemId()), 104);
+        ctx.drawString(font, name, x + 20, y + 5, 0xFFDDDDDD, false);
+        ctx.drawString(font, "x" + row.count(), x + 126, y + 5, 0xFFEECC77, false);
     }
 
     private String[][] buildDisplayGrid(CustomRecipeEntry e) {
@@ -827,7 +824,7 @@ public class CustomRecipesScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
         super.render(ctx, mouseX, mouseY, delta);
     }
@@ -836,7 +833,7 @@ public class CustomRecipesScreen extends Screen {
     public boolean mouseClicked(double mx, double my, int button) {
         if (quickAddEditMode && button == 1) {
             quickAddEditMode = false;
-            clearAndInit();
+            rebuildWidgets();
             return true;
         }
         if (hasRecipeScrollbar()
@@ -863,7 +860,7 @@ public class CustomRecipesScreen extends Screen {
                     else if (selectedRecipe >= scroll + visible) scroll = selectedRecipe - visible + 1;
                     scroll = Math.max(0, Math.min(scroll, maxScroll));
                 }
-                clearAndInit();
+                rebuildWidgets();
                 return true;
             }
         }
@@ -877,7 +874,7 @@ public class CustomRecipesScreen extends Screen {
             int next = Math.max(0, Math.min(quickAddScroll - (int) v, quickAddMaxScroll()));
             if (next != quickAddScroll) {
                 quickAddScroll = next;
-                clearAndInit();
+                rebuildWidgets();
             }
             return true;
         }
@@ -886,7 +883,7 @@ public class CustomRecipesScreen extends Screen {
         int next = Math.max(0, Math.min(scroll - (int) v, maxScroll()));
         if (next != scroll) {
             scroll = next;
-            clearAndInit();
+            rebuildWidgets();
         }
         return true;
     }
@@ -914,7 +911,7 @@ public class CustomRecipesScreen extends Screen {
         next = Math.max(0, Math.min(next, maxScroll()));
         if (next != scroll) {
             scroll = next;
-            clearAndInit();
+            rebuildWidgets();
         }
     }
 
@@ -934,7 +931,7 @@ public class CustomRecipesScreen extends Screen {
     }
 
     /** Compact visual mode marker: a 3×3 grid for shaped, loose dots for shapeless. */
-    private void drawRecipeTypeIcon(DrawContext ctx, int x, int y, boolean shaped, int color) {
+    private void drawRecipeTypeIcon(GuiGraphics ctx, int x, int y, boolean shaped, int color) {
         if (shaped) {
             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.LOCKED_INFO, x, y, 10, 14);
         } else {
@@ -942,14 +939,14 @@ public class CustomRecipesScreen extends Screen {
         }
     }
 
-    private void drawKnownByDefaultIcon(DrawContext ctx, int x, int y, boolean known) {
+    private void drawKnownByDefaultIcon(GuiGraphics ctx, int x, int y, boolean known) {
         CustomRecipeSprites.draw(ctx,
                 known ? CustomRecipeSprites.KNOWN_BY_DEFAULT_INFO : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT_INFO,
                 x, y, 20, 18);
     }
 
     /** Yellow pixel warning triangle, independent from any optional font glyph. */
-    private void drawWarningIcon(DrawContext ctx, int x, int y) {
+    private void drawWarningIcon(GuiGraphics ctx, int x, int y) {
         int yellow = 0xFFFFD447;
         ctx.fill(x + 5, y, x + 7, y + 2, yellow);
         ctx.fill(x + 3, y + 2, x + 9, y + 4, yellow);
@@ -959,7 +956,7 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(x + 5, y + 7, x + 7, y + 8, 0xFF3A3000);
     }
 
-    private void drawRecipeStatusIcon(DrawContext ctx, int x, int y, boolean corrupted, boolean conflict) {
+    private void drawRecipeStatusIcon(GuiGraphics ctx, int x, int y, boolean corrupted, boolean conflict) {
         if (corrupted) {
             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.CORRUPTED, x, y, 16, 16);
         } else if (conflict) {
@@ -1028,22 +1025,22 @@ public class CustomRecipesScreen extends Screen {
     }
 
     /** Small scroll/list marker shown beside range indicators. */
-    private void drawScrollIcon(DrawContext ctx, int x, int y) {
+    private void drawScrollIcon(GuiGraphics ctx, int x, int y) {
         CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SCROLLER_IDLE, x, y, 12, 15);
     }
 
-    private void drawBox(DrawContext ctx, int x, int y, int w, int h, int c) {
-        ctx.drawHorizontalLine(x, x + w - 1, y, c);
-        ctx.drawHorizontalLine(x, x + w - 1, y + h - 1, c);
-        ctx.drawVerticalLine(x, y, y + h - 1, c);
-        ctx.drawVerticalLine(x + w - 1, y, y + h - 1, c);
+    private void drawBox(GuiGraphics ctx, int x, int y, int w, int h, int c) {
+        ctx.fill(x, y, x + w, y + 1, c);
+        ctx.fill(x, y + h - 1, x + w, y + h, c);
+        ctx.fill(x, y, x + 1, y + h, c);
+        ctx.fill(x + w - 1, y, x + w, y + h, c);
     }
 
-    @Override public boolean shouldPause() { return true; }
+    @Override public boolean isPauseScreen() { return true; }
 
     /** Escape leaves Recipe Creator, so let its owner protect pending edits. */
-    @Override public void close() {
-        if (libraryPicker) client.setScreen(new CustomRecipesScreen(parent));
-        else client.setScreen(parent);
+    @Override public void onClose() {
+        if (libraryPicker) minecraft.setScreen(new CustomRecipesScreen(parent));
+        else minecraft.setScreen(parent);
     }
 }
