@@ -1,4 +1,4 @@
-# Modrinth release - Custom Recipe 1.3.4
+# Modrinth release - Custom Recipe 1.3.4 Forge
 
 ## Version type
 
@@ -6,15 +6,15 @@ Release
 
 ## Version number
 
-1.3.4
+1.3.4+1.20.1-forge
 
 ## Version subtitle
 
-v1.3.4 for Minecraft 1.20.1
+v1.3.4 for Minecraft 1.20.1 (Forge)
 
 ## Loader
 
-Fabric
+Forge
 
 ## Game version
 
@@ -24,18 +24,34 @@ Fabric
 
 `build/libs/customrecipe-1.3.4+1.20.1.jar`
 
+## Dependencies
+
+- Required: Cloth Config API (Forge) 11.1.136 or newer.
+- Optional: Just Enough Items (JEI) 15.20.0 or newer.
+- Optional: Roughly Enough Items (REI).
+
 ## Version changelog
 
-### Port and save compatibility
+### Forge 1.20.1 port
 
-- Rebuilt the 1.20.1 Fabric version on the Custom Recipe 1.3.4 architecture.
-- Older configurations are migrated safely to the active world. The pre-migration file is retained as `.legacy-backup`, and the last valid version is retained as `.previous`.
-- Server-editor saves wait for a confirmation that the server wrote the file. Failed writes now remain visible and report an error instead of silently doing nothing.
-- Larger legacy recipe libraries are supported during client/server configuration transfer.
+- Added Forge 47.4.10 support for Minecraft 1.20.1 and Java 17.
+- Preserved the complete Custom Recipe editor: Global Library, per-world configurations, imports, previews, filters, Quick Add, and recipe creation and editing.
+- Preserved server configuration, recipe synchronization, recipe IDs, save format, and existing world data.
 
-### Fixed
+### In-game configuration
 
-- Fixed discovery of Vanilla and installed-mod recipes in Default Recipes for Minecraft 1.20.1.
-- Fixed the legacy 1.20.1 recipe result format.
-- Removed the Heavy Core/Mace quick-add entry, unavailable in Minecraft 1.20.1.
-- Fixed the unsaved-changes overlay so its text and buttons remain readable.
+- Added Cloth Config integration to the Forge Mods screen.
+- Opening Custom Recipe configuration now opens the full Custom Recipe editor directly.
+- Added a Custom Recipe action to the in-game pause menu for local-world management.
+
+### Recipe browser and integrations
+
+- Added JEI compatibility while retaining REI compatibility.
+- Improved Vanilla Recipe discovery, including installed-mod recipes and all supported crafting-recipe variants.
+- Added progressive loading feedback and local recipe caching in the Vanilla Recipe browser.
+- Fixed disabling Vanilla crafting recipes in singleplayer and on dedicated servers.
+
+### Server support
+
+- Added Forge networking for server configuration, validation, saving, and recipe updates.
+- Improved the local test server workflow for offline development and console commands.
