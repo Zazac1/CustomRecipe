@@ -26,6 +26,12 @@ public class ModConfig {
     public String editor_world_id = "";
     public String editor_world_name = "";
 
+    /** Client-only editor preferences, shared by every local save. */
+    public boolean automatic_gui_scale = true;
+    public String default_editor_target_id = "global";
+    public String default_editor_target_name = "Global Library";
+    public boolean preload_recipes_on_startup = true;
+
     /**
      * Recipe IDs (without namespace) of built-in recipes to disable.
      * Example: ["saddle", "name_tag"]

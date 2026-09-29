@@ -1,3 +1,9 @@
+[CmdletBinding()]
+param(
+    [ValidateSet('1', '2', '3')]
+    [string]$VersionChoice
+)
+
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
@@ -6,7 +12,10 @@ Write-Host 'Choisis la version Minecraft à tester :'
 Write-Host '  1. Minecraft 26.1'
 Write-Host '  2. Minecraft 26.1.1'
 Write-Host '  3. Minecraft 26.1.2'
-$choice = Read-Host 'Choix (1-3)'
+$choice = if ($VersionChoice) { $VersionChoice } else { Read-Host 'Choix (1-3)' }
+if ($choice -notin @('1', '2', '3')) {
+    throw 'Choix invalide. Relance le script et choisis 1, 2 ou 3.'
+}
 
 switch ($choice) {
     '1' {
@@ -27,9 +36,6 @@ switch ($choice) {
         $testModProfile = '26.1.2'
         $profileNotice = $null
     }
-    default {
-        throw 'Choix invalide. Relance le script et choisis 1, 2 ou 3.'
-    }
 }
 
 $gradleVersionArgs = @(
@@ -39,14 +45,18 @@ $gradleVersionArgs = @(
 Write-Host "Cible : Minecraft $minecraftVersion avec Fabric API $fabricApiVersion"
 if ($profileNotice) { Write-Warning $profileNotice }
 
-$javaHomes = Get-ChildItem -LiteralPath 'C:\Program Files\Java' -Directory -Filter 'jdk-25*' -ErrorAction SilentlyContinue |
-    Sort-Object Name -Descending |
-    Select-Object -ExpandProperty FullName
-$javaHome = $javaHomes | Where-Object {
+$javaHomes = @()
+if ($env:JAVA_HOME) { $javaHomes += $env:JAVA_HOME }
+foreach ($javaRoot in @('C:\Program Files\Java', 'C:\Program Files\Eclipse Adoptium')) {
+    $javaHomes += Get-ChildItem -LiteralPath $javaRoot -Directory -Filter 'jdk-25*' -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        Select-Object -ExpandProperty FullName
+}
+$javaHome = $javaHomes | Select-Object -Unique | Where-Object {
     Test-Path -LiteralPath (Join-Path $_ 'bin\java.exe')
 } | Select-Object -First 1
 if (-not $javaHome) {
-    throw 'JDK 25 introuvable. Installe un JDK 25 dans C:\Program Files\Java.'
+    throw 'JDK 25 introuvable. Défini JAVA_HOME ou installe un JDK 25 dans C:\Program Files\Java ou C:\Program Files\Eclipse Adoptium.'
 }
 $env:JAVA_HOME = $javaHome
 $env:GRADLE_USER_HOME = Join-Path $env:USERPROFILE '.gradle'
