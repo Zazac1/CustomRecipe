@@ -225,6 +225,12 @@ public final class ConfigLoader {
     private static void normalize(ModConfig config) {
         if (config.editor_world_id == null) config.editor_world_id = "";
         if (config.editor_world_name == null) config.editor_world_name = "";
+        if (config.default_editor_target_id == null || config.default_editor_target_id.isBlank()) {
+            config.default_editor_target_id = "global";
+        }
+        if (config.default_editor_target_name == null || config.default_editor_target_name.isBlank()) {
+            config.default_editor_target_name = "Global Library";
+        }
         if (config.disabled_builtin == null) config.disabled_builtin = new java.util.ArrayList<>();
         if (config.known_by_default_builtin == null) config.known_by_default_builtin = new java.util.ArrayList<>();
         if (config.disabled_recipes == null) config.disabled_recipes = new java.util.ArrayList<>();

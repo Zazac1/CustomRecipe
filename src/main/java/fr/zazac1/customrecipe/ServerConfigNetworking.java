@@ -217,8 +217,9 @@ public final class ServerConfigNetworking {
                 }
             }
 
-            boolean outputMatch = request.matchOutput() && resultId.contains(query);
-            boolean ingredientMatch = request.matchIngredients() && ingredients.stream().anyMatch(id -> id.contains(query));
+            boolean outputMatch = request.matchOutput() && itemMatchesQuery(resultId, query);
+            boolean ingredientMatch = request.matchIngredients() && recipe.getIngredients().stream()
+                    .anyMatch(ingredient -> ingredientMatchesQuery(ingredient, query));
             boolean disabled = disabledRecipeIds.contains(entry.getId().toString());
             boolean statusMatch = switch (statusFilter) {
                 case "ENABLED" -> !disabled && !special;
@@ -231,7 +232,8 @@ public final class ServerConfigNetworking {
                 case "VANILLA" -> entry.getId().getNamespace().equals("minecraft");
                 default -> true;
             };
-            if (statusMatch && sourceMatch && (query.isEmpty() || outputMatch || ingredientMatch)) {
+            if (statusMatch && sourceMatch && (query.isEmpty()
+                    || entry.getId().toString().toLowerCase(Locale.ROOT).contains(query) || outputMatch || ingredientMatch)) {
                 matches.add(new VanillaRecipePage.VanillaRecipeInfo(
                         entry.getId().toString(), resultId,
                         toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
@@ -252,6 +254,20 @@ public final class ServerConfigNetworking {
                 .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
                 .findFirst()
                 .orElse("");
+    }
+
+    private static boolean itemMatchesQuery(String itemId, String query) {
+        if (itemId.toLowerCase(Locale.ROOT).contains(query)) return true;
+        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(itemId));
+        return item != null && !item.equals(net.minecraft.world.item.Items.AIR)
+                && new ItemStack(item).getHoverName().getString().toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    private static boolean ingredientMatchesQuery(Ingredient ingredient, String query) {
+        for (ItemStack stack : ingredient.getItems()) {
+            if (itemMatchesQuery(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), query)) return true;
+        }
+        return false;
     }
 
     private static VanillaRecipeDetails findVanillaRecipeDetails(net.minecraft.server.MinecraftServer server, String rawId) {

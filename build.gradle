@@ -1,7 +1,18 @@
+buildscript {
+    repositories {
+        maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+    }
+    dependencies {
+        classpath 'org.spongepowered:mixingradle:0.7-SNAPSHOT'
+    }
+}
+
 plugins {
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
     id 'maven-publish'
 }
+
+apply plugin: 'org.spongepowered.mixin'
 
 version = project.mod_version
 group = project.maven_group
@@ -26,6 +37,10 @@ minecraft {
 }
 
 repositories {
+    // Production JARs for local compatibility testing. Declaring this as a
+    // repository (rather than files(...)) lets ForgeGradle remap their names
+    // from the production namespace to the development namespace.
+    flatDir { dirs 'dev-mods' }
     maven {
         name = 'BlameJared Maven'
         url = 'https://maven.blamejared.com/'
@@ -47,6 +62,25 @@ dependencies {
     compileOnly fg.deobf("mezz.jei:jei-${project.minecraft_version}-common-api:${project.jei_version}")
     compileOnly fg.deobf("mezz.jei:jei-${project.minecraft_version}-forge-api:${project.jei_version}")
     runtimeOnly fg.deobf("mezz.jei:jei-${project.minecraft_version}-forge:${project.jei_version}")
+
+    // Local mods used to test compatibility. They must go through ForgeGradle's
+    // deobfuscation layer in a development run; raw production jars in
+    // run/mods use different method names and crash at startup.
+    if (file('dev-mods/balm-forge-1.20.1-7.3.44.jar').exists()) {
+        runtimeOnly fg.deobf('local.test:balm-forge-1.20.1:7.3.44')
+    }
+    if (file('dev-mods/waystones-forge-1.20.1-14.1.21.jar').exists()) {
+        runtimeOnly fg.deobf('local.test:waystones-forge-1.20.1:14.1.21')
+    }
+
+    // Generates the refmap that translates Mojang names in mixins to the
+    // obfuscated names present in a distributed Forge installation.
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
+mixin {
+    add sourceSets.main, 'customrecipe.refmap.json'
+    config 'customrecipe.mixins.json'
 }
 
 processResources {

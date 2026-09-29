@@ -50,6 +50,7 @@ public class VanillaRecipesScreen extends Screen {
     private static Map<String, String> localRecipeJsonCache = Map.of();
     private static net.minecraft.server.MinecraftServer localRecipeCacheServer;
     private static int localRecipeCacheFingerprint;
+    private static boolean startupPreloadStarted;
     private static final int ROW = 20;
     private static final int HEADER_Y = 34;
     private static final int SEARCH_Y = 52;
@@ -150,6 +151,27 @@ public class VanillaRecipesScreen extends Screen {
         super(Component.translatable("customrecipe.vanilla.title"));
         this.parent = parent;
         this.localMode = localMode;
+    }
+
+    /**
+     * Builds the default local-recipe cache once after Minecraft is ready. This
+     * intentionally runs on the client thread because resource packs and mod
+     * registries are not thread-safe; users can disable it in settings.
+     */
+    static void preloadAtStartup(net.minecraft.client.Minecraft client) {
+        if (startupPreloadStarted || !localRecipeCache.isEmpty()) return;
+        startupPreloadStarted = true;
+        try {
+            VanillaRecipesScreen scanner = new VanillaRecipesScreen(new ConfigScreen(null), true);
+            scanner.minecraft = client;
+            VanillaRecipePage page = scanner.findLocalRecipes();
+            localRecipeCache = List.copyOf(page.recipes());
+            localRecipeCacheServer = client.getSingleplayerServer();
+            localRecipeCacheFingerprint = scanner.localRecipeFingerprint(localRecipeCacheServer);
+            CustomRecipeMod.LOGGER.info("[Custom Recipe] Preloaded {} recipes at startup.", localRecipeCache.size());
+        } catch (RuntimeException exception) {
+            CustomRecipeMod.LOGGER.warn("[Custom Recipe] Startup recipe preload was skipped: {}", exception.getMessage());
+        }
     }
 
     ConfigScreen configScreen() { return parent; }
@@ -398,11 +420,11 @@ public class VanillaRecipesScreen extends Screen {
                 case SPECIAL -> recipe.special();
             };
             String cachedJson = localRecipeJsonCache.get(recipe.id());
-            boolean searchMatch = loweredQuery.isEmpty()
-                    || matchOutput && recipe.result().toLowerCase(Locale.ROOT).contains(loweredQuery)
+            boolean searchMatch = loweredQuery.isEmpty() || recipe.id().toLowerCase(Locale.ROOT).contains(loweredQuery)
+                    || matchOutput && itemMatchesQuery(recipe.result(), loweredQuery)
                     || matchIngredients && cachedJson != null && cachedJson.toLowerCase(Locale.ROOT).contains(loweredQuery)
                     || matchIngredients && recipe.slots().stream()
-                    .anyMatch(ingredient -> ingredient.toLowerCase(Locale.ROOT).contains(loweredQuery));
+                    .anyMatch(ingredient -> itemMatchesQuery(ingredient, loweredQuery));
             if (sourceMatch && statusMatch && searchMatch) filtered.add(recipe);
         }
         return filtered;
@@ -548,9 +570,9 @@ public class VanillaRecipesScreen extends Screen {
             for (Ingredient ingredient : recipe.getIngredients()) ingredients.add(firstMatchingId(ingredient));
         }
 
-        boolean outputMatch = matchOutput && resultId.toLowerCase(Locale.ROOT).contains(loweredQuery);
-        boolean ingredientMatch = matchIngredients && ingredients.stream()
-                .anyMatch(id -> id.toLowerCase(Locale.ROOT).contains(loweredQuery));
+        boolean outputMatch = matchOutput && itemMatchesQuery(resultId, loweredQuery);
+        boolean ingredientMatch = matchIngredients && recipe.getIngredients().stream()
+                .anyMatch(ingredient -> ingredientMatchesQuery(ingredient, loweredQuery));
         boolean disabled = parent.disabledRecipes.contains(entry.getId().toString());
         boolean statusMatch = switch (statusFilter) {
             case ENABLED -> !disabled && !special;
@@ -563,7 +585,8 @@ public class VanillaRecipesScreen extends Screen {
             case VANILLA -> entry.getId().getNamespace().equals("minecraft");
             case ALL -> true;
         };
-        if (statusMatch && sourceMatch && (loweredQuery.isEmpty() || outputMatch || ingredientMatch)) {
+        if (statusMatch && sourceMatch && (loweredQuery.isEmpty()
+                || entry.getId().toString().toLowerCase(Locale.ROOT).contains(loweredQuery) || outputMatch || ingredientMatch)) {
             matches.add(new VanillaRecipePage.VanillaRecipeInfo(entry.getId().toString(), resultId,
                     toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
                     gridWidth, gridHeight, shapeless, special));
@@ -600,9 +623,9 @@ public class VanillaRecipesScreen extends Screen {
                 for (Ingredient ingredient : recipe.getIngredients()) ingredients.add(firstMatchingId(ingredient));
             }
 
-            boolean outputMatch = matchOutput && resultId.toLowerCase(Locale.ROOT).contains(loweredQuery);
-            boolean ingredientMatch = matchIngredients && ingredients.stream()
-                    .anyMatch(id -> id.toLowerCase(Locale.ROOT).contains(loweredQuery));
+            boolean outputMatch = matchOutput && itemMatchesQuery(resultId, loweredQuery);
+            boolean ingredientMatch = matchIngredients && recipe.getIngredients().stream()
+                    .anyMatch(ingredient -> ingredientMatchesQuery(ingredient, loweredQuery));
             boolean disabled = parent.disabledRecipes.contains(entry.getId().toString());
             boolean statusMatch = switch (statusFilter) {
                 case ENABLED -> !disabled && !special;
@@ -615,7 +638,8 @@ public class VanillaRecipesScreen extends Screen {
                 case VANILLA -> entry.getId().getNamespace().equals("minecraft");
                 case ALL -> true;
             };
-            if (statusMatch && sourceMatch && (loweredQuery.isEmpty() || outputMatch || ingredientMatch)) {
+            if (statusMatch && sourceMatch && (loweredQuery.isEmpty()
+                    || entry.getId().toString().toLowerCase(Locale.ROOT).contains(loweredQuery) || outputMatch || ingredientMatch)) {
                 matches.add(new VanillaRecipePage.VanillaRecipeInfo(entry.getId().toString(), resultId,
                         toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
                         gridWidth, gridHeight, shapeless, special));
@@ -653,10 +677,11 @@ public class VanillaRecipesScreen extends Screen {
         if ((sourceFilter == SourceFilter.VANILLA && !vanillaRecipe)
                 || (sourceFilter == SourceFilter.MODDED && vanillaRecipe)) return;
         String resultId = findResultId(json, recipeId);
-        boolean outputMatch = matchOutput && resultId.toLowerCase(Locale.ROOT).contains(loweredQuery);
+        RecipeLayout layout = findLocalRecipeLayout(json);
+        boolean outputMatch = matchOutput && itemMatchesQuery(resultId, loweredQuery);
         boolean ingredientMatch = matchIngredients && json.toLowerCase(Locale.ROOT).contains(loweredQuery);
-        if ((loweredQuery.isEmpty() || outputMatch || ingredientMatch) && matchedIds.add(recipeId)) {
-            RecipeLayout layout = findLocalRecipeLayout(json);
+        if ((loweredQuery.isEmpty() || recipeId.toLowerCase(Locale.ROOT).contains(loweredQuery)
+                || outputMatch || ingredientMatch) && matchedIds.add(recipeId)) {
             boolean special = isSpecialRecipe(json);
             matches.add(new VanillaRecipePage.VanillaRecipeInfo(recipeId, resultId, toPreviewSlots(layout),
                     layout.width(), layout.height(), layout.shapeless(), special));
@@ -841,6 +866,17 @@ public class VanillaRecipesScreen extends Screen {
     private fr.zazac1.customrecipe.VanillaRecipeDetails findLocalRecipeDetails(String recipeId) {
         ResourceLocation id = ResourceLocation.tryParse(recipeId);
         if (id == null) return new fr.zazac1.customrecipe.VanillaRecipeDetails(recipeId, List.of());
+
+        // When a local world is running, the recipe manager already resolved
+        // every mod tag. This is more reliable than reopening its JSON, which
+        // can be hidden inside Forge's transformed mod archive.
+        var localServer = minecraft.getSingleplayerServer();
+        if (localServer != null) {
+            var loaded = localServer.getRecipeManager().byKey(id).orElse(null);
+            if (loaded instanceof CraftingRecipe wrappedRecipe) {
+                return detailsFromLoadedRecipe(recipeId, unwrap(wrappedRecipe));
+            }
+        }
         ResourceLocation resourceId = new ResourceLocation(id.getNamespace(), "recipes/" + id.getPath() + ".json");
         Optional<String> json = readLocalRecipeJson(resourceId);
         if (json.isEmpty()) return new fr.zazac1.customrecipe.VanillaRecipeDetails(recipeId, List.of());
@@ -883,6 +919,48 @@ public class VanillaRecipesScreen extends Screen {
         }
     }
 
+    /** Builds selectable previews from the resolved Ingredient stacks, including Forge tags. */
+    private fr.zazac1.customrecipe.VanillaRecipeDetails detailsFromLoadedRecipe(String recipeId, CraftingRecipe recipe) {
+        List<List<String>> choices = new ArrayList<>(java.util.Collections.nCopies(9, List.of()));
+        if (recipe instanceof ShapedRecipe shaped) {
+            List<Ingredient> ingredients = shaped.getIngredients();
+            for (int row = 0; row < shaped.getHeight() && row < 3; row++) {
+                for (int column = 0; column < shaped.getWidth() && column < 3; column++) {
+                    int source = row * shaped.getWidth() + column;
+                    choices.set(row * 3 + column, source < ingredients.size()
+                            ? ingredientChoices(ingredients.get(source)) : List.of());
+                }
+            }
+        } else {
+            List<Ingredient> ingredients = recipe.getIngredients();
+            for (int slot = 0; slot < ingredients.size() && slot < 9; slot++) {
+                choices.set(slot, ingredientChoices(ingredients.get(slot)));
+            }
+        }
+        return variantPreviews(recipeId, choices);
+    }
+
+    private List<String> ingredientChoices(Ingredient ingredient) {
+        if (ingredient == null) return List.of();
+        TreeSet<String> choices = new TreeSet<>();
+        for (ItemStack stack : ingredient.getItems()) {
+            if (!stack.isEmpty()) choices.add(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        }
+        return new ArrayList<>(choices);
+    }
+
+    private fr.zazac1.customrecipe.VanillaRecipeDetails variantPreviews(String recipeId, List<List<String>> choices) {
+        TreeSet<String> variants = new TreeSet<>();
+        for (List<String> choice : choices) if (choice.size() > 1) variants.addAll(choice);
+        List<fr.zazac1.customrecipe.VanillaRecipeDetails.VariantPreview> previews = new ArrayList<>();
+        for (String material : variants.stream().limit(48).toList()) {
+            List<String> slots = new ArrayList<>(9);
+            for (List<String> choice : choices) slots.add(choice.contains(material) ? material : (choice.isEmpty() ? "" : choice.get(0)));
+            previews.add(new fr.zazac1.customrecipe.VanillaRecipeDetails.VariantPreview(material, slots));
+        }
+        return new fr.zazac1.customrecipe.VanillaRecipeDetails(recipeId, previews);
+    }
+
     private Optional<String> readLocalRecipeJson(ResourceLocation resourceId) {
         try {
             var resource = minecraft.getResourceManager().getResource(resourceId).orElse(null);
@@ -892,16 +970,33 @@ public class VanillaRecipesScreen extends Screen {
                 }
             }
             try (JarFile jar = minecraftJar()) {
-                if (jar == null) return Optional.empty();
-                var entry = jar.getJarEntry("data/" + resourceId.getNamespace() + "/" + resourceId.getPath());
-                if (entry == null) return Optional.empty();
-                try (var input = jar.getInputStream(entry)) {
-                    return Optional.of(new String(input.readAllBytes(), StandardCharsets.UTF_8));
+                if (jar != null) {
+                    var entry = jar.getJarEntry("data/" + resourceId.getNamespace() + "/" + resourceId.getPath());
+                    if (entry != null) {
+                        try (var input = jar.getInputStream(entry)) {
+                            return Optional.of(new String(input.readAllBytes(), StandardCharsets.UTF_8));
+                        }
+                    }
+                }
+            }
+            // Mod recipes are available while browsing from the title screen,
+            // but Forge may not expose their data through ResourceManager yet.
+            String archiveEntry = "data/" + resourceId.getNamespace() + "/" + resourceId.getPath();
+            for (var modFile : ModList.get().getModFiles()) {
+                Path archivePath = modFile.getFile().getFilePath().toAbsolutePath().normalize();
+                if (!Files.isRegularFile(archivePath) || !archivePath.toString().endsWith(".jar")) continue;
+                try (JarFile archive = new JarFile(archivePath.toFile())) {
+                    var entry = archive.getJarEntry(archiveEntry);
+                    if (entry == null) continue;
+                    try (var input = archive.getInputStream(entry)) {
+                        return Optional.of(new String(input.readAllBytes(), StandardCharsets.UTF_8));
+                    }
                 }
             }
         } catch (Exception ignored) {
             return Optional.empty();
         }
+        return Optional.empty();
     }
 
     private JarFile minecraftJar() throws Exception {
@@ -984,7 +1079,10 @@ public class VanillaRecipesScreen extends Screen {
         } catch (IllegalStateException ignored) {
             // At the title screen tags may not be bound yet; use their JSON below.
         }
-        ResourceLocation tagResource = new ResourceLocation(tagId.getNamespace(), "tags/item/" + tagId.getPath() + ".json");
+        // In 1.20.1 datapacks use the plural directory: tags/items/.  The
+        // singular form is used by newer versions and made every JSON tag
+        // (including minecraft:planks for sticks) appear empty on Forge.
+        ResourceLocation tagResource = new ResourceLocation(tagId.getNamespace(), "tags/items/" + tagId.getPath() + ".json");
         Optional<String> json = readLocalRecipeJson(tagResource);
         if (json.isEmpty()) return;
         try {
@@ -1041,6 +1139,21 @@ public class VanillaRecipesScreen extends Screen {
     private String itemName(String id) {
         var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
         return item == null || item == Items.AIR ? shortId(id) : new ItemStack(item).getHoverName().getString();
+    }
+
+    /** Searches both the stable registry ID and the name the player sees in their language. */
+    private boolean itemMatchesQuery(String itemId, String loweredQuery) {
+        return itemId.toLowerCase(Locale.ROOT).contains(loweredQuery)
+                || itemName(itemId).toLowerCase(Locale.ROOT).contains(loweredQuery);
+    }
+
+    /** A tag can resolve to many modded items; searching only its first value loses recipes. */
+    private boolean ingredientMatchesQuery(Ingredient ingredient, String loweredQuery) {
+        for (ItemStack stack : ingredient.getItems()) {
+            String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+            if (itemMatchesQuery(itemId, loweredQuery)) return true;
+        }
+        return false;
     }
 
     @Override

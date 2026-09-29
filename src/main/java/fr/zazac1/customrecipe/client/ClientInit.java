@@ -11,6 +11,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.PauseScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -30,6 +31,8 @@ import java.nio.file.attribute.BasicFileAttributes;
 /** Forge client lifecycle setup. Network endpoints live in {@link ClientPacketHandler}. */
 public final class ClientInit {
     private static String activeClientWorldId = "";
+    /** Original GUI scale saved for the complete lifetime of a Custom Recipe screen flow. */
+    private static Integer guiScaleBeforeCustomRecipe;
     private static final ResourceLocation PAUSE_BUTTON_ICON = new ResourceLocation(CustomRecipeMod.MOD_ID,
             "textures/gui/pause_button.png");
 
@@ -38,6 +41,7 @@ public final class ClientInit {
         MinecraftForge.EVENT_BUS.addListener(ClientInit::registerClientCommands);
         MinecraftForge.EVENT_BUS.addListener(ClientInit::onPauseScreenInit);
         MinecraftForge.EVENT_BUS.addListener(ClientInit::onPauseScreenRender);
+        MinecraftForge.EVENT_BUS.addListener(ClientInit::onScreenOpening);
         MinecraftForge.registerConfigScreen(ClothConfigIntegration::createScreen);
     }
 
@@ -70,10 +74,58 @@ public final class ClientInit {
         event.getGuiGraphics().blit(PAUSE_BUTTON_ICON, x + 2, y + 2, 0, 0, 16, 16, 16, 16);
     }
 
+    /**
+     * The editor was designed around the vanilla GUI scale of 3. Keep that scale
+     * for every Custom Recipe sub-screen, then put the player's exact setting
+     * back as soon as they leave the editor.
+     */
+    private static void onScreenOpening(ScreenEvent.Opening event) {
+        updateGuiScaleForScreen(Minecraft.getInstance(), event.getNewScreen());
+    }
+
+    /** Re-check on tick too: some Forge configuration entry points bypass the opening event. */
+    private static void updateGuiScaleForScreen(Minecraft client, Screen screen) {
+        if (isCustomRecipeScreen(screen)) {
+            if (!ConfigLoader.get().automatic_gui_scale) {
+                restoreGuiScale(client);
+                return;
+            }
+            if (guiScaleBeforeCustomRecipe == null) {
+                guiScaleBeforeCustomRecipe = client.options.guiScale().get();
+            }
+            setGuiScale(client, 3);
+            return;
+        }
+
+        restoreGuiScale(client);
+    }
+
+    private static void restoreGuiScale(Minecraft client) {
+        if (guiScaleBeforeCustomRecipe != null) {
+            int originalScale = guiScaleBeforeCustomRecipe;
+            guiScaleBeforeCustomRecipe = null;
+            setGuiScale(client, originalScale);
+        }
+    }
+
+    private static void setGuiScale(Minecraft client, int scale) {
+        if (client.options.guiScale().get() == scale) return;
+        client.options.guiScale().set(scale);
+        // OptionInstance updates the stored value. Resize explicitly so the
+        // currently open editor is immediately rebuilt at its new scale.
+        client.resizeDisplay();
+    }
+
+    private static boolean isCustomRecipeScreen(Screen screen) {
+        return screen != null && screen.getClass().getPackageName().startsWith("fr.zazac1.customrecipe.client");
+    }
+
     /** Same END tick used on Fabric: checks a local world once and sends its editor hint. */
     private static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft client = Minecraft.getInstance();
+        updateGuiScaleForScreen(client, client.screen);
+        if (ConfigLoader.get().preload_recipes_on_startup) VanillaRecipesScreen.preloadAtStartup(client);
         var server = client.getSingleplayerServer();
         if (server == null) {
             activeClientWorldId = "";

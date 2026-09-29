@@ -37,25 +37,34 @@ final class RecipeTargetSelectScreen extends Screen {
     private static final int ROW = 42;
     private static final DateTimeFormatter LAST_PLAYED_FORMAT =
             DateTimeFormatter.ofPattern("M/d/yy, h:mm a", Locale.US).withZone(ZoneId.systemDefault());
-    private final ConfigScreen parent;
-    private final Function<ConfigScreen, Screen> selectedScreen;
+    private final Screen parent;
+    private final Function<fr.zazac1.customrecipe.RecipeTarget, Screen> selectedScreen;
     private final List<LocalWorld> worlds = new ArrayList<>();
     private EditBox search;
     private int scroll;
 
     RecipeTargetSelectScreen(ConfigScreen parent) {
-        this(parent, null);
+        this(parent, parent::createTargetScreen, true);
     }
 
     RecipeTargetSelectScreen(ConfigScreen parent, Function<ConfigScreen, Screen> selectedScreen) {
+        this(parent, target -> selectedScreen.apply(parent.createTargetScreen(target)), true);
+    }
+
+    static RecipeTargetSelectScreen forSettings(Screen parent,
+                                                 Function<fr.zazac1.customrecipe.RecipeTarget, Screen> selectedScreen) {
+        return new RecipeTargetSelectScreen(parent, selectedScreen, true);
+    }
+
+    private RecipeTargetSelectScreen(Screen parent, Function<fr.zazac1.customrecipe.RecipeTarget, Screen> selectedScreen,
+                                     boolean settingsSelection) {
         super(Component.translatable("customrecipe.screen.select_target"));
         this.parent = parent;
         this.selectedScreen = selectedScreen;
     }
 
     private void selectTarget(fr.zazac1.customrecipe.RecipeTarget target) {
-        ConfigScreen next = parent.createTargetScreen(target);
-        minecraft.setScreen(selectedScreen == null ? next : selectedScreen.apply(next));
+        minecraft.setScreen(selectedScreen.apply(target));
     }
 
     @Override
