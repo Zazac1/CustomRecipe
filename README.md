@@ -9,7 +9,7 @@ Download the latest release matching your game version:
 - **1.20.1**
 - **1.21.1**
 - **1.21.8**
-- **1.21.11**
+- **1.21.10**
 - **26.2**
 - **26.3** *(upcoming)*
 

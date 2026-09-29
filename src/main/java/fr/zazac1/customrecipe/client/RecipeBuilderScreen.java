@@ -356,7 +356,8 @@ public class RecipeBuilderScreen extends Screen {
             if (entry.getValue() == Items.AIR) continue;
             String id = entry.getKey().getValue().toString();
             String path = entry.getKey().getValue().getPath();
-            if (id.contains(ql) || path.contains(ql)) {
+            String displayName = new ItemStack(entry.getValue()).getName().getString().toLowerCase(Locale.ROOT);
+            if (id.contains(ql) || path.contains(ql) || displayName.contains(ql)) {
                 matches.add(id);
             }
         }
@@ -712,7 +713,7 @@ public class RecipeBuilderScreen extends Screen {
                 var heldItem = Registries.ITEM.get(Identifier.tryParse(heldItemId));
                 if (heldItem != null && heldItem != Items.AIR) {
                 ctx.drawItem(new ItemStack(heldItem), ghostX, ghostY);
-                // The 1.21.11 GUI item pipeline has no alpha overload. Its
+                // This GUI item pipeline has no alpha overload. Its
                 // translucent veil keeps the cursor item at 80% visual weight.
                 ctx.fill(ghostX, ghostY, ghostX + 16, ghostY + 16, 0x33000000);
                 }
