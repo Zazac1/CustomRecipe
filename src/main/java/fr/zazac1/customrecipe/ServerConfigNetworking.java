@@ -209,22 +209,26 @@ public final class ServerConfigNetworking {
             int gridHeight = 0;
             boolean shapeless = !(recipe instanceof ShapedRecipe);
             List<String> ingredients = new ArrayList<>();
+            List<Ingredient> ingredientMatchers = new ArrayList<>();
             if (recipe instanceof ShapedRecipe shaped) {
                 // getIngredients includes blank cells and preserves the declared pattern.
                 gridWidth = shaped.getWidth();
                 gridHeight = shaped.getHeight();
                 for (var ingredient : shaped.getIngredients()) {
                     ingredients.add(firstMatchingId(ingredient));
+                    ingredientMatchers.add(ingredient);
                 }
             } else {
                 // Shapeless recipes deliberately keep the JSON ingredient order.
                 for (Ingredient ingredient : recipe.getIngredients()) {
                     ingredients.add(firstMatchingId(ingredient));
+                    ingredientMatchers.add(ingredient);
                 }
             }
 
-            boolean outputMatch = request.matchOutput() && resultId.contains(query);
-            boolean ingredientMatch = request.matchIngredients() && ingredients.stream().anyMatch(id -> id.contains(query));
+            boolean outputMatch = request.matchOutput() && itemMatchesQuery(resultId, query);
+            boolean ingredientMatch = request.matchIngredients() && ingredientMatchers.stream()
+                    .anyMatch(ingredient -> ingredientMatchesQuery(ingredient, query));
             boolean disabled = disabledRecipeIds.contains(entry.getId().toString());
             boolean statusMatch = switch (statusFilter) {
                 case "ENABLED" -> !disabled && !special;
@@ -237,7 +241,8 @@ public final class ServerConfigNetworking {
                 case "VANILLA" -> entry.getId().getNamespace().equals("minecraft");
                 default -> true;
             };
-            if (statusMatch && sourceMatch && (query.isEmpty() || outputMatch || ingredientMatch)) {
+            if (statusMatch && sourceMatch && (query.isEmpty() || entry.getId().toString().toLowerCase(Locale.ROOT).contains(query)
+                    || outputMatch || ingredientMatch)) {
                 matches.add(new VanillaRecipePage.VanillaRecipeInfo(
                         entry.getId().toString(), resultId,
                         toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
@@ -258,6 +263,17 @@ public final class ServerConfigNetworking {
                 .map(stack -> Registries.ITEM.getId(stack.getItem()).toString())
                 .findFirst()
                 .orElse("");
+    }
+
+    private static boolean itemMatchesQuery(String itemId, String query) {
+        var item = Registries.ITEM.get(Identifier.tryParse(itemId));
+        String name = item == null ? "" : new ItemStack(item).getName().getString().toLowerCase(Locale.ROOT);
+        return itemId.toLowerCase(Locale.ROOT).contains(query) || name.contains(query);
+    }
+
+    private static boolean ingredientMatchesQuery(Ingredient ingredient, String query) {
+        return Arrays.stream(ingredient.getMatchingStacks()).anyMatch(stack -> itemMatchesQuery(
+                Registries.ITEM.getId(stack.getItem()).toString(), query));
     }
 
     private static VanillaRecipeDetails findVanillaRecipeDetails(net.minecraft.server.MinecraftServer server, String rawId) {

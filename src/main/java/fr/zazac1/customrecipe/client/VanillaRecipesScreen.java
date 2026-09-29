@@ -37,6 +37,8 @@ import java.util.jar.JarFile;
 /** Server-filtered default crafting recipe browser for OPs, including installed mods. */
 @Environment(EnvType.CLIENT)
 public class VanillaRecipesScreen extends Screen {
+    private static List<VanillaRecipePage.VanillaRecipeInfo> startupRecipeCache = List.of();
+    private static boolean startupPreloadStarted;
     private static final int ROW = 20;
     private static final int HEADER_Y = 34;
     private static final int SEARCH_Y = 52;
@@ -127,6 +129,20 @@ public class VanillaRecipesScreen extends Screen {
         super(Text.translatable("customrecipe.vanilla.title"));
         this.parent = parent;
         this.localMode = localMode;
+    }
+
+    /** Builds the local browser cache once, after the client has finished initialising. */
+    static void preloadAtStartup(net.minecraft.client.MinecraftClient client) {
+        if (startupPreloadStarted || !startupRecipeCache.isEmpty() || client.getResourceManager() == null) return;
+        startupPreloadStarted = true;
+        try {
+            VanillaRecipesScreen scanner = new VanillaRecipesScreen(null, true);
+            scanner.client = client;
+            VanillaRecipePage page = scanner.findLocalRecipes();
+            startupRecipeCache = List.copyOf(page.recipes());
+        } catch (RuntimeException exception) {
+            startupPreloadStarted = false;
+        }
     }
 
     ConfigScreen configScreen() { return parent; }
@@ -261,6 +277,10 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     private VanillaRecipePage findLocalRecipes() {
+        if (query.isBlank() && matchIngredients && matchOutput
+                && sourceFilter == SourceFilter.ALL && !startupRecipeCache.isEmpty()) {
+            return new VanillaRecipePage(startupRecipeCache, 0, startupRecipeCache.size());
+        }
         String loweredQuery = query.trim().toLowerCase(Locale.ROOT);
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
         Set<String> matchedIds = new HashSet<>();
@@ -294,9 +314,10 @@ public class VanillaRecipesScreen extends Screen {
         if ((sourceFilter == SourceFilter.VANILLA && !vanillaRecipe)
                 || (sourceFilter == SourceFilter.MODDED && vanillaRecipe)) return;
         String resultId = findResultId(json, recipeId);
-        boolean outputMatch = matchOutput && resultId.toLowerCase(Locale.ROOT).contains(loweredQuery);
-        boolean ingredientMatch = matchIngredients && json.toLowerCase(Locale.ROOT).contains(loweredQuery);
-        if ((loweredQuery.isEmpty() || outputMatch || ingredientMatch) && matchedIds.add(recipeId)) {
+        boolean outputMatch = matchOutput && itemMatchesQuery(resultId, loweredQuery);
+        boolean ingredientMatch = matchIngredients && localIngredientsMatch(json, loweredQuery);
+        if ((loweredQuery.isEmpty() || recipeId.toLowerCase(Locale.ROOT).contains(loweredQuery)
+                || outputMatch || ingredientMatch) && matchedIds.add(recipeId)) {
             RecipeLayout layout = findLocalRecipeLayout(json);
             boolean special = isSpecialRecipe(json);
             matches.add(new VanillaRecipePage.VanillaRecipeInfo(recipeId, resultId, toPreviewSlots(layout),
@@ -584,6 +605,24 @@ public class VanillaRecipesScreen extends Screen {
         }
     }
 
+    /** Expands item tags before matching, so #planks also finds every individual plank. */
+    private boolean localIngredientsMatch(String json, String loweredQuery) {
+        try {
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            List<JsonElement> ingredients = new ArrayList<>();
+            if (root.has("ingredients")) ingredients.add(root.get("ingredients"));
+            if (root.has("key") && root.get("key").isJsonObject()) {
+                for (Map.Entry<String, JsonElement> entry : root.getAsJsonObject("key").entrySet()) ingredients.add(entry.getValue());
+            }
+            for (JsonElement ingredient : ingredients) {
+                for (String itemId : localIngredientChoices(ingredient)) if (itemMatchesQuery(itemId, loweredQuery)) return true;
+            }
+        } catch (Exception ignored) {
+            // A malformed optional recipe resource is omitted from matching.
+        }
+        return false;
+    }
+
     /** Reads tag JSON too, so variants are available from ModMenu before joining a world. */
     private void collectLocalTagItems(Identifier tagId, Set<String> choices, Set<Identifier> visited) {
         if (!visited.add(tagId)) return;
@@ -652,6 +691,11 @@ public class VanillaRecipesScreen extends Screen {
     private String itemName(String id) {
         var item = Registries.ITEM.get(Identifier.tryParse(id));
         return item == null || item == Items.AIR ? shortId(id) : new ItemStack(item).getName().getString();
+    }
+
+    private boolean itemMatchesQuery(String itemId, String loweredQuery) {
+        return itemId.toLowerCase(Locale.ROOT).contains(loweredQuery)
+                || itemName(itemId).toLowerCase(Locale.ROOT).contains(loweredQuery);
     }
 
     @Override

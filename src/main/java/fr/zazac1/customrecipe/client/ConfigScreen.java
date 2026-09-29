@@ -55,7 +55,10 @@ public class ConfigScreen extends Screen {
     }
 
     public static ConfigScreen fromModMenu(Screen parent) {
-        return new ConfigScreen(parent);
+        ModConfig config = ConfigLoader.get();
+        if ("global".equals(config.default_editor_target_id)) return new ConfigScreen(parent);
+        return new ConfigScreen(parent, config, "Custom Recipe", false, ConfigLoader::saveAndInvalidate,
+                new WorldRecipeTarget(config.default_editor_target_id, config.default_editor_target_name), false);
     }
 
     public static ConfigScreen fromPauseMenu(Screen parent) {
@@ -114,6 +117,11 @@ public class ConfigScreen extends Screen {
 
         addDrawable((ctx, mouseX, mouseY, delta) ->
                 ctx.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.home.title"), width / 2, top - 27, 0xFFFFFFFF));
+
+        addDrawableChild(ButtonWidget.builder(Text.empty(), b -> client.setScreen(new ModSettingsScreen(this)))
+                .dimensions(width - 28, height - 28, 20, 20).build());
+        addDrawable((ctx, mouseX, mouseY, delta) -> CustomRecipeSprites.draw(ctx,
+                new Identifier(CustomRecipeMod.MOD_ID, "textures/gui/icons/settings.png"), width - 26, height - 26, 16, 16));
 
         ButtonWidget selectWorld = ButtonWidget.builder(Text.empty(),
                 b -> client.setScreen(new RecipeTargetSelectScreen(this)))

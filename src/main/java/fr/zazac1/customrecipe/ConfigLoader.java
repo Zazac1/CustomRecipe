@@ -3,6 +3,8 @@ package fr.zazac1.customrecipe;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
@@ -158,6 +160,11 @@ public final class ConfigLoader {
         try {
             ModConfig config = GSON.fromJson(json, ModConfig.class);
             if (config == null) return null;
+            // Missing primitive booleans deserialize as false. Detect the
+            // pre-1.3.5 shape so the new preferences keep their documented defaults.
+            JsonObject raw = JsonParser.parseString(json).getAsJsonObject();
+            if (!raw.has("automatic_gui_scale")) config.automatic_gui_scale = true;
+            if (!raw.has("preload_recipes_on_startup")) config.preload_recipes_on_startup = true;
             normalize(config);
             return config;
         } catch (JsonSyntaxException e) {
@@ -224,6 +231,12 @@ public final class ConfigLoader {
     private static void normalize(ModConfig config) {
         if (config.editor_world_id == null) config.editor_world_id = "";
         if (config.editor_world_name == null) config.editor_world_name = "";
+        if (config.default_editor_target_id == null || config.default_editor_target_id.isBlank()) {
+            config.default_editor_target_id = "global";
+        }
+        if (config.default_editor_target_name == null || config.default_editor_target_name.isBlank()) {
+            config.default_editor_target_name = "Global Library";
+        }
         if (config.disabled_builtin == null) config.disabled_builtin = new java.util.ArrayList<>();
         if (config.known_by_default_builtin == null) config.known_by_default_builtin = new java.util.ArrayList<>();
         if (config.disabled_recipes == null) config.disabled_recipes = new java.util.ArrayList<>();
