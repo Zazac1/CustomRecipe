@@ -6,11 +6,11 @@ Release
 
 ## Version number
 
-1.3.5
+1.3.5-1.21.10-(Fabric)
 
 ## Version subtitle
 
-v1.3.5 for Minecraft 1.21.10 (Fabric)
+1.3.5-1.21.10-(Fabric)
 
 ## Loader
 
@@ -25,6 +25,12 @@ Fabric
 `build/libs/customrecipe-1.3.5+1.21.10.jar`
 
 ## Version changelog
+
+### Minecraft 1.21.10 support
+
+- Added Custom Recipe 1.3.5 support for Minecraft 1.21.10 using Fabric.
+- Preserved Custom Recipe's recipe editor, Global Library, and per-world recipe configurations.
+- Existing 1.3.4 configurations are migrated safely and keep their saved data and preferences.
 
 ### Editor settings
 
@@ -42,7 +48,3 @@ Fabric
 
 - Added a settings button to the Custom Recipe editor.
 - The GUI scale is restored to the exact value selected before opening the editor.
-
-### Compatibility
-
-- Existing 1.3.4 configurations are migrated safely and keep their saved data and preferences.
