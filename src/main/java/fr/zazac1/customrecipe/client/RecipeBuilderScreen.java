@@ -356,7 +356,8 @@ public class RecipeBuilderScreen extends Screen {
             if (entry.getValue() == Items.AIR) continue;
             String id = entry.getKey().getValue().toString();
             String path = entry.getKey().getValue().getPath();
-            if (id.contains(ql) || path.contains(ql)) {
+            String displayName = new ItemStack(entry.getValue()).getName().getString().toLowerCase(Locale.ROOT);
+            if (id.contains(ql) || path.contains(ql) || displayName.contains(ql)) {
                 matches.add(id);
             }
         }
