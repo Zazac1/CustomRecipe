@@ -24,7 +24,7 @@ v1.3.5 for Minecraft 1.20.1 (Forge)
 ### Recipe browser
 
 - Improved searches to find recipes and ingredients by displayed item name, item ID, recipe ID, and mod namespace.
-- Improved support for interchangeable ingredients, including item tags and materials added by installed mods.
+- Fixed interchangeable ingredient previews, including item tags and materials added by installed mods.
 - Fixed ingredient previews in the recipe details screen when browsing outside a loaded world.
 
 ### Interface
