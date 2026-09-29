@@ -4,6 +4,7 @@ import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import fr.zazac1.customrecipe.WorldRecipeTarget;
+import fr.zazac1.customrecipe.RecipeTarget;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gl.RenderPipelines;
@@ -42,25 +43,32 @@ final class RecipeTargetSelectScreen extends Screen {
     private static final int ROW = 42;
     private static final DateTimeFormatter LAST_PLAYED_FORMAT =
             DateTimeFormatter.ofPattern("M/d/yy, h:mm a", Locale.US).withZone(ZoneId.systemDefault());
-    private final ConfigScreen parent;
-    private final Function<ConfigScreen, Screen> selectedScreen;
+    private final Screen parent;
+    private final Function<RecipeTarget, Screen> selectedScreen;
     private final List<LocalWorld> worlds = new ArrayList<>();
     private TextFieldWidget search;
     private int scroll;
 
     RecipeTargetSelectScreen(ConfigScreen parent) {
-        this(parent, null);
+        this(parent, parent::createTargetScreen);
     }
 
     RecipeTargetSelectScreen(ConfigScreen parent, Function<ConfigScreen, Screen> selectedScreen) {
+        this((Screen) parent, (Function<RecipeTarget, Screen>) target -> selectedScreen.apply(parent.createTargetScreen(target)));
+    }
+
+    static RecipeTargetSelectScreen forSettings(Screen parent, Function<RecipeTarget, Screen> selectedScreen) {
+        return new RecipeTargetSelectScreen(parent, selectedScreen);
+    }
+
+    private RecipeTargetSelectScreen(Screen parent, Function<RecipeTarget, Screen> selectedScreen) {
         super(Text.translatable("customrecipe.screen.select_target"));
         this.parent = parent;
         this.selectedScreen = selectedScreen;
     }
 
-    private void selectTarget(fr.zazac1.customrecipe.RecipeTarget target) {
-        ConfigScreen next = parent.createTargetScreen(target);
-        client.setScreen(selectedScreen == null ? next : selectedScreen.apply(next));
+    private void selectTarget(RecipeTarget target) {
+        client.setScreen(selectedScreen.apply(target));
     }
 
     @Override
