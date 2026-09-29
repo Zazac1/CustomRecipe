@@ -1,34 +1,54 @@
-# Custom Recipe 1.3.5 — Fabric 1.21.1
+# Modrinth release - Custom Recipe 1.3.5
 
-**Game version:** Minecraft 1.21.1  
-**Loader:** Fabric  
-**Release type:** Release
+## Version type
 
-## Minecraft 1.21.1 support
+Release
 
-- Added Custom Recipe 1.3.5 support for Minecraft 1.21.1 using Fabric.
-- Preserved the recipe editor, Global Library, per-world configurations, multiplayer, permissions, networking, Recipe Book integration, and Shift-crafting.
-- Existing 1.3.4 configurations migrate safely and retain recipes, worlds, enabled states, and preferences.
+## Version number
 
-## Editor settings
+1.3.5-1.21.1-(Fabric)
 
-- Added the in-game Custom Recipe settings screen.
-- Choose automatic GUI Scale 3, the initial Global Library or world target, and Default Recipe preloading on startup.
-- Added reset buttons, translated tooltips, clear on/off indicators, and persistent settings.
-- GUI Scale is restored to its exact former value when leaving Custom Recipe.
+## Version subtitle
 
-## Recipe search
+v1.3.5 for Minecraft 1.21.1 (Fabric)
 
-- Recipe Builder search finds items by registry ID and displayed name.
-- Default Recipes search finds display names, item IDs, recipe IDs, mod namespaces, and items included by ingredient tags.
-- The same improved search logic is available for local and dedicated-server recipe browsers.
+## Loader
 
-## Interface
+Fabric
 
-- Added a settings button to the editor home screen.
-- Fixed save-confirmation popup layering so background labels do not overlap the modal.
+## Game version
 
-## Upload
+1.21.1
 
-- File: `customrecipe-1.3.5+1.21.1.jar`
-- Required dependency: Fabric API
+## File
+
+`build/libs/customrecipe-1.3.5+1.21.1.jar`
+
+## Version changelog
+
+### Minecraft 1.21.1 support
+
+- Adapted Custom Recipe 1.3.5 for Minecraft 1.21.1 using Fabric.
+- Preserved the recipe editor, Global Library, and per-world recipe configurations.
+- Existing 1.3.4 configurations migrate safely and retain saved recipes and preferences.
+
+### Editor settings
+
+- Adapted the in-game Custom Recipe settings screen for Minecraft 1.21.1.
+- Choose whether the editor automatically uses GUI Scale 3, which library or world opens first, and whether Default Recipes are preloaded at startup.
+- Added reset buttons, translated tooltips, and clear on/off indicators for each setting.
+
+### Recipe search
+
+- Improved Recipe Builder search to find items by displayed name as well as item ID.
+- Improved Default Recipes search to find results and ingredients by displayed name, item ID, recipe ID, and mod namespace.
+- Searches include every item accepted through an ingredient tag in local and dedicated-server recipe browsers.
+
+### Interface
+
+- Added a settings button to the Custom Recipe editor.
+- The GUI scale is restored to the exact value selected before opening the editor.
+
+### Fixes
+
+- Fixed background labels overlapping the save confirmation popup.
