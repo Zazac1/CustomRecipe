@@ -49,3 +49,4 @@ public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
     @Override public String getGroup() { return delegate.getGroup(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }
 }
+

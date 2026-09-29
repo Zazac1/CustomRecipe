@@ -56,3 +56,4 @@ public abstract class CraftingScreenHandlerMixin {
         return manager.getFirstMatch(type, (CraftingRecipeInput) input, world, preferred);
     }
 }
+

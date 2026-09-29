@@ -96,6 +96,11 @@ public class ConfigScreen extends Screen {
     }
 
     private RecipeTarget defaultTarget() {
+        if ("global".equals(baseConfig.default_editor_target_id)) return GlobalRecipeTarget.INSTANCE;
+        if (baseConfig.default_editor_target_id != null && !baseConfig.default_editor_target_id.isBlank()
+                && baseConfig.findWorldConfig(baseConfig.default_editor_target_id) != null) {
+            return new WorldRecipeTarget(baseConfig.default_editor_target_id, baseConfig.default_editor_target_name);
+        }
         if (!editorWorldId.isBlank()) return new WorldRecipeTarget(editorWorldId,
                 "Current " + editorWorldName);
         return GlobalRecipeTarget.INSTANCE;
@@ -113,6 +118,11 @@ public class ConfigScreen extends Screen {
 
         addDrawable((ctx, mouseX, mouseY, delta) ->
                 ctx.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.home.title"), width / 2, top - 27, 0xFFFFFFFF));
+
+        addDrawableChild(ButtonWidget.builder(Text.empty(), b -> client.setScreen(new ModSettingsScreen(this)))
+                .dimensions(width - 28, height - 28, 20, 20).build());
+        addDrawable((ctx, mouseX, mouseY, delta) -> CustomRecipeSprites.draw(ctx,
+                Identifier.of(CustomRecipeMod.MOD_ID, "textures/gui/icons/settings.png"), width - 26, height - 26, 16, 16));
 
         ButtonWidget selectWorld = ButtonWidget.builder(Text.empty(),
                 b -> client.setScreen(new RecipeTargetSelectScreen(this)))

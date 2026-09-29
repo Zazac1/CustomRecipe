@@ -31,3 +31,4 @@ public final class DisabledCraftingRecipe implements CraftingRecipe {
     @Override public String getGroup() { return delegate.getGroup(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }
 }
+

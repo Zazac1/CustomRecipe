@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
 import java.util.function.Function;
+import java.util.function.Consumer;
 
 /** Direct save-folder scan: no asynchronous vanilla world-list omissions. */
 @Environment(EnvType.CLIENT)
@@ -43,21 +44,38 @@ final class RecipeTargetSelectScreen extends Screen {
             DateTimeFormatter.ofPattern("M/d/yy, h:mm a", Locale.US).withZone(ZoneId.systemDefault());
     private final ConfigScreen parent;
     private final Function<ConfigScreen, Screen> selectedScreen;
+    private final Screen settingsParent;
+    private final Consumer<fr.zazac1.customrecipe.RecipeTarget> settingsSelection;
     private final List<LocalWorld> worlds = new ArrayList<>();
     private TextFieldWidget search;
     private int scroll;
 
     RecipeTargetSelectScreen(ConfigScreen parent) {
-        this(parent, null);
+        this(parent, (Function<ConfigScreen, Screen>) null);
     }
 
     RecipeTargetSelectScreen(ConfigScreen parent, Function<ConfigScreen, Screen> selectedScreen) {
         super(Text.translatable("customrecipe.screen.select_target"));
         this.parent = parent;
         this.selectedScreen = selectedScreen;
+        this.settingsParent = null;
+        this.settingsSelection = null;
+    }
+
+    static RecipeTargetSelectScreen forSettings(Screen parent, Consumer<fr.zazac1.customrecipe.RecipeTarget> selection) {
+        return new RecipeTargetSelectScreen(parent, selection);
+    }
+
+    private RecipeTargetSelectScreen(Screen parent, Consumer<fr.zazac1.customrecipe.RecipeTarget> selection) {
+        super(Text.translatable("customrecipe.screen.select_target"));
+        this.parent = null;
+        this.selectedScreen = null;
+        this.settingsParent = parent;
+        this.settingsSelection = selection;
     }
 
     private void selectTarget(fr.zazac1.customrecipe.RecipeTarget target) {
+        if (settingsSelection != null) { settingsSelection.accept(target); return; }
         ConfigScreen next = parent.createTargetScreen(target);
         client.setScreen(selectedScreen == null ? next : selectedScreen.apply(next));
     }
@@ -73,7 +91,7 @@ final class RecipeTargetSelectScreen extends Screen {
         search.setPlaceholder(Text.translatable("customrecipe.screen.search"));
         search.setChangedListener(value -> scroll = 0);
         addDrawableChild(search);
-        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.back"), b -> client.setScreen(parent))
+        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.back"), b -> client.setScreen(settingsParent != null ? settingsParent : parent))
                 .dimensions(width / 2 - 55, height - 28, 110, 20).build());
     }
 
@@ -251,7 +269,7 @@ final class RecipeTargetSelectScreen extends Screen {
     public boolean shouldPause() { return true; }
 
     @Override
-    public void close() { client.setScreen(parent); }
+    public void close() { client.setScreen(settingsParent != null ? settingsParent : parent); }
 
     private record WorldIcon(Identifier id, int width, int height) {}
     private record WorldDetails(String name, String lastPlayed, String description) {}

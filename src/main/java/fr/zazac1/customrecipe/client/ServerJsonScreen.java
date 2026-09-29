@@ -84,3 +84,4 @@ public class ServerJsonScreen extends Screen {
 
     @Override public boolean shouldPause() { return true; }
 }
+

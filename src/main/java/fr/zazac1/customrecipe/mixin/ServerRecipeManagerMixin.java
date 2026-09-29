@@ -198,3 +198,4 @@ public abstract class ServerRecipeManagerMixin {
         return new RecipeEntry<>(key, recipe);
     }
 }
+

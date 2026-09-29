@@ -19,6 +19,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.GameMenuScreen;
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.HoverEvent;
@@ -36,6 +37,8 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
 @Environment(EnvType.CLIENT)
 public class ClientInit implements ClientModInitializer {
     private static String activeClientWorldId = "";
+    /** Exact GUI-scale option value (including Auto = 0) before entering the editor flow. */
+    private static Integer guiScaleBeforeCustomRecipe;
     private static final Gson GSON = new Gson();
 
     @Override
@@ -52,6 +55,7 @@ public class ClientInit implements ClientModInitializer {
                 })
         ));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            updateGuiScaleForScreen(client, client.currentScreen);
             if (client.getServer() == null) {
                 activeClientWorldId = "";
                 return;
@@ -119,6 +123,30 @@ public class ClientInit implements ClientModInitializer {
                 screen.applyDetails(details);
             }
         });
+    }
+
+    /** Applies scale 3 only while a Custom Recipe screen is open and restores the saved value on exit. */
+    private static void updateGuiScaleForScreen(MinecraftClient client, Screen screen) {
+        boolean editorScreen = screen != null && screen.getClass().getPackageName().startsWith("fr.zazac1.customrecipe.client");
+        if (editorScreen && ConfigLoader.get().automatic_gui_scale) {
+            if (guiScaleBeforeCustomRecipe == null) guiScaleBeforeCustomRecipe = client.options.getGuiScale().getValue();
+            setGuiScale(client, 3);
+        } else {
+            restoreGuiScale(client);
+        }
+    }
+
+    private static void restoreGuiScale(MinecraftClient client) {
+        if (guiScaleBeforeCustomRecipe == null) return;
+        int scale = guiScaleBeforeCustomRecipe;
+        guiScaleBeforeCustomRecipe = null;
+        setGuiScale(client, scale);
+    }
+
+    private static void setGuiScale(MinecraftClient client, int scale) {
+        if (client.options.getGuiScale().getValue() == scale) return;
+        client.options.getGuiScale().setValue(scale);
+        client.onResolutionChanged();
     }
 
     /**

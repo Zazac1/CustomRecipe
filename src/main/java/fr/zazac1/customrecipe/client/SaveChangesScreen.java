@@ -38,6 +38,10 @@ final class SaveChangesScreen extends Screen {
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         // Keep the editor visible: this screen behaves as a modal confirmation, not a new menu.
         returnTo.render(context, mouseX, mouseY, delta);
+        // Parent screens use deferred drawables for their labels. Put every modal layer
+        // above that batch so a home-screen caption cannot bleed through the panel.
+        context.getMatrices().push();
+        context.getMatrices().translate(0.0f, 0.0f, 200.0f);
         context.fill(0, 0, width, height, 0x98000000);
 
         int panelWidth = 250;
@@ -53,6 +57,7 @@ final class SaveChangesScreen extends Screen {
         context.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.save.title"), width / 2, panelY + 12, 0xFFFFFFFF);
         context.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.save.line1"), width / 2, panelY + 28, 0xFFE0E6E3);
         context.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.save.line2"), width / 2, panelY + 40, 0xFFB8C7C1);
+        context.getMatrices().pop();
     }
 
     private void drawBorder(DrawContext context, int x, int y, int width, int height, int color) {
