@@ -6,11 +6,11 @@ Release
 
 ## Version number
 
-1.3.5+26.3
+1.3.5-26.3-(Fabric)
 
 ## Version subtitle
 
-v1.3.5 for Minecraft 26.3 (Fabric)
+1.3.5-26.3-(Fabric)
 
 ## Loader
 
