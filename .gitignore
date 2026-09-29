@@ -6,6 +6,7 @@ bin/
 out/
 run/
 run-client/
+run-client-clean/
 run-server/
 .idea/
 *.iml

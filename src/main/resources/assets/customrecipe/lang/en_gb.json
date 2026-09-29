@@ -18,6 +18,7 @@
   "customrecipe.button.add_from_library": "Add From Library",
   "customrecipe.button.add_all_from_library": "Add All Global Library Recipes",
 
+
   "customrecipe.button.export": "Export",
   "customrecipe.button.import": "Import",
   "customrecipe.button.select_world_to_import": "Select a World to Import",
@@ -125,4 +126,16 @@
   ,"customrecipe.world.default_name": "World"
   ,"customrecipe.world.enabled_recipes": "Enabled recipes"
   ,"customrecipe.world.available_recipes": "Available recipes"
+  ,"customrecipe.settings.open": "Custom Recipe settings"
+  ,"customrecipe.settings.title": "Custom Recipe Settings"
+  ,"customrecipe.settings.auto_scale": "Automatically adjust GUI scale: %s"
+  ,"customrecipe.settings.open_target": "Open editor at: %s"
+  ,"customrecipe.settings.preload": "Load recipes at Minecraft startup: %s"
+  ,"customrecipe.settings.preload_hint": "This can cause a short lag while Minecraft starts."
+  ,"customrecipe.settings.yes": "Yes"
+  ,"customrecipe.settings.no": "No"
+  ,"customrecipe.settings.auto_scale.tooltip": "Temporarily uses GUI Scale 3 while browsing Custom Recipe, then restores your setting."
+  ,"customrecipe.settings.open_target.tooltip": "Choose which Global Library or local world opens first from the Mods menu."
+  ,"customrecipe.settings.preload.tooltip": "Builds the recipe cache when Minecraft starts. This can briefly slow startup."
+  ,"customrecipe.settings.reset": "Restore default"
 }

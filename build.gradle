@@ -32,6 +32,16 @@ loom {
     runs {
         client {
             runDir = "run-client"
+            // Work around a JDK 25 C2 crash while Minecraft reads model resources.
+            // This applies only to the local development client, never the built mod.
+            vmArg "-XX:TieredStopAtLevel=1"
+        }
+        // Isolated diagnostic profile. Its separate run directory has no optional
+        // development mods, so it does not alter the normal client profile.
+        clientClean {
+            client()
+            runDir = "run-client-clean"
+            vmArg "-XX:TieredStopAtLevel=1"
         }
         server {
             runDir = "run-server"
@@ -65,6 +75,18 @@ java {
 jar {
     from('LICENSE') {
         rename { "${it}_${project.mod_id}" }
+    }
+}
+
+// Fabric 26.3 development convenience: publish a freshly successful local build
+// to the dedicated Modrinth test profile. This is deliberately not shared by
+// any other version or publication task.
+tasks.named("build") {
+    doLast {
+        copy {
+            from tasks.named("jar")
+            into "C:/Users/isaac/AppData/Roaming/ModrinthApp/profiles/Fabric 26.3/mods"
+        }
     }
 }
 
