@@ -33,12 +33,17 @@ import java.util.HashSet;
 @Mixin(RecipeManager.class)
 public abstract class ServerRecipeManagerMixin {
 
+    /** 26.2 supplies its decoded recipes to the resource-reload hook. */
     @ModifyVariable(
             method = "apply(Lnet/minecraft/world/item/crafting/RecipeMap;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)V",
             at = @At("HEAD"),
             argsOnly = true
     )
     private RecipeMap customrecipe$applyConfig(RecipeMap original) {
+        return customrecipe$configureRecipes(original);
+    }
+
+    private RecipeMap customrecipe$configureRecipes(RecipeMap original) {
         ConfigLoader.invalidate();
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
 
