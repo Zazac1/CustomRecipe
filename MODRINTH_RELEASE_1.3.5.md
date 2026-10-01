@@ -1,16 +1,16 @@
-# Modrinth release - Custom Recipe 1.3.5 Beta NeoForge
+# Modrinth release - Custom Recipe 1.3.5 NeoForge
 
 ## Version type
 
-Beta
+Release
 
 ## Version number
 
-1.3.5-1.21.1-(NeoForge)-beta
+1.3.5-1.21.1-(NeoForge)
 
 ## Version subtitle
 
-v1.3.5 Beta for Minecraft 1.21.1 (NeoForge)
+v1.3.5 for Minecraft 1.21.1 (NeoForge)
 
 ## Loader
 
@@ -22,13 +22,13 @@ NeoForge
 
 ## File
 
-`build/libs/customrecipe-1.3.5-beta+1.21.1.jar`
+`build/libs/customrecipe-1.3.5+1.21.1.jar`
 
 ## Version changelog
 
-### NeoForge 1.21.1 beta
+### NeoForge 1.21.1 support
 
-- Added beta support for Minecraft 1.21.1 using NeoForge.
+- Added support for Minecraft 1.21.1 using NeoForge.
 - Adapted the Custom Recipe editor, Global Library, per-world configurations, and backup import/export flow for NeoForge.
 - Existing Custom Recipe configurations and recipe IDs remain supported.
 
@@ -50,7 +50,3 @@ NeoForge
 - Import confirmations show the selected configuration and recipe counts before changes are applied.
 - Fixed confirmation panels and editor overlays rendering behind the background blur.
 - Fixed duplicate save confirmations while editing a server configuration.
-
-### Beta testing
-
-- This is a beta release. Please back up configurations and report any remaining client, dedicated-server, or recipe-viewer issues.
