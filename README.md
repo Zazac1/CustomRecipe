@@ -1,18 +1,18 @@
-# Custom Recipe for Minecraft 1.21.1
+# Custom Recipe for Minecraft 1.20.1
 
-Custom Recipe is a Fabric mod for Minecraft **1.21.1**. Create shaped or shapeless crafting recipes in game, manage built-in recipes, and let server operators control custom and vanilla crafting recipes without editing datapacks.
+Custom Recipe is a Fabric mod for Minecraft **1.20.1**. Create shaped or shapeless crafting recipes in game, manage built-in recipes, and let server operators control custom and vanilla crafting recipes without editing datapacks.
 
 ## Highlights
 
-- Visual shaped and shapeless recipe builder for vanilla and modded items.
+- Visual shaped and shapeless recipe builder for vanilla and modded items, with reusable items, protected slots, and an Empty clear tile.
 - Persistent custom recipes, with stable IDs and enable/disable state.
 - **Known by default** recipes are silently added to every player's recipe book.
 - Custom recipes with identical inputs share one recipe-book group.
-- Five built-in recipes with enable/disable and **Known by default** controls.
-- **Default Recipes** browser: Minecraft and installed-mod recipes, live search, status filters, exact 3x3 previews, and material variants.
+- Four built-in recipes that can be toggled per world and marked **Known by default**.
+- Default Recipes browser: client-installed Vanilla and modded recipes, live search, status filters, and exact 3x3 previews.
 - Material variants: for recipes using tags such as planks or stone, preview each usable material and disable one material variant or the entire recipe.
-- Missing-mod recipes stay saved as **Corrupted**, are disabled safely, and recover when the required mod returns.
-- Client and server catalogs remain independent. Local recipes are staged for an OP and sent only after **Save**.
+- Same default-recipe controls in ModMenu/local singleplayer and the OP server editor.
+- OP-only server configuration command with permission-checked client/server networking.
 
 ## Build and installation
 
@@ -38,8 +38,8 @@ Open **ModMenu -> Custom Recipe**.
 
 - **My Recipes**: inspect, enable, disable, or delete custom recipes.
 - **Built-in Recipes**: toggle the included recipes.
-- **Create a Recipe**: create a shaped or shapeless recipe.
-- **Default Recipes**: search Minecraft and installed-mod recipes, filter Enabled/Disabled, and click a name to open its preview.
+- **Create a Recipe**: create a shaped or shapeless recipe with persistent item selection and reusable items.
+- **Default Recipes**: search Vanilla and installed-mod crafting recipes, filter by status, and click a name to open its preview.
 
 In a recipe preview, interchangeable ingredients appear in a compact icon grid:
 
@@ -59,7 +59,7 @@ Install the mod on the dedicated server and on the operator's client. An operato
 /customrecipe
 ```
 
-The server sends its authoritative configuration to that operator only. Local ModMenu recipes are shown as drafts and are validated against the server catalog; they are not sent until the OP clicks **Save**. The editor supports custom recipes, built-ins, default recipes, material variants, and manual JSON editing. Click **Save** to send the full configuration back to the server; it is written to the server `config/customrecipe.json` and recipes are reloaded.
+The server sends its authoritative configuration to that operator only. The editor supports custom recipes, built-ins, default crafting recipes, material variants, and manual JSON editing. Local recipes are staged and checked against the server catalog; only **Save** publishes them. The configuration is written to the server `config/customrecipe.json` and recipes are reloaded.
 
 The server validates operator permission and configuration size before accepting a save.
 
@@ -91,17 +91,16 @@ Relevant configuration fields:
 | Enchanted Golden Apple | `GGG / GAG / GGG` | Gold Block + Apple |
 | Elytra | `_S_ / MFM / M_M` | String + Phantom Membrane + Feather |
 | Bottle o' Enchanting | `_L_ / EBE / _L_` | Lapis Lazuli + Emerald + Glass Bottle |
-| Heavy Core | `_N_ / NBN / _N_` | Netherite Ingot + Breeze Rod |
 
 ## Compatibility
 
 | Component | Version |
 |---|---|
-| Minecraft | 1.21.1 |
+| Minecraft | 1.20.1 |
 | Java | 21+ |
-| Fabric Loader | 0.16.5+ |
-| Fabric API | 0.104.0+1.21.1 |
-| ModMenu | 11.0.4 (optional) |
+| Fabric Loader | 0.16.10+ |
+| Fabric API | 0.92.9+1.20.1 |
+| ModMenu | 7.2.2 (optional) |
 
 ## License and links
 

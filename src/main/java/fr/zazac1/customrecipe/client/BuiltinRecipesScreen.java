@@ -2,17 +2,15 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.RecipeIntegrity;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.MultilineTextWidget;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.MultiLineTextWidget;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -20,7 +18,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-@Environment(EnvType.CLIENT)
 public class BuiltinRecipesScreen extends Screen {
 
     /** { id, displayName, resultItemId } */
@@ -61,9 +58,9 @@ public class BuiltinRecipesScreen extends Screen {
     static int quickAddCount() { return RECIPES.length; }
     static String quickAddId(int index) { return RECIPES[index][0]; }
     static String quickAddName(int index) {
-        Identifier id = Identifier.tryParse(RECIPES[index][2]);
-        return id != null && Registries.ITEM.containsId(id)
-                ? Registries.ITEM.get(id).getName().getString() : RECIPES[index][1];
+        ResourceLocation id = ResourceLocation.tryParse(RECIPES[index][2]);
+        return id != null && BuiltInRegistries.ITEM.containsKey(id)
+                ? new ItemStack(BuiltInRegistries.ITEM.get(id)).getHoverName().getString() : RECIPES[index][1];
     }
     static String quickAddResult(int index) { return RECIPES[index][2]; }
 
@@ -110,7 +107,7 @@ public class BuiltinRecipesScreen extends Screen {
     private int selectedRecipe = -1;
 
     public BuiltinRecipesScreen(ConfigScreen parent) {
-        super(Text.translatable("customrecipe.screen.built_in"));
+        super(Component.translatable("customrecipe.screen.built_in"));
         this.parent   = parent;
         this.disabled = parent.disabled;
         this.knownByDefault = parent.knownByDefaultBuiltin;
@@ -133,23 +130,22 @@ public class BuiltinRecipesScreen extends Screen {
 
     @Override
     protected void init() {
-        addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client, parent.target(),
-                parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
+        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, parent.target(), parent.targetLabel()));
         // ── Fills + icônes + mini-grille ─────────────────────────────────
-        addDrawable((ctx, mx, my, d) -> {
+        addRenderableOnly((ctx, mx, my, d) -> {
             // Liste background
             ctx.fill(PAD, listTop(), width - PAD, listTop() + listH(), 0x88101010);
             drawBox(ctx, PAD, listTop(), width - PAD * 2, listH(), 0xFF505050);
             ctx.fill(PAD + 1, listTop() + 1, width - PAD - 1, rowsTop() - 1, 0xDD252B2A);
-            ctx.drawHorizontalLine(PAD + 1, width - PAD - 2, rowsTop() - 1, 0xFF596462);
+            ctx.hLine(PAD + 1, width - PAD - 2, rowsTop() - 1, 0xFF596462);
             int[] columns = {PAD + 45, PAD + 96, stateX() - 4};
             for (int column : columns)
-                ctx.drawVerticalLine(column, listTop() + 1, listTop() + listH() - 2, 0xFF39433F);
+                ctx.vLine(column, listTop() + 1, listTop() + listH() - 2, 0xFF39433F);
             int headerColor = 0xFFB8C7C1;
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.output"), PAD + 4, listTop() + 4, headerColor, false);
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.known"), PAD + 48, listTop() + 4, headerColor, false);
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.recipe"), recipeX(), listTop() + 4, headerColor, false);
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.table.state"), stateX() + 28, listTop() + 4, headerColor, false);
+            ctx.drawString(font, Component.translatable("customrecipe.table.output"), PAD + 4, listTop() + 4, headerColor, false);
+            ctx.drawString(font, Component.translatable("customrecipe.table.known"), PAD + 48, listTop() + 4, headerColor, false);
+            ctx.drawString(font, Component.translatable("customrecipe.table.recipe"), recipeX(), listTop() + 4, headerColor, false);
+            ctx.drawString(font, Component.translatable("customrecipe.table.state"), stateX() + 28, listTop() + 4, headerColor, false);
             if (RECIPES.length > maxVisible()) drawScrollIcon(ctx, PAD, listTop() + listH() - 15);
 
             int vis = maxVisible();
@@ -163,9 +159,9 @@ public class BuiltinRecipesScreen extends Screen {
                 // Keep the reactive state tint visible behind the state button as well.
                 ctx.fillGradient(PAD + 1, y, width - PAD - 1, y + ROW - 2,
                         rowColor, (rowColor & 0x00FFFFFF) | 0x18000000);
-                var item = Registries.ITEM.get(Identifier.tryParse(RECIPES[i][2]));
+                var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(RECIPES[i][2]));
                 if (item != null && item != Items.AIR)
-                    ctx.drawItem(new ItemStack(item), itemIconX(), y + 2);
+                    ctx.renderItem(new ItemStack(item), itemIconX(), y + 2);
                 CustomRecipeSprites.draw(ctx,
                         knownByDefault.contains(RECIPES[i][0])
                                 ? CustomRecipeSprites.KNOWN_BY_DEFAULT_INFO
@@ -178,9 +174,9 @@ public class BuiltinRecipesScreen extends Screen {
                 int dy = detailY();
                 ctx.fill(PAD, dy, width - PAD, dy + DETAIL_H, 0x88101010);
                 drawBox(ctx, PAD, dy, width - PAD * 2, DETAIL_H, 0xFF607050);
-                var detailItem = Registries.ITEM.get(Identifier.tryParse(RECIPES[selectedRecipe][2]));
+                var detailItem = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(RECIPES[selectedRecipe][2]));
                 if (detailItem != null && detailItem != Items.AIR)
-                    ctx.drawItem(new ItemStack(detailItem), PAD + 4, dy + 2);
+                    ctx.renderItem(new ItemStack(detailItem), PAD + 4, dy + 2);
                 CustomRecipeSprites.draw(ctx,
                         knownByDefault.contains(RECIPES[selectedRecipe][0])
                                 ? CustomRecipeSprites.KNOWN_BY_DEFAULT_INFO
@@ -196,9 +192,9 @@ public class BuiltinRecipesScreen extends Screen {
                         drawBox(ctx, sx, sy, MINI, MINI, 0xFF555555);
                         String id = grid[r][c];
                         if (id != null) {
-                            var it = Registries.ITEM.get(Identifier.tryParse(id));
+                            var it = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
                             if (it != null && it != Items.AIR)
-                                ctx.drawItem(new ItemStack(it), sx + 1, sy + 1);
+                                ctx.renderItem(new ItemStack(it), sx + 1, sy + 1);
                         }
                     }
                 }
@@ -207,9 +203,9 @@ public class BuiltinRecipesScreen extends Screen {
                 int resultY = gy + MINI;
                 ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
                 drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
-                var ri = Registries.ITEM.get(Identifier.tryParse(RECIPES[selectedRecipe][2]));
+                var ri = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(RECIPES[selectedRecipe][2]));
                 if (ri != null && ri != Items.AIR)
-                    ctx.drawItem(new ItemStack(ri), resultX + 1, resultY + 1);
+                    ctx.renderItem(new ItemStack(ri), resultX + 1, resultY + 1);
             }
         });
 
@@ -223,85 +219,90 @@ public class BuiltinRecipesScreen extends Screen {
             boolean dis = disabled.contains(id);
             boolean sel = selectedRecipe == i;
 
-            MultilineTextWidget lbl = new MultilineTextWidget(
+            MultiLineTextWidget lbl = new MultiLineTextWidget(
                     recipeX(), y + (ROW - 8) / 2,
-                    Text.literal(quickAddName(i))
+                    Component.literal(quickAddName(i))
                             .withColor(dis ? (sel ? 0xBBAAAA : 0x888888)
                                            : (sel ? 0xFFEE88 : 0xE0E0E0)),
-                    textRenderer);
+                    font);
             lbl.setMaxWidth(stateX() - recipeX() - 8);
             lbl.setMaxRows(1);
-            addDrawableChild(lbl);
+            addRenderableWidget(lbl);
 
-            addDrawableChild(ButtonWidget.builder(
-                    dis ? Text.translatable("customrecipe.state.disabled").withColor(0xFF5555)
-                        : Text.translatable("customrecipe.state.enabled").withColor(0x55FF55),
+            addRenderableWidget(Button.builder(
+                    dis ? Component.translatable("customrecipe.state.disabled").withColor(0xFF5555)
+                        : Component.translatable("customrecipe.state.enabled").withColor(0x55FF55),
                     b -> toggle(id)
-            ).dimensions(stateX(), y + 2, 88, ROW - 4).build());
+            ).bounds(stateX(), y + 2, 88, ROW - 4).build());
         }
 
         // ── Indicateur de scroll ──────────────────────────────────────────
         if (RECIPES.length > maxVisible()) {
             int from = scroll + 1, to = Math.min(scroll + maxVisible(), RECIPES.length);
-            MultilineTextWidget hint = new MultilineTextWidget(
+            MultiLineTextWidget hint = new MultiLineTextWidget(
                     PAD + 14, listTop() + listH() - 10,
-                    Text.literal(from + "-" + to + "/" + RECIPES.length).withColor(0x666666),
-                    textRenderer);
+                    Component.literal(from + "-" + to + "/" + RECIPES.length).withColor(0x666666),
+                    font);
             hint.setMaxWidth(70);
             hint.setMaxRows(1);
-            addDrawableChild(hint);
+            addRenderableWidget(hint);
         }
 
         // ── Panneau de détail (widgets texte) ─────────────────────────────
         if (selectedRecipe >= 0) {
             int cnt = RESULT_COUNTS[selectedRecipe];
             String label = RECIPES[selectedRecipe][1] + (cnt > 1 ? "  ×" + cnt : "");
-            MultilineTextWidget nameW = new MultilineTextWidget(
+            MultiLineTextWidget nameW = new MultiLineTextWidget(
                     PAD + 50, detailY() + 4,
-                    Text.literal(label).withColor(0xFFEE77), textRenderer);
+                    Component.literal(label).withColor(0xFFEE77), font);
             nameW.setMaxWidth(width - PAD * 2 - 8);
             nameW.setMaxRows(1);
-            addDrawableChild(nameW);
+            addRenderableWidget(nameW);
 
             // Flèche →
             int gx = detailGridX(), gy = detailGridY();
-            MultilineTextWidget arrow = new MultilineTextWidget(
+            MultiLineTextWidget arrow = new MultiLineTextWidget(
                     gx + 3 * MINI + 3, gy + MINI + (MINI - 8) / 2,
-                    Text.literal("→"), textRenderer);
+                    Component.literal("→"), font);
             arrow.setMaxWidth(12);
             arrow.setMaxRows(1);
-            addDrawableChild(arrow);
+            addRenderableWidget(arrow);
 
             String id = RECIPES[selectedRecipe][0];
             boolean known = knownByDefault.contains(id);
             int knownButtonX = stateX() + 34;
-            addDrawableChild(ButtonWidget.builder(Text.empty(),
+            addRenderableWidget(Button.builder(Component.empty(),
                     b -> toggleKnownByDefault(id)
-            ).dimensions(knownButtonX, detailY() + 30, 20, 20).build());
-            addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+            ).bounds(knownButtonX, detailY() + 30, 20, 20).build());
+            addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                     known ? CustomRecipeSprites.KNOWN_BY_DEFAULT : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT,
                     knownButtonX, detailY() + 30, 20, 20));
         }
 
         // ── Bouton Retour ─────────────────────────────────────────────────
-        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.back"),
-                b -> client.setScreen(parent)
-        ).dimensions(width / 2 - 50, height - 24, 100, 18).build());
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"),
+                b -> minecraft.setScreen(parent)
+        ).bounds(width / 2 - 50, height - 24, 100, 18).build());
     }
 
     private void toggle(String id) {
         if (!disabled.remove(id)) disabled.add(id);
-        clearAndInit();
+        clearWidgets(); init();
     }
 
     private void toggleKnownByDefault(String id) {
         if (!knownByDefault.remove(id)) knownByDefault.add(id);
-        clearAndInit();
+        clearWidgets(); init();
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+    public void renderBackground(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
+        super.renderBackground(ctx, mouseX, mouseY, delta);
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
+    }
+
+    @Override
+    public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
         super.render(ctx, mouseX, mouseY, delta);
     }
 
@@ -317,7 +318,7 @@ public class BuiltinRecipesScreen extends Screen {
                 selectedRecipe = (selectedRecipe == i) ? -1 : i;
                 // Reclamper le scroll si la liste rétrécit
                 scroll = Math.max(0, Math.min(scroll, Math.max(0, RECIPES.length - maxVisible())));
-                clearAndInit();
+                clearWidgets(); init();
                 return true;
             }
         }
@@ -328,23 +329,23 @@ public class BuiltinRecipesScreen extends Screen {
     public boolean mouseScrolled(double mx, double my, double h, double v) {
         scroll = Math.max(0, Math.min(scroll - (int) v,
                 Math.max(0, RECIPES.length - maxVisible())));
-        clearAndInit();
+        clearWidgets(); init();
         return true;
     }
 
     /** Small scroll/list marker shown beside range indicators. */
-    private void drawScrollIcon(DrawContext ctx, int x, int y) {
+    private void drawScrollIcon(GuiGraphics ctx, int x, int y) {
         CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SCROLLER_IDLE, x, y, 12, 15);
     }
 
-    private void drawBox(DrawContext ctx, int x, int y, int w, int h, int c) {
-        ctx.drawHorizontalLine(x, x + w - 1, y, c);
-        ctx.drawHorizontalLine(x, x + w - 1, y + h - 1, c);
-        ctx.drawVerticalLine(x, y, y + h - 1, c);
-        ctx.drawVerticalLine(x + w - 1, y, y + h - 1, c);
+    private void drawBox(GuiGraphics ctx, int x, int y, int w, int h, int c) {
+        ctx.hLine(x, x + w - 1, y, c);
+        ctx.hLine(x, x + w - 1, y + h - 1, c);
+        ctx.vLine(x, y, y + h - 1, c);
+        ctx.vLine(x + w - 1, y, y + h - 1, c);
     }
 
-    @Override public boolean shouldPause() { return true; }
+    @Override public boolean isPauseScreen() { return true; }
 
-    @Override public void close() { client.setScreen(parent); }
+    public void onClose() { minecraft.setScreen(parent); }
 }

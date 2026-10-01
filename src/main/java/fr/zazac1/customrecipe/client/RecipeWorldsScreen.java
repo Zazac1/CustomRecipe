@@ -3,21 +3,19 @@ package fr.zazac1.customrecipe.client;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.texture.NativeImageBackedTexture;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import com.mojang.blaze3d.platform.NativeImage;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtSizeTracker;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,7 +31,6 @@ import java.util.Locale;
 import java.util.stream.Stream;
 
 /** World assignment picker. 1.21.8 has no WorldListWidget builder, so this mirrors its visible behaviour. */
-@Environment(EnvType.CLIENT)
 public final class RecipeWorldsScreen extends Screen {
     private static final int ROW = 56;
     private static final DateTimeFormatter LAST_PLAYED_FORMAT =
@@ -43,11 +40,11 @@ public final class RecipeWorldsScreen extends Screen {
     private final CustomRecipesScreen returnScreen;
     private final int recipeIndex;
     private final List<LocalWorld> worlds = new ArrayList<>();
-    private TextFieldWidget search;
+    private EditBox search;
     private int scroll;
 
     RecipeWorldsScreen(ConfigScreen config, CustomRecipesScreen returnScreen, int recipeIndex) {
-        super(Text.literal("Select worlds"));
+        super(Component.literal("Select worlds"));
         this.config = config;
         this.returnScreen = returnScreen;
         this.recipeIndex = recipeIndex;
@@ -56,32 +53,32 @@ public final class RecipeWorldsScreen extends Screen {
     @Override
     protected void init() {
         if (recipeIndex < 0 || recipeIndex >= config.recipes.size()) {
-            client.setScreen(returnScreen);
+            minecraft.setScreen(returnScreen);
             return;
         }
         if (config.isServerManaged()) {
-            addDrawableChild(ButtonWidget.builder(Text.literal("Add current server world"), b -> {
+            addRenderableWidget(Button.builder(Component.literal("Add current server world"), b -> {
                 config.addToCurrentWorld(recipe());
-                client.setScreen(returnScreen);
-            }).dimensions(width / 2 - 110, height / 2 - 12, 220, 20).build());
-            addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> client.setScreen(returnScreen))
-                    .dimensions(width / 2 - 55, height / 2 + 16, 110, 20).build());
+                minecraft.setScreen(returnScreen);
+            }).bounds(width / 2 - 110, height / 2 - 12, 220, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(returnScreen))
+                    .bounds(width / 2 - 55, height / 2 + 16, 110, 20).build());
             return;
         }
 
         scanWorlds();
-        search = new TextFieldWidget(textRenderer, width / 2 - 100, 28, 200, 20, Text.literal("Search worlds"));
-        search.setPlaceholder(Text.literal("Search..."));
-        search.setChangedListener(value -> scroll = 0);
-        addDrawableChild(search);
-        addDrawableChild(ButtonWidget.builder(Text.literal("Back"), b -> client.setScreen(returnScreen))
-                .dimensions(width / 2 - 55, height - 28, 110, 20).build());
+        search = new EditBox(font, width / 2 - 100, 28, 200, 20, Component.literal("Search worlds"));
+        search.setHint(Component.literal("Search..."));
+        search.setResponder(value -> scroll = 0);
+        addRenderableWidget(search);
+        addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(returnScreen))
+                .bounds(width / 2 - 55, height - 28, 110, 20).build());
     }
 
     private void scanWorlds() {
         worlds.clear();
         try {
-            Path saves = client.getLevelStorage().getSavesDirectory();
+            Path saves = minecraft.getLevelSource().getBaseDir();
             if (saves == null || !Files.isDirectory(saves)) return;
             try (Stream<Path> entries = Files.list(saves)) {
                 entries.filter(Files::isDirectory)
@@ -106,27 +103,27 @@ public final class RecipeWorldsScreen extends Screen {
 
     private WorldDetails readWorldDetails(Path directory, String fallbackName) {
         try {
-            NbtCompound data = NbtIo.readCompressed(directory.resolve("level.dat"), NbtSizeTracker.of(104_857_600L))
+            CompoundTag data = NbtIo.readCompressed(directory.resolve("level.dat"), NbtAccounter.unlimitedHeap())
                     .getCompound("Data");
             String name = data.contains("LevelName", 8) ? data.getString("LevelName") : fallbackName;
             long lastPlayed = data.contains("LastPlayed", 4) ? data.getLong("LastPlayed") : 0L;
             int gameType = data.contains("GameType", 3) ? data.getInt("GameType") : 0;
             String mode = switch (gameType) {
-                case 1 -> Text.translatable("customrecipe.world.creative").getString();
-                case 2 -> Text.translatable("customrecipe.world.adventure").getString();
-                case 3 -> Text.translatable("customrecipe.world.spectator").getString();
-                default -> Text.translatable("customrecipe.world.survival").getString();
+                case 1 -> Component.translatable("customrecipe.world.creative").getString();
+                case 2 -> Component.translatable("customrecipe.world.adventure").getString();
+                case 3 -> Component.translatable("customrecipe.world.spectator").getString();
+                default -> Component.translatable("customrecipe.world.survival").getString();
             };
             String commands = data.contains("allowCommands", 1) && data.getBoolean("allowCommands")
-                    ? Text.translatable("customrecipe.world.commands").getString() : "";
-            NbtCompound versionData = data.contains("Version", 10) ? data.getCompound("Version") : new NbtCompound();
+                    ? Component.translatable("customrecipe.world.commands").getString() : "";
+            CompoundTag versionData = data.contains("Version", 10) ? data.getCompound("Version") : new CompoundTag();
             String version = versionData.contains("Name", 8) ? versionData.getString("Name")
-                    : Text.translatable("customrecipe.world.unknown_version").getString();
+                    : Component.translatable("customrecipe.world.unknown_version").getString();
             String played = lastPlayed > 0 ? name + " (" + LAST_PLAYED_FORMAT.format(Instant.ofEpochMilli(lastPlayed)) + ")" : name;
             return new WorldDetails(name, played,
-                    mode + commands + Text.translatable("customrecipe.world.version", version).getString());
+                    mode + commands + Component.translatable("customrecipe.world.version", version).getString());
         } catch (IOException | RuntimeException ignored) {
-            return new WorldDetails(fallbackName, fallbackName, Text.translatable("customrecipe.world.local").getString());
+            return new WorldDetails(fallbackName, fallbackName, Component.translatable("customrecipe.world.local").getString());
         }
     }
 
@@ -135,11 +132,11 @@ public final class RecipeWorldsScreen extends Screen {
         if (!Files.isRegularFile(iconPath)) return null;
         try (InputStream input = Files.newInputStream(iconPath)) {
             NativeImage image = NativeImage.read(input);
-            Identifier textureId = Identifier.of(CustomRecipeMod.MOD_ID,
+            ResourceLocation textureId = ResourceLocation.fromNamespaceAndPath(CustomRecipeMod.MOD_ID,
                     "dynamic/recipe_worlds/" + id.replaceAll("[^a-z0-9_./-]", "_"));
             WorldIcon icon = new WorldIcon(textureId, image.getWidth(), image.getHeight());
-            client.getTextureManager().registerTexture(textureId,
-                    new NativeImageBackedTexture(image));
+            minecraft.getTextureManager().register(textureId,
+                    new DynamicTexture(image));
             return icon;
         } catch (IOException | RuntimeException ignored) {
             return null;
@@ -149,7 +146,7 @@ public final class RecipeWorldsScreen extends Screen {
     private CustomRecipeEntry recipe() { return config.recipes.get(recipeIndex); }
 
     private List<LocalWorld> visibleWorlds() {
-        String query = search == null ? "" : search.getText().trim().toLowerCase(Locale.ROOT);
+        String query = search == null ? "" : search.getValue().trim().toLowerCase(Locale.ROOT);
         return query.isEmpty() ? worlds : worlds.stream()
                 .filter(world -> world.name.toLowerCase(Locale.ROOT).contains(query)).toList();
     }
@@ -199,7 +196,7 @@ public final class RecipeWorldsScreen extends Screen {
                 toggleCurrentRecipe(world);
                 return true;
             }
-            client.setScreen(new WorldRecipesScreen(config, this, world.id, world.name));
+            minecraft.setScreen(new WorldRecipesScreen(config, this, world.id, world.name));
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
@@ -214,10 +211,9 @@ public final class RecipeWorldsScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        renderBackground(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 8, 0xFFFFFF);
+    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
+        context.drawCenteredString(font, title, width / 2, 8, 0xFFFFFF);
         List<LocalWorld> shown = visibleWorlds();
         for (int row = 0; row < shownRows(); row++) {
             int index = scroll + row;
@@ -228,25 +224,25 @@ public final class RecipeWorldsScreen extends Screen {
             context.fill(listX(), y, listX() + listW(), y + ROW - 1, hovered ? 0x77335A42 : 0x66101010);
             drawBox(context, listX(), y, listW(), ROW, hovered ? 0xFFFFFFFF : 0xFF505050);
             if (world.icon != null) {
-                context.drawTexture(world.icon.id, listX() + 4, y + 12, 0, 0,
+                context.blit(world.icon.id, listX() + 4, y + 12, 0, 0,
                         32, 32, world.icon.width, world.icon.height);
             } else {
-                context.drawItem(new ItemStack(Items.GRASS_BLOCK), listX() + 12, y + 20);
+                context.renderItem(new ItemStack(Items.GRASS_BLOCK), listX() + 12, y + 20);
             }
-            context.drawText(textRenderer, world.name, listX() + 42, y + 8, 0xFFFFFFFF, true);
-            context.drawText(textRenderer, world.lastPlayed, listX() + 42, y + 20, 0xFFAAAAAA, false);
-            context.drawText(textRenderer, world.description, listX() + 42, y + 32, 0xFFAAAAAA, false);
+            context.drawString(font, world.name, listX() + 42, y + 8, 0xFFFFFFFF, true);
+            context.drawString(font, world.lastPlayed, listX() + 42, y + 20, 0xFFAAAAAA, false);
+            context.drawString(font, world.description, listX() + 42, y + 32, 0xFFAAAAAA, false);
             boolean enabled = recipe().world_ids != null && recipe().world_ids.contains(world.id);
             CustomRecipeSprites.draw(context, CustomRecipeSprites.SLOT, checkboxX() - 1, y + 17, 20, 20);
             CustomRecipeSprites.draw(context, enabled ? CustomRecipeSprites.ACCEPT : CustomRecipeSprites.REJECT,
                     checkboxX(), y + 18, 18, 18);
         }
         if (hasScrollBar()) drawScrollBar(context);
-        if (shown.isEmpty()) context.drawCenteredTextWithShadow(textRenderer,
-                Text.translatable("customrecipe.screen.no_worlds"), width / 2, rowsTop() + 12, 0xAAAAAA);
+        if (shown.isEmpty()) context.drawCenteredString(font,
+                Component.translatable("customrecipe.screen.no_worlds"), width / 2, rowsTop() + 12, 0xAAAAAA);
     }
 
-    private void drawScrollBar(DrawContext context) {
+    private void drawScrollBar(GuiGraphics context) {
         int trackTop = rowsTop();
         int trackHeight = rowsBottom() - trackTop;
         int thumbHeight = Math.max(12, trackHeight * visibleRows() / visibleWorlds().size());
@@ -257,17 +253,17 @@ public final class RecipeWorldsScreen extends Screen {
         drawBox(context, scrollBarX(), thumbY, 6, thumbHeight, 0xFFEEEEEE);
     }
 
-    private void drawBox(DrawContext context, int x, int y, int w, int h, int color) {
-        context.drawHorizontalLine(x, x + w - 1, y, color);
-        context.drawHorizontalLine(x, x + w - 1, y + h - 1, color);
-        context.drawVerticalLine(x, y, y + h - 1, color);
-        context.drawVerticalLine(x + w - 1, y, y + h - 1, color);
+    private void drawBox(GuiGraphics context, int x, int y, int w, int h, int color) {
+        context.hLine(x, x + w - 1, y, color);
+        context.hLine(x, x + w - 1, y + h - 1, color);
+        context.vLine(x, y, y + h - 1, color);
+        context.vLine(x + w - 1, y, y + h - 1, color);
     }
 
-    @Override public boolean shouldPause() { return true; }
-    @Override public void close() { client.setScreen(returnScreen); }
+    @Override public boolean isPauseScreen() { return true; }
+    @Override public void onClose() { minecraft.setScreen(returnScreen); }
 
-    private record WorldIcon(Identifier id, int width, int height) {}
+    private record WorldIcon(ResourceLocation id, int width, int height) {}
     private record WorldDetails(String name, String lastPlayed, String description) {}
     private record LocalWorld(String id, String name, String lastPlayed, String description, WorldIcon icon) {}
 }

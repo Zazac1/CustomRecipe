@@ -1,28 +1,29 @@
-package fr.zazac1.customrecipe;
+package fr.zazac1.customrecipe.client;
 
+import fr.zazac1.customrecipe.CustomRecipeMod;
+import net.minecraft.client.Minecraft;
 import net.neoforged.fml.ModList;
-import net.minecraft.server.MinecraftServer;
 
 import java.lang.reflect.Method;
 
-/** Refreshes REI after Custom Recipe injects runtime recipes into the server manager. */
+/** Rebuilds REI after the server replaces the client's recipe catalogue. */
 final class ReiCompat {
-    private ReiCompat() {}
+    private ReiCompat() { }
 
-    static void refreshAfterRecipeReload(MinecraftServer server) {
+    static void refreshAfterRecipeCatalogueSync() {
         if (!ModList.get().isLoaded("roughlyenoughitems")) return;
-        // REI's normal data-pack listener runs before ServerRecipeManager receives
-        // our injected recipes. Run its own reload once the server reload is done.
-        server.execute(() -> {
+        Minecraft.getInstance().execute(() -> {
             try {
                 Class<?> stage = Class.forName("me.shedaniel.rei.api.common.registry.ReloadStage");
                 Class<?> interruption = Class.forName("me.shedaniel.rei.impl.common.plugins.ReloadInterruptionContext");
                 Object never = interruption.getMethod("ofNever").invoke(null);
                 Class<?> reloadManager = Class.forName("me.shedaniel.rei.impl.common.plugins.ReloadManagerImpl");
                 Method reload = reloadManager.getMethod("reloadPlugins", stage, interruption);
+                // A null stage means a complete REI plugin reload, including
+                // the vanilla crafting category that reads RecipeManager.
                 reload.invoke(null, null, never);
-            } catch (ReflectiveOperationException e) {
-                CustomRecipeMod.LOGGER.debug("[CustomRecipe] Could not refresh REI displays: {}", e.getMessage());
+            } catch (ReflectiveOperationException exception) {
+                CustomRecipeMod.LOGGER.debug("[CustomRecipe] Could not refresh REI displays: {}", exception.getMessage());
             }
         });
     }

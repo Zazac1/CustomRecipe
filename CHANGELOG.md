@@ -1,52 +1,88 @@
 # Changelog
 
-## 1.3.4+1.21.1
+## 1.3.4+1.20.1
 
-### Added
+### Port and compatibility
 
-- Ported the 1.3.4 feature set to Minecraft 1.21.1.
-- Added the Default Recipes Show filter: All, Modded, and Vanilla.
-
-### Changed
-
-- Renamed the home-screen Vanilla Recipes entry to Default Recipes and the recipe-state filter to Status.
+- Rebuilt the 1.20.1 Fabric version on the current Custom Recipe 1.3.4 architecture.
+- Old shared configurations are migrated safely to the active world; the original is retained in `.legacy-backup` and the preceding valid save in `.previous`.
+- Server-editor saves now wait for a durable server acknowledgement. A failed write leaves the confirmation window open and reports the failure instead of silently closing.
+- Increased the supported configuration transfer size for larger pre-migration recipe libraries.
 
 ### Fixed
 
-- Disabled crafting recipes and material variants now retain their native 1.21.1 network recipe format while being blocked during crafting.
+- Fixed Default Recipes discovery for both Vanilla and installed-mod recipes on Minecraft 1.20.1 (`data/*/recipes`).
+- Fixed parsing of the legacy 1.20.1 `result.item` recipe format.
+- Removed the Heavy Core/Mace quick-add entry, which does not exist in Minecraft 1.20.1.
+- Fixed the unsaved-changes confirmation to use an opaque, readable overlay.
 
-## 1.3.2+1.21.1
+## 1.3.2+1.20.1
 
 ### Added
 
-- Added central full-configuration Import and Export actions below Save.
+- Added per-world recipe targets, a reusable Global Library, and full configuration Import and Export actions.
 - Added import confirmation details and world-name export filenames.
 
-### Changed
+### Fixed
 
-- Global Library imports now preserve Vanilla settings and related recipe state.
+- Added safe configuration writes, recovery copies, and migration of legacy recipe settings.
+
+## 1.2.1+1.20.1
+
+### Recipe management overhaul
+
+- Added **Known by default** for built-in and custom recipes, missing-mod recovery, and exact conflict handling.
+- Reworked **Default Recipes** with installed-mod recipes, live search, status filters, tag previews, and material variants.
+- Reworked the recipe creator with reusable items, persistent selection, protected slots, and an Empty clear tile.
+
+### Client and server support
+
+- Kept client and server recipe catalogs separate so different mod lists remain safe.
+- Local ModMenu recipes are staged in the OP `/customrecipe` editor and are only published when the OP saves.
+- Staged recipes are checked against server items and recipes for missing mods and conflicts.
+
+### 1.20.1 fixes
+
+- Fixed local recipe discovery for Vanilla and installed mods (`recipes/` data paths and legacy result JSON).
+- Fixed interchangeable tag materials for tools and other recipes in the local browser.
+- Preserved disabled variants, custom-output selection, Vanilla priority, and Shift-crafting in the green recipe book.
+
+## 1.1.4+1.20.1
+
+- Fixed material variants in the local ModMenu editor: vanilla item tags are now resolved from Minecraft data before joining a world.
+- Fixed immediate result refresh after choosing a custom recipe from the green recipe book.
+
+## 1.1.3+1.20.1
+
+### Recipe book improvements
+
+- Added the **Known by default** option to custom recipe creation and editing.
+- Recipes marked as known are added silently to the recipe book.
+- Custom recipes with the same inputs are grouped in the green recipe book.
+- Selecting a custom output from a mixed Vanilla/custom group now changes the crafting result immediately.
+- The selected custom output remains active while Shift-crafting.
+
+### Recipe priority and fixes
+
+- Vanilla recipes keep priority when they use the same inputs as a custom recipe.
+- Disabling the Vanilla recipe allows the custom recipe to be crafted.
+- Fixed the 1.20.1 client and dedicated-server startup crash introduced by the recipe-book controls.
+
+## 1.1.2+1.20.1
+
+### Added
+
+- Added full Fabric support for Minecraft 1.20.1.
+- Includes custom recipe creation, ModMenu configuration, `/customrecipe` server configuration, vanilla recipe controls, and material variants.
 
 ### Fixed
 
-- Added safe configuration writes, recovery copies, and improved legacy migration.
+- Fixed vanilla recipe results and icons in the local ModMenu browser.
+- Fixed local custom recipes so they load in singleplayer after saving.
 
-## 1.1.4+1.21.1
+## 1.1.1+1.20.1
 
-- Added the **Known by default** option to recipe creation and editing; enabled recipes are silently added to every player's recipe book.
-- Custom recipes with identical inputs now share one recipe-book group and keep the selected output during Shift-crafting.
-- Fixed vanilla ingredient and material-variant previews in the local ModMenu editor for the 1.21 direct ingredient JSON format.
-- Fixed recipe-book output selection: a chosen custom result is no longer replaced by the first matching Vanilla result during crafting-result refreshes.
-- Added a Minecraft-JAR fallback when local recipe resources do not return any craft recipes.
-
-## 1.1.2+1.21.1
-
-### Changed
-
-- Recipes created through ModMenu are now drafts until an OP explicitly adds them to a server.
-
-## 1.1.1+1.21.1
-
-- Ported Recipes Creator 1.1.1 to Minecraft 1.21.1 (Fabric).
+- Ported Recipes Creator 1.1.1 to Minecraft 1.20.1 (Fabric).
 
 ## 1.1.1 - 2026-08-26
 

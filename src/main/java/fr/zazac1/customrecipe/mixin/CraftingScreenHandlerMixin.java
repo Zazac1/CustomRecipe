@@ -1,59 +1,44 @@
 package fr.zazac1.customrecipe.mixin;
 
 import fr.zazac1.customrecipe.CustomRecipeMod;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.inventory.CraftingResultInventory;
-import net.minecraft.inventory.RecipeInputInventory;
-import net.minecraft.recipe.CraftingRecipe;
-import net.minecraft.recipe.RecipeEntry;
-import net.minecraft.recipe.RecipeType;
-import net.minecraft.recipe.RecipeManager;
-import net.minecraft.recipe.input.CraftingRecipeInput;
-import net.minecraft.recipe.input.RecipeInput;
-import net.minecraft.screen.CraftingScreenHandler;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.world.World;
+import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeInput;
+import net.minecraft.world.item.crafting.RecipeManager;
+import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Optional;
 
-/** Keeps a custom recipe chosen from the green book selected during shift-crafting. */
-@Mixin(CraftingScreenHandler.class)
+/**
+ * Keeps a custom recipe explicitly selected by the recipe book during
+ * shift-crafting. 1.21.1 moved this lookup into slotChangedCraftingGrid.
+ */
+@Mixin(value = CraftingMenu.class, remap = false)
 public abstract class CraftingScreenHandlerMixin {
-    @Unique
-    private RecipeEntry<CraftingRecipe> customrecipe$bookRecipe;
-
-    @Inject(method = "onInputSlotFillFinish", at = @At("HEAD"))
-    private void customrecipe$rememberBookRecipe(RecipeEntry<CraftingRecipe> recipe, CallbackInfo ci) {
-        customrecipe$bookRecipe = recipe.id().getNamespace().equals(CustomRecipeMod.MOD_ID) ? recipe : null;
-    }
-
     @Redirect(
-            method = "updateResult",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/recipe/RecipeManager;getFirstMatch(Lnet/minecraft/recipe/RecipeType;Lnet/minecraft/recipe/input/RecipeInput;Lnet/minecraft/world/World;Lnet/minecraft/recipe/RecipeEntry;)Ljava/util/Optional;")
+            method = "slotChangedCraftingGrid",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/crafting/RecipeManager;getRecipeFor(Lnet/minecraft/world/item/crafting/RecipeType;Lnet/minecraft/world/item/crafting/RecipeInput;Lnet/minecraft/world/level/Level;Lnet/minecraft/world/item/crafting/RecipeHolder;)Ljava/util/Optional;"),
+            remap = false
     )
-    private static Optional<RecipeEntry<CraftingRecipe>> customrecipe$keepBookRecipe(
-            RecipeManager manager, RecipeType<CraftingRecipe> type, RecipeInput input, World world,
-            RecipeEntry<CraftingRecipe> requested, ScreenHandler handler, World enclosingWorld,
-            PlayerEntity player, RecipeInputInventory inventory, CraftingResultInventory resultInventory,
-            RecipeEntry<CraftingRecipe> currentRecipe) {
-        RecipeEntry<CraftingRecipe> preferred = requested;
-        if (preferred == null && handler instanceof CraftingScreenHandler) {
-            CraftingScreenHandlerMixin mixin = (CraftingScreenHandlerMixin) (Object) handler;
-            RecipeEntry<CraftingRecipe> saved = mixin.customrecipe$bookRecipe;
-            if (saved != null && input instanceof CraftingRecipeInput craftingInput
-                    && saved.value().matches(craftingInput, world)) {
-                preferred = saved;
-            } else if (saved != null) {
-                mixin.customrecipe$bookRecipe = null;
-            }
+    private static Optional<RecipeHolder<CraftingRecipe>> customrecipe$keepBookRecipe(
+            RecipeManager manager, RecipeType<CraftingRecipe> type, RecipeInput input, Level level,
+            RecipeHolder<CraftingRecipe> requested) {
+        if (input instanceof CraftingInput craftingInput
+                && requested != null
+                && requested.id().getNamespace().equals(CustomRecipeMod.MOD_ID)
+                && requested.value().matches(craftingInput, level)) {
+            return Optional.of(requested);
         }
-        return manager.getFirstMatch(type, (CraftingRecipeInput) input, world, preferred);
+        // CraftingMenu always passes CraftingInput here; the instance check keeps the
+        // redirect compatible with RecipeManager's erased RecipeInput signature.
+        return input instanceof CraftingInput craftingInput
+                ? manager.getRecipeFor(type, craftingInput, level, requested)
+                : Optional.empty();
     }
 }
-

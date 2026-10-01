@@ -1,15 +1,15 @@
 package fr.zazac1.customrecipe;
 
-import net.minecraft.item.ItemStack;
-import net.minecraft.recipe.CraftingRecipe;
-import net.minecraft.recipe.Ingredient;
-import net.minecraft.recipe.RecipeSerializer;
-import net.minecraft.recipe.book.CraftingRecipeCategory;
-import net.minecraft.recipe.input.CraftingRecipeInput;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.world.World;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.item.crafting.CraftingBookCategory;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.world.level.Level;
 
-import net.minecraft.util.collection.DefaultedList;
+import net.minecraft.core.NonNullList;
 
 /** Keeps a disabled crafting recipe visible to management screens while preventing it from matching. */
 public final class DisabledCraftingRecipe implements CraftingRecipe {
@@ -21,14 +21,13 @@ public final class DisabledCraftingRecipe implements CraftingRecipe {
 
     public CraftingRecipe delegate() { return delegate; }
 
-    @Override public boolean matches(CraftingRecipeInput input, World world) { return false; }
-    @Override public ItemStack craft(CraftingRecipeInput input, RegistryWrapper.WrapperLookup registries) { return delegate.craft(input, registries); }
-    @Override public boolean fits(int width, int height) { return delegate.fits(width, height); }
-    @Override public ItemStack getResult(RegistryWrapper.WrapperLookup registries) { return delegate.getResult(registries); }
+    @Override public boolean matches(CraftingInput input, Level world) { return false; }
+    @Override public ItemStack assemble(CraftingInput input, HolderLookup.Provider registries) { return delegate.assemble(input, registries); }
+    @Override public boolean canCraftInDimensions(int width, int height) { return delegate.canCraftInDimensions(width, height); }
+    @Override public ItemStack getResultItem(HolderLookup.Provider registries) { return delegate.getResultItem(registries); }
     @Override public RecipeSerializer<?> getSerializer() { return delegate.getSerializer(); }
-    @Override public CraftingRecipeCategory getCategory() { return delegate.getCategory(); }
-    @Override public DefaultedList<Ingredient> getIngredients() { return delegate.getIngredients(); }
+    @Override public CraftingBookCategory category() { return delegate.category(); }
+    @Override public NonNullList<Ingredient> getIngredients() { return delegate.getIngredients(); }
     @Override public String getGroup() { return delegate.getGroup(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }
 }
-

@@ -1,4 +1,5 @@
 .gradle/
+.gradle-port*/
 .gradle-user/
 build/
 bin/
@@ -6,10 +7,15 @@ out/
 run/
 run-client/
 run-server/
+dev-mods/
 .idea/
+.eclipse/
+.vscode/
 *.iml
 *.ipr
 *.iws
+hs_err_pid*.log
+replay_pid*.log
 
 # Loom generated files
 remappedSrc/

@@ -2,27 +2,24 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.ModConfig;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.EditBoxWidget;
-import net.minecraft.client.gui.widget.MultilineTextWidget;
-import net.minecraft.text.Text;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.MultiLineTextWidget;
+import net.minecraft.network.chat.Component;
 
 /** Advanced raw server JSON editor. */
-@Environment(EnvType.CLIENT)
 public class ServerJsonScreen extends Screen {
     private static final int MAX_JSON_CHARS = 30_000;
 
     private final ConfigScreen parent;
     private final String initialJson;
-    private EditBoxWidget jsonField;
+    private EditBox jsonField;
     private String error = "";
 
     public ServerJsonScreen(ConfigScreen parent, ModConfig config) {
-        super(Text.literal("Manual Edit"));
+        super(Component.literal("Manual Edit"));
         this.parent = parent;
         // Keep Gson's pretty-printed layout: this is an editor, not a single-line field.
         this.initialJson = ConfigLoader.toJson(config);
@@ -30,58 +27,61 @@ public class ServerJsonScreen extends Screen {
 
     @Override
     protected void init() {
-        addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client, parent.target(),
-                parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
+        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, parent.target(), parent.targetLabel()));
         int margin = 14;
-        addDrawableChild(new MultilineTextWidget(margin + 31, 12,
-                Text.literal("WARNING: Advanced editor. Invalid or incompatible JSON can erase recipe settings. Use Save only after checking it."),
-                textRenderer));
+        addRenderableWidget(new MultiLineTextWidget(margin + 31, 12,
+                Component.literal("WARNING: Advanced editor. Invalid or incompatible JSON can erase recipe settings. Use Save only after checking it."),
+                font));
 
         int editorTop = 44;
         int editorHeight = Math.max(70, height - editorTop - 52);
-        jsonField = addDrawableChild(new EditBoxWidget(textRenderer, margin, editorTop,
-                width - margin * 2, editorHeight, Text.literal("Server config JSON"),
-                Text.literal("{\n  \"custom_recipes\": []\n}")));
+        jsonField = addRenderableWidget(new EditBox(font, margin, editorTop,
+                width - margin * 2, editorHeight, Component.literal("Server config JSON")));
+        jsonField.setHint(Component.literal("{\n  \"custom_recipes\": []\n}"));
         jsonField.setMaxLength(MAX_JSON_CHARS);
-        jsonField.setText(initialJson);
+        jsonField.setValue(initialJson);
         setFocused(jsonField);
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("    Apply JSON"), b -> apply())
-                .dimensions(width / 2 - 102, height - 28, 98, 20).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("   Cancel"), b -> client.setScreen(parent))
-                .dimensions(width / 2 + 4, height - 28, 98, 20).build());
-        addDrawable((ctx, mx, my, d) -> {
+        addRenderableWidget(Button.builder(Component.literal("    Apply JSON"), b -> apply())
+                .bounds(width / 2 - 102, height - 28, 98, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("   Cancel"), b -> minecraft.setScreen(parent))
+                .bounds(width / 2 + 4, height - 28, 98, 20).build());
+        addRenderableOnly((ctx, mx, my, d) -> {
             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.ACCEPT, width / 2 - 98, height - 27, 18, 18);
             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, width / 2 + 8, height - 27, 18, 18);
         });
     }
 
     private void apply() {
-        ModConfig config = ConfigLoader.fromJson(jsonField.getText());
+        ModConfig config = ConfigLoader.fromJson(jsonField.getValue());
         if (config == null) {
             error = "Invalid JSON";
             return;
         }
         parent.replaceConfig(config);
-        client.setScreen(parent);
+        minecraft.setScreen(parent);
     }
 
     @Override
-    public void close() {
-        if (!initialJson.equals(jsonField.getText())) {
-            client.setScreen(new SaveChangesScreen(this, this::apply, () -> client.setScreen(parent)));
+    public void onClose() {
+        if (!initialJson.equals(jsonField.getValue())) {
+            minecraft.setScreen(new SaveChangesScreen(this, this::apply, () -> minecraft.setScreen(parent)));
         } else {
-            client.setScreen(parent);
+            minecraft.setScreen(parent);
         }
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+    public void renderBackground(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
+        super.renderBackground(ctx, mouseX, mouseY, delta);
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
-        super.render(ctx, mouseX, mouseY, delta);
-        if (!error.isEmpty()) ctx.drawText(textRenderer, error, 14, height - 44, 0xFF5555, false);
     }
 
-    @Override public boolean shouldPause() { return true; }
-}
+    @Override
+    public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
+        super.render(ctx, mouseX, mouseY, delta);
+        if (!error.isEmpty()) ctx.drawString(font, error, 14, height - 44, 0xFF5555, false);
+    }
 
+    @Override public boolean isPauseScreen() { return true; }
+}

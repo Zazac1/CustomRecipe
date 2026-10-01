@@ -5,9 +5,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.resource.Resource;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.Minecraft;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.resources.ResourceLocation;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,8 +26,8 @@ final class LocalRecipeConflictDetector {
 
     private LocalRecipeConflictDetector() {}
 
-    static void refresh(List<CustomRecipeEntry> customRecipes, MinecraftClient client) {
-        List<DefaultRecipe> defaults = loadDefaults(client);
+    static void refresh(List<CustomRecipeEntry> customRecipes, Minecraft minecraft) {
+        List<DefaultRecipe> defaults = loadDefaults(minecraft);
         rememberVanillaCraftingOutputs(defaults);
         for (CustomRecipeEntry custom : customRecipes) {
             List<String> conflicts = new ArrayList<>();
@@ -49,8 +49,8 @@ final class LocalRecipeConflictDetector {
         }
     }
 
-    static void refreshVanillaCraftingOutputs(MinecraftClient client) {
-        rememberVanillaCraftingOutputs(loadDefaults(client));
+    static void refreshVanillaCraftingOutputs(Minecraft minecraft) {
+        rememberVanillaCraftingOutputs(loadDefaults(minecraft));
     }
 
     static boolean hasVanillaCraftingOutput(String itemId) {
@@ -65,16 +65,16 @@ final class LocalRecipeConflictDetector {
         vanillaCraftingOutputs = Collections.unmodifiableSet(outputs);
     }
 
-    private static List<DefaultRecipe> loadDefaults(MinecraftClient client) {
+    private static List<DefaultRecipe> loadDefaults(Minecraft minecraft) {
         List<DefaultRecipe> recipes = new ArrayList<>();
         Set<String> seenIds = new HashSet<>();
-        Map<Identifier, Resource> resources = client.getResourceManager().findResources("recipe",
+        Map<ResourceLocation, Resource> resources = minecraft.getResourceManager().listResources("recipe",
                 id -> id.getPath().endsWith(".json"));
-        for (Map.Entry<Identifier, Resource> resource : resources.entrySet()) {
-            Identifier resourceId = resource.getKey();
+        for (Map.Entry<ResourceLocation, Resource> resource : resources.entrySet()) {
+            ResourceLocation resourceId = resource.getKey();
             if (resourceId.getNamespace().equals(CustomRecipeMod.MOD_ID)
                     && resourceId.getPath().startsWith("recipe/custom/")) continue;
-            try (var input = resource.getValue().getInputStream()) {
+            try (var input = resource.getValue().open()) {
                 String recipeId = resourceId.getNamespace() + ":" + resourceId.getPath()
                         .substring("recipe/".length(), resourceId.getPath().length() - ".json".length());
                 DefaultRecipe recipe = parse(recipeId, new String(input.readAllBytes(), StandardCharsets.UTF_8));
@@ -83,14 +83,14 @@ final class LocalRecipeConflictDetector {
                 // Optional or malformed datapack recipes are not comparable locally.
             }
         }
-        loadBundledVanillaRecipes(client, recipes, seenIds);
+        loadBundledVanillaRecipes(minecraft, recipes, seenIds);
         return recipes;
     }
 
     /** Development clients may not mount Minecraft's own recipe resources. */
-    private static void loadBundledVanillaRecipes(MinecraftClient client, List<DefaultRecipe> recipes, Set<String> seenIds) {
+    private static void loadBundledVanillaRecipes(Minecraft minecraft, List<DefaultRecipe> recipes, Set<String> seenIds) {
         try {
-            var source = client.getClass().getProtectionDomain().getCodeSource();
+            var source = minecraft.getClass().getProtectionDomain().getCodeSource();
             if (source == null) return;
             Path path = Path.of(source.getLocation().toURI());
             if (!Files.isRegularFile(path)) return;

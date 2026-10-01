@@ -2,39 +2,31 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.ModConfig;
-import fr.zazac1.customrecipe.SaveServerConfigPayload;
-import fr.zazac1.customrecipe.ValidateServerConfigPayload;
-import fr.zazac1.customrecipe.VanillaRecipeQueryPayload;
-import fr.zazac1.customrecipe.VanillaRecipeDetailsQueryPayload;
+import fr.zazac1.customrecipe.ModNetworking;
 import com.google.gson.Gson;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.util.List;
 
 /** Client-only sender for the OP server editor. */
-@Environment(EnvType.CLIENT)
 public final class ClientServerConfigNetworking {
     private static final Gson GSON = new Gson();
     public static void save(ModConfig config) {
-        ClientPlayNetworking.send(new SaveServerConfigPayload(ConfigLoader.toJson(config)));
+        ModNetworking.save(ConfigLoader.toJson(config));
     }
 
     /** Requests a server-only integrity and conflict check without saving anything. */
     public static void validate(ModConfig config) {
-        ClientPlayNetworking.send(new ValidateServerConfigPayload(ConfigLoader.toJson(config)));
+        ModNetworking.validate(ConfigLoader.toJson(config));
     }
 
     public static void searchVanilla(String query, boolean matchIngredients, boolean matchOutput,
                                      String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {
-        ClientPlayNetworking.send(new VanillaRecipeQueryPayload(
-                GSON.toJson(new RecipeQuery(query, matchIngredients, matchOutput,
-                        statusFilter, sourceFilter, disabledRecipeIds, page))));
+        ModNetworking.queryVanilla(GSON.toJson(new RecipeQuery(query, matchIngredients, matchOutput,
+                statusFilter, sourceFilter, disabledRecipeIds, page)));
     }
 
     public static void requestVanillaDetails(String recipeId) {
-        ClientPlayNetworking.send(new VanillaRecipeDetailsQueryPayload(recipeId));
+        ModNetworking.queryVanillaDetails(recipeId);
     }
 
     private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,

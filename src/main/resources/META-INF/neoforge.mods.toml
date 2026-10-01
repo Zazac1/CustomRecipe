@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="MIT"
+
+[[mods]]
+modId="customrecipe"
+version="${version}"
+displayName="Custom Recipe"
+authors="zazac1"
+description='''Create, manage, enable, disable and assign custom crafting recipes globally or per world.'''
+logoFile="assets/customrecipe/icon.png"
+
+[[mixins]]
+config="customrecipe.mixins.json"
+
+[[dependencies.customrecipe]]
+modId="neoforge"
+type="required"
+versionRange="[${neo_version},)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.customrecipe]]
+modId="minecraft"
+type="required"
+versionRange="${minecraft_version_range}"
+ordering="NONE"
+side="BOTH"

@@ -1,4 +1,4 @@
-# Modrinth release - Custom Recipe 1.3.4
+# Modrinth release - Custom Recipe 1.3.4 Forge
 
 ## Version type
 
@@ -6,34 +6,52 @@ Release
 
 ## Version number
 
-1.3.4
+1.3.4+1.20.1-forge
 
 ## Version subtitle
 
-v1.3.4 for Minecraft 1.21.1
+v1.3.4 for Minecraft 1.20.1 (Forge)
 
 ## Loader
 
-Fabric
+Forge
 
 ## Game version
 
-1.21.1
+1.20.1
 
 ## File
 
-`build/libs/customrecipe-1.3.4+1.21.1.jar`
+`build/libs/customrecipe-1.3.4+1.20.1.jar`
+
+## Dependencies
+
+- Required: Cloth Config API (Forge) 11.1.136 or newer.
+- Optional: Just Enough Items (JEI) 15.20.0 or newer.
+- Optional: Roughly Enough Items (REI).
 
 ## Version changelog
 
-### Default Recipes filters
+### Forge 1.20.1 port
 
-- Changed the home-screen entry from Vanilla Recipes to Default Recipes.
-- Renamed the existing recipe-state filter to Status.
-- Added a Show filter to switch between All, Modded, and Vanilla recipes.
-- The Modded and Vanilla filters now apply to both local and server recipe catalogs.
+- Added Forge 47.4.10 support for Minecraft 1.20.1 and Java 17.
+- Preserved the complete Custom Recipe editor: Global Library, per-world configurations, imports, previews, filters, Quick Add, and recipe creation and editing.
+- Preserved server configuration, recipe synchronization, recipe IDs, save format, and existing world data.
 
-### Compatibility
+### In-game configuration
 
-- Ported Custom Recipe 1.3.4 to Minecraft 1.21.1 while retaining the 1.3.4 feature set.
-- Fixed recipe synchronization for Minecraft 1.21.1: disabled crafting recipes and material variants are filtered during recipe matching, so the vanilla recipe network format remains valid for clients.
+- Added Cloth Config integration to the Forge Mods screen.
+- Opening Custom Recipe configuration now opens the full Custom Recipe editor directly.
+- Added a Custom Recipe action to the in-game pause menu for local-world management.
+
+### Recipe browser and integrations
+
+- Added JEI compatibility while retaining REI compatibility.
+- Improved Vanilla Recipe discovery, including installed-mod recipes and all supported crafting-recipe variants.
+- Added progressive loading feedback and local recipe caching in the Vanilla Recipe browser.
+- Fixed disabling Vanilla crafting recipes in singleplayer and on dedicated servers.
+
+### Server support
+
+- Added Forge networking for server configuration, validation, saving, and recipe updates.
+- Improved the local test server workflow for offline development and console commands.

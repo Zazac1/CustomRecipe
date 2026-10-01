@@ -5,15 +5,15 @@ import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.recipe.*;
-import net.minecraft.recipe.book.CraftingRecipeCategory;
-import net.minecraft.registry.Registries;
-import net.minecraft.resource.ResourceManager;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.collection.DefaultedList;
-import net.minecraft.util.profiler.Profiler;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.*;
+import net.minecraft.world.item.crafting.CraftingBookCategory;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.NonNullList;
+import net.minecraft.util.profiling.ProfilerFiller;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -30,24 +30,24 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-@Mixin(RecipeManager.class)
+@Mixin(value = RecipeManager.class, remap = false)
 public abstract class ServerRecipeManagerMixin {
-    @Shadow public abstract Collection<RecipeEntry<?>> values();
-    @Shadow public abstract void setRecipes(Iterable<RecipeEntry<?>> recipes);
+    @Shadow(remap = false) public abstract Collection<RecipeHolder<?>> getRecipes();
+    @Shadow(remap = false) public abstract void replaceRecipes(Iterable<RecipeHolder<?>> recipes);
 
-    @Inject(method = "apply(Ljava/util/Map;Lnet/minecraft/resource/ResourceManager;Lnet/minecraft/util/profiler/Profiler;)V", at = @At("TAIL"))
-    private void customrecipe$applyConfig(Map<Identifier, JsonElement> ignored, ResourceManager resourceManager,
-                                          Profiler profiler, CallbackInfo ci) {
+    @Inject(method = "apply(Ljava/util/Map;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)V", at = @At("TAIL"), remap = false)
+    private void customrecipe$applyConfig(Map<ResourceLocation, JsonElement> ignored, ResourceManager resourceManager,
+                                          ProfilerFiller profiler, CallbackInfo ci) {
         ConfigLoader.invalidate();
         ModConfig rootConfig = ConfigLoader.get();
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
 
-        List<RecipeEntry<?>> recipes = new ArrayList<>(values());
+        List<RecipeHolder<?>> recipes = new ArrayList<>(getRecipes());
 
         // 1. Remove disabled built-in recipes (namespace = "customrecipe")
         if (!config.disabled_builtin.isEmpty()) {
             recipes.removeIf(entry -> {
-                Identifier id = entry.id();
+                ResourceLocation id = entry.id();
                 if (!id.getNamespace().equals(CustomRecipeMod.MOD_ID)) return false;
                 for (String disabled : config.disabled_builtin) {
                     if (id.getPath().equals(disabled)) return true;
@@ -73,7 +73,7 @@ public abstract class ServerRecipeManagerMixin {
                 continue;
             }
             recipeStateChanged |= fr.zazac1.customrecipe.RecipeIntegrity.refresh(entry);
-            RecipeEntry<?> built = Boolean.TRUE.equals(entry.corrupted) ? null
+            RecipeHolder<?> built = Boolean.TRUE.equals(entry.corrupted) ? null
                     : buildCustomRecipe(entry, idx, recipeBookGroup(entry));
             if (Boolean.TRUE.equals(entry.corrupted)) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Disabled corrupted recipe {}: missing {}. Reinstall required mods {} or delete the recipe.",
@@ -89,24 +89,24 @@ public abstract class ServerRecipeManagerMixin {
         // The recipe manager uses the first matching entry. Vanilla entries
         // stay first, so a custom recipe only takes effect after the matching
         // vanilla recipe has been disabled. Custom recipes still share groups.
-        setRecipes(recipes);
+        replaceRecipes(recipes);
     }
 
     // ── dispatch ─────────────────────────────────────────────────────────
 
-    private RecipeEntry<?> buildCustomRecipe(CustomRecipeEntry entry, int idx, String recipeGroup) {
+    private RecipeHolder<?> buildCustomRecipe(CustomRecipeEntry entry, int idx, String recipeGroup) {
         if (entry == null) return null;
         if (entry.result == null || entry.result.isBlank()) return null;
 
-        Identifier resultId = Identifier.tryParse(entry.result);
-        if (resultId == null || !Registries.ITEM.containsId(resultId)) {
+        ResourceLocation resultId = ResourceLocation.tryParse(entry.result);
+        if (resultId == null || !BuiltInRegistries.ITEM.containsKey(resultId)) {
             CustomRecipeMod.LOGGER.warn("[CustomRecipe] Unknown result item: {}", entry.result);
             return null;
         }
 
-        ItemStack result = new ItemStack(Registries.ITEM.get(resultId), Math.max(1, entry.count));
+        ItemStack result = new ItemStack(BuiltInRegistries.ITEM.get(resultId), Math.max(1, entry.count));
 
-        Identifier key = entry.serverRecipeId();
+        ResourceLocation key = entry.serverRecipeId();
 
         if ("shaped".equalsIgnoreCase(entry.type)) {
             return buildShaped(entry, result, key, recipeGroup);
@@ -132,36 +132,36 @@ public abstract class ServerRecipeManagerMixin {
 
     // ── shapeless ─────────────────────────────────────────────────────────
 
-    private RecipeEntry<ShapelessRecipe> buildShapeless(CustomRecipeEntry entry, ItemStack result,
-                                                         Identifier key, String recipeGroup) {
+    private RecipeHolder<ShapelessRecipe> buildShapeless(CustomRecipeEntry entry, ItemStack result,
+                                                         ResourceLocation key, String recipeGroup) {
         List<String> rawIngredients = entry.ingredients;
         if (rawIngredients == null || rawIngredients.isEmpty()) return null;
 
         List<Ingredient> ingredients = new ArrayList<>();
         for (String itemId : rawIngredients) {
             if (itemId == null || itemId.isBlank()) continue;
-            Identifier id = Identifier.tryParse(itemId.trim());
-            if (id == null || !Registries.ITEM.containsId(id)) {
+            ResourceLocation id = ResourceLocation.tryParse(itemId.trim());
+            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shapeless ingredient not found: {}", itemId);
                 return null;
             }
-            ingredients.add(Ingredient.ofItems(Registries.ITEM.get(id)));
+            ingredients.add(Ingredient.of(BuiltInRegistries.ITEM.get(id)));
         }
         if (ingredients.isEmpty()) return null;
 
         ShapelessRecipe recipe = new ShapelessRecipe(
                 recipeGroup,
-                CraftingRecipeCategory.MISC,
+                CraftingBookCategory.MISC,
                 result,
-                DefaultedList.copyOf(Ingredient.EMPTY, ingredients.toArray(Ingredient[]::new))
+                NonNullList.copyOf(ingredients)
         );
-        return new RecipeEntry<>(key, recipe);
+        return new RecipeHolder<>(key, recipe);
     }
 
     // ── shaped ────────────────────────────────────────────────────────────
 
-    private RecipeEntry<ShapedRecipe> buildShaped(CustomRecipeEntry entry, ItemStack result,
-                                                    Identifier key, String recipeGroup) {
+    private RecipeHolder<ShapedRecipe> buildShaped(CustomRecipeEntry entry, ItemStack result,
+                                                    ResourceLocation key, String recipeGroup) {
         List<String> pattern = entry.pattern;
         Map<String, String> keysMap = entry.keys;
         if (pattern == null || pattern.isEmpty()) return null;
@@ -172,17 +172,17 @@ public abstract class ServerRecipeManagerMixin {
         for (Map.Entry<String, String> kv : keysMap.entrySet()) {
             if (kv.getKey() == null || kv.getKey().isEmpty()) continue;
             char sym = kv.getKey().charAt(0);
-            Identifier itemId = Identifier.tryParse(kv.getValue());
-            if (itemId == null || !Registries.ITEM.containsId(itemId)) {
+            ResourceLocation itemId = ResourceLocation.tryParse(kv.getValue());
+            if (itemId == null || !BuiltInRegistries.ITEM.containsKey(itemId)) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shaped key item not found: {}", kv.getValue());
                 return null;
             }
-            symbols.put(sym, Ingredient.ofItems(Registries.ITEM.get(itemId)));
+            symbols.put(sym, Ingredient.of(BuiltInRegistries.ITEM.get(itemId)));
         }
 
-        RawShapedRecipe rawRecipe;
+        ShapedRecipePattern rawRecipe;
         try {
-            rawRecipe = RawShapedRecipe.create(symbols, pattern);
+            rawRecipe = ShapedRecipePattern.of(symbols, pattern);
         } catch (Exception e) {
             CustomRecipeMod.LOGGER.warn("[CustomRecipe] Invalid shaped pattern for result: {} — {}", entry.result, e.getMessage());
             return null;
@@ -191,11 +191,10 @@ public abstract class ServerRecipeManagerMixin {
 
         ShapedRecipe recipe = new ShapedRecipe(
                 recipeGroup,
-                CraftingRecipeCategory.MISC,
+                CraftingBookCategory.MISC,
                 rawRecipe,
                 result
         );
-        return new RecipeEntry<>(key, recipe);
+        return new RecipeHolder<>(key, recipe);
     }
 }
-
