@@ -5,11 +5,12 @@ import fr.zazac1.customrecipe.RecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderPipelines;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,14 +35,14 @@ final class RecipeTargetBadge {
         if (target.isWorld()) {
             WorldIcon icon = worldIcon(minecraft, target);
             if (icon != null) {
-                context.blit(icon.id(), x, y, 0, 0, 24, 24,
+                context.blit(RenderPipelines.GUI_TEXTURED, icon.id(), x, y, 0, 0, 24, 24,
                         icon.width(), icon.height());
             } else {
                 context.renderItem(new ItemStack(Items.GRASS_BLOCK), x + 4, y + 4);
             }
         } else {
-            ResourceLocation globe = ResourceLocation.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "textures/gui/world_globe.png");
-            context.blit(globe, x + 4, y + 4,
+            Identifier globe = Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "textures/gui/world_globe.png");
+            context.blit(RenderPipelines.GUI_TEXTURED, globe, x + 4, y + 4,
                     0, 0, 16, 16, 16, 16);
         }
         context.drawString(minecraft.font, label, x + 31, y + 8, 0xFFFFFFFF, true);
@@ -65,11 +66,11 @@ final class RecipeTargetBadge {
             if (!Files.isRegularFile(iconPath)) return missing(target.id());
             try (InputStream input = Files.newInputStream(iconPath)) {
                 NativeImage image = NativeImage.read(input);
-                ResourceLocation id = ResourceLocation.fromNamespaceAndPath(CustomRecipeMod.MOD_ID,
+                Identifier id = Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID,
                         "dynamic/world_icons/" + target.id().replaceAll("[^a-z0-9_./-]", "_"));
                 WorldIcon icon = new WorldIcon(id, image.getWidth(), image.getHeight());
                 minecraft.getTextureManager().register(id,
-                        new DynamicTexture(image));
+                        new DynamicTexture(() -> "customrecipe_world_icon", image));
                 WORLD_ICONS.put(target.id(), icon);
                 return icon;
             }
@@ -83,7 +84,7 @@ final class RecipeTargetBadge {
         return null;
     }
 
-    private record WorldIcon(ResourceLocation id, int width, int height) {}
+    private record WorldIcon(Identifier id, int width, int height) {}
 
     private RecipeTargetBadge() {}
 }

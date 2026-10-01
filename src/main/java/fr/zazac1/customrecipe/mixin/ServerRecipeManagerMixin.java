@@ -1,17 +1,23 @@
 package fr.zazac1.customrecipe.mixin;
 
 import fr.zazac1.customrecipe.ConfigLoader;
+import fr.zazac1.customrecipe.BuiltinRecipeIds;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
+import fr.zazac1.customrecipe.DisabledCraftingRecipe;
 import fr.zazac1.customrecipe.ModConfig;
+import fr.zazac1.customrecipe.RecipeVariantRule;
+import fr.zazac1.customrecipe.VariantFilteredCraftingRecipe;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.*;
 import net.minecraft.world.item.crafting.CraftingBookCategory;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.packs.resources.ResourceManager;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.core.NonNullList;
 import net.minecraft.util.profiling.ProfilerFiller;
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,7 +26,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import com.google.gson.JsonElement;
 import java.util.Collection;
 
 // In Minecraft 1.21.8 the shaped-recipe pattern class is RawShapedRecipe (not ShapedRecipePattern)
@@ -29,14 +34,17 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashMap;
+import java.util.HashSet;
 
 @Mixin(value = RecipeManager.class, remap = false)
 public abstract class ServerRecipeManagerMixin {
     @Shadow(remap = false) public abstract Collection<RecipeHolder<?>> getRecipes();
-    @Shadow(remap = false) public abstract void replaceRecipes(Iterable<RecipeHolder<?>> recipes);
+    @Shadow(remap = false) private RecipeMap recipes;
 
-    @Inject(method = "apply(Ljava/util/Map;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)V", at = @At("TAIL"), remap = false)
-    private void customrecipe$applyConfig(Map<ResourceLocation, JsonElement> ignored, ResourceManager resourceManager,
+    @Inject(method = "apply(Lnet/minecraft/world/item/crafting/RecipeMap;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)V", at = @At("TAIL"), remap = false)
+    private void customrecipe$applyConfig(RecipeMap ignored, ResourceManager resourceManager,
                                           ProfilerFiller profiler, CallbackInfo ci) {
         ConfigLoader.invalidate();
         ModConfig rootConfig = ConfigLoader.get();
@@ -44,24 +52,47 @@ public abstract class ServerRecipeManagerMixin {
 
         List<RecipeHolder<?>> recipes = new ArrayList<>(getRecipes());
 
-        // 1. Remove disabled built-in recipes (namespace = "customrecipe")
-        if (!config.disabled_builtin.isEmpty()) {
+        // 1. Bundled recipes are templates, not active data-pack recipes by
+        // default. A world loads one only after it has selected built-ins in
+        // the editor; disabled selections remain absent after that.
+        if (!config.builtin_recipes_initialized || !config.disabled_builtin.isEmpty()) {
             recipes.removeIf(entry -> {
-                ResourceLocation id = entry.id();
-                if (!id.getNamespace().equals(CustomRecipeMod.MOD_ID)) return false;
-                for (String disabled : config.disabled_builtin) {
-                    if (id.getPath().equals(disabled)) return true;
-                }
-                return false;
+                Identifier id = entry.id().identifier();
+                if (!id.getNamespace().equals(CustomRecipeMod.MOD_ID)
+                        || !BuiltinRecipeIds.contains(id.getPath())) return false;
+                return !config.builtin_recipes_initialized || config.disabled_builtin.contains(id.getPath());
             });
         }
 
-        // 1b. Non-crafting recipes can be removed. Crafting recipes must retain
-        // their concrete vanilla classes for the 1.21.1 recipe-network codec;
-        // RecipeManagerCraftingFilterMixin enforces their state at craft time.
+        // 1b. Non-crafting recipes can be removed directly. Crafting recipes
+        // remain discoverable by management screens but are wrapped so every
+        // matching path, including cached menu checks, sees them as disabled.
         if (!config.disabled_recipes.isEmpty()) {
-            recipes.removeIf(entry -> config.disabled_recipes.contains(entry.id().toString())
+            recipes.removeIf(entry -> config.disabled_recipes.contains(entry.id().identifier().toString())
                     && !(entry.value() instanceof CraftingRecipe));
+        }
+
+        // 1c. RecipeManager has more than one crafting lookup path in 1.21.11.
+        // Filtering its public overloads alone misses callers that invoke the
+        // recipe directly, so encode the disabled state in the crafting recipe
+        // itself. This preserves the recipe ID for the editor and recipe book.
+        Map<String, Set<String>> variantsByRecipe = new HashMap<>();
+        for (RecipeVariantRule rule : config.disabled_recipe_variants) {
+            if (rule == null || rule.recipe_id == null || rule.material_id == null) continue;
+            variantsByRecipe.computeIfAbsent(rule.recipe_id, key -> new HashSet<>()).add(rule.material_id);
+        }
+        for (int i = 0; i < recipes.size(); i++) {
+            RecipeHolder<?> holder = recipes.get(i);
+            if (!(holder.value() instanceof CraftingRecipe crafting)) continue;
+            String recipeId = holder.id().identifier().toString();
+            if (config.disabled_recipes.contains(recipeId)) {
+                recipes.set(i, new RecipeHolder<>(holder.id(), new DisabledCraftingRecipe(crafting)));
+                continue;
+            }
+            Set<String> blockedMaterials = variantsByRecipe.get(recipeId);
+            if (blockedMaterials != null && !blockedMaterials.isEmpty()) {
+                recipes.set(i, new RecipeHolder<>(holder.id(), new VariantFilteredCraftingRecipe(crafting, blockedMaterials)));
+            }
         }
 
         // 2. Inject user custom recipes
@@ -89,7 +120,7 @@ public abstract class ServerRecipeManagerMixin {
         // The recipe manager uses the first matching entry. Vanilla entries
         // stay first, so a custom recipe only takes effect after the matching
         // vanilla recipe has been disabled. Custom recipes still share groups.
-        replaceRecipes(recipes);
+        this.recipes = RecipeMap.create(recipes);
     }
 
     // ── dispatch ─────────────────────────────────────────────────────────
@@ -98,15 +129,15 @@ public abstract class ServerRecipeManagerMixin {
         if (entry == null) return null;
         if (entry.result == null || entry.result.isBlank()) return null;
 
-        ResourceLocation resultId = ResourceLocation.tryParse(entry.result);
+        Identifier resultId = Identifier.tryParse(entry.result);
         if (resultId == null || !BuiltInRegistries.ITEM.containsKey(resultId)) {
             CustomRecipeMod.LOGGER.warn("[CustomRecipe] Unknown result item: {}", entry.result);
             return null;
         }
 
-        ItemStack result = new ItemStack(BuiltInRegistries.ITEM.get(resultId), Math.max(1, entry.count));
+        ItemStack result = new ItemStack(BuiltInRegistries.ITEM.getValue(resultId), Math.max(1, entry.count));
 
-        ResourceLocation key = entry.serverRecipeId();
+        Identifier key = entry.serverRecipeId();
 
         if ("shaped".equalsIgnoreCase(entry.type)) {
             return buildShaped(entry, result, key, recipeGroup);
@@ -133,19 +164,19 @@ public abstract class ServerRecipeManagerMixin {
     // ── shapeless ─────────────────────────────────────────────────────────
 
     private RecipeHolder<ShapelessRecipe> buildShapeless(CustomRecipeEntry entry, ItemStack result,
-                                                         ResourceLocation key, String recipeGroup) {
+                                                         Identifier key, String recipeGroup) {
         List<String> rawIngredients = entry.ingredients;
         if (rawIngredients == null || rawIngredients.isEmpty()) return null;
 
         List<Ingredient> ingredients = new ArrayList<>();
         for (String itemId : rawIngredients) {
             if (itemId == null || itemId.isBlank()) continue;
-            ResourceLocation id = ResourceLocation.tryParse(itemId.trim());
+            Identifier id = Identifier.tryParse(itemId.trim());
             if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shapeless ingredient not found: {}", itemId);
                 return null;
             }
-            ingredients.add(Ingredient.of(BuiltInRegistries.ITEM.get(id)));
+            ingredients.add(Ingredient.of(BuiltInRegistries.ITEM.getValue(id)));
         }
         if (ingredients.isEmpty()) return null;
 
@@ -155,13 +186,13 @@ public abstract class ServerRecipeManagerMixin {
                 result,
                 NonNullList.copyOf(ingredients)
         );
-        return new RecipeHolder<>(key, recipe);
+        return new RecipeHolder<>(ResourceKey.create(Registries.RECIPE, key), recipe);
     }
 
     // ── shaped ────────────────────────────────────────────────────────────
 
     private RecipeHolder<ShapedRecipe> buildShaped(CustomRecipeEntry entry, ItemStack result,
-                                                    ResourceLocation key, String recipeGroup) {
+                                                    Identifier key, String recipeGroup) {
         List<String> pattern = entry.pattern;
         Map<String, String> keysMap = entry.keys;
         if (pattern == null || pattern.isEmpty()) return null;
@@ -172,12 +203,12 @@ public abstract class ServerRecipeManagerMixin {
         for (Map.Entry<String, String> kv : keysMap.entrySet()) {
             if (kv.getKey() == null || kv.getKey().isEmpty()) continue;
             char sym = kv.getKey().charAt(0);
-            ResourceLocation itemId = ResourceLocation.tryParse(kv.getValue());
+            Identifier itemId = Identifier.tryParse(kv.getValue());
             if (itemId == null || !BuiltInRegistries.ITEM.containsKey(itemId)) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shaped key item not found: {}", kv.getValue());
                 return null;
             }
-            symbols.put(sym, Ingredient.of(BuiltInRegistries.ITEM.get(itemId)));
+            symbols.put(sym, Ingredient.of(BuiltInRegistries.ITEM.getValue(itemId)));
         }
 
         ShapedRecipePattern rawRecipe;
@@ -195,6 +226,6 @@ public abstract class ServerRecipeManagerMixin {
                 rawRecipe,
                 result
         );
-        return new RecipeHolder<>(key, recipe);
+        return new RecipeHolder<>(ResourceKey.create(Registries.RECIPE, key), recipe);
     }
 }

@@ -112,7 +112,7 @@ Write-Host 'Compilation du mod...'
 if ($LASTEXITCODE -ne 0) { throw 'Compilation échouée : lancement annulé.' }
 
 # Le build unique évite une course entre runServer et runClient sur les classes du mod.
-$serverScript = "`$host.UI.RawUI.WindowTitle = 'Custom Recipe NeoForge 1.21.1 - Serveur de test'; `$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer --console=plain --no-daemon -x compileJava -x processResources -x classes"
+$serverScript = "`$host.UI.RawUI.WindowTitle = 'Custom Recipe NeoForge 1.21.11 - Serveur de test'; `$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer --console=plain --no-daemon -x compileJava -x processResources -x classes"
 $clientScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runClient --no-daemon -x compileJava -x processResources -x classes"
 
 Write-Host "Serveur : $lanIp`:25565"

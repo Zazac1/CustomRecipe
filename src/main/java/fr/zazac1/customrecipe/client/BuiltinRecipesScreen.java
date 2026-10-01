@@ -1,5 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
+import net.minecraft.client.input.MouseButtonEvent;
+
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.RecipeIntegrity;
 import net.minecraft.client.gui.GuiGraphics;
@@ -10,7 +12,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -58,9 +60,9 @@ public class BuiltinRecipesScreen extends Screen {
     static int quickAddCount() { return RECIPES.length; }
     static String quickAddId(int index) { return RECIPES[index][0]; }
     static String quickAddName(int index) {
-        ResourceLocation id = ResourceLocation.tryParse(RECIPES[index][2]);
+        Identifier id = Identifier.tryParse(RECIPES[index][2]);
         return id != null && BuiltInRegistries.ITEM.containsKey(id)
-                ? new ItemStack(BuiltInRegistries.ITEM.get(id)).getHoverName().getString() : RECIPES[index][1];
+                ? new ItemStack(BuiltInRegistries.ITEM.getValue(id)).getHoverName().getString() : RECIPES[index][1];
     }
     static String quickAddResult(int index) { return RECIPES[index][2]; }
 
@@ -152,14 +154,14 @@ public class BuiltinRecipesScreen extends Screen {
             for (int i = scroll; i < Math.min(RECIPES.length, scroll + vis); i++) {
                 int y = rowY(i);
                 if (y < listTop() || y + ROW > listTop() + listH()) continue;
-                boolean dis = disabled.contains(RECIPES[i][0]);
+                boolean dis = parent.isBuiltinRecipeDisabled(RECIPES[i][0]);
                 boolean sel = selectedRecipe == i;
                 int rowColor = dis ? (sel ? 0x44662200 : 0x44550000)
                         : (sel ? 0x44005533 : 0x22005500);
                 // Keep the reactive state tint visible behind the state button as well.
                 ctx.fillGradient(PAD + 1, y, width - PAD - 1, y + ROW - 2,
                         rowColor, (rowColor & 0x00FFFFFF) | 0x18000000);
-                var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(RECIPES[i][2]));
+                var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(RECIPES[i][2]));
                 if (item != null && item != Items.AIR)
                     ctx.renderItem(new ItemStack(item), itemIconX(), y + 2);
                 CustomRecipeSprites.draw(ctx,
@@ -174,7 +176,7 @@ public class BuiltinRecipesScreen extends Screen {
                 int dy = detailY();
                 ctx.fill(PAD, dy, width - PAD, dy + DETAIL_H, 0x88101010);
                 drawBox(ctx, PAD, dy, width - PAD * 2, DETAIL_H, 0xFF607050);
-                var detailItem = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(RECIPES[selectedRecipe][2]));
+                var detailItem = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(RECIPES[selectedRecipe][2]));
                 if (detailItem != null && detailItem != Items.AIR)
                     ctx.renderItem(new ItemStack(detailItem), PAD + 4, dy + 2);
                 CustomRecipeSprites.draw(ctx,
@@ -192,7 +194,7 @@ public class BuiltinRecipesScreen extends Screen {
                         drawBox(ctx, sx, sy, MINI, MINI, 0xFF555555);
                         String id = grid[r][c];
                         if (id != null) {
-                            var it = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
+                            var it = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(id));
                             if (it != null && it != Items.AIR)
                                 ctx.renderItem(new ItemStack(it), sx + 1, sy + 1);
                         }
@@ -203,7 +205,7 @@ public class BuiltinRecipesScreen extends Screen {
                 int resultY = gy + MINI;
                 ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
                 drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
-                var ri = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(RECIPES[selectedRecipe][2]));
+                var ri = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(RECIPES[selectedRecipe][2]));
                 if (ri != null && ri != Items.AIR)
                     ctx.renderItem(new ItemStack(ri), resultX + 1, resultY + 1);
             }
@@ -216,7 +218,7 @@ public class BuiltinRecipesScreen extends Screen {
             if (y < listTop() || y + ROW > listTop() + listH()) continue;
 
             final String id = RECIPES[i][0];
-            boolean dis = disabled.contains(id);
+            boolean dis = parent.isBuiltinRecipeDisabled(id);
             boolean sel = selectedRecipe == i;
 
             MultiLineTextWidget lbl = new MultiLineTextWidget(
@@ -286,6 +288,7 @@ public class BuiltinRecipesScreen extends Screen {
     }
 
     private void toggle(String id) {
+        parent.initializeBuiltinRecipes();
         if (!disabled.remove(id)) disabled.add(id);
         clearWidgets(); init();
     }
@@ -307,7 +310,9 @@ public class BuiltinRecipesScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mx, double my, int button) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
+        double mx = click.x(), my = click.y();
+        int button = click.button();
         int toggleStart = stateX();
         int vis = maxVisible();
         for (int i = scroll; i < Math.min(RECIPES.length, scroll + vis); i++) {
@@ -322,7 +327,7 @@ public class BuiltinRecipesScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(mx, my, button);
+        return super.mouseClicked(click, focused);
     }
 
     @Override

@@ -2,16 +2,17 @@ package fr.zazac1.customrecipe;
 
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
-import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraft.world.item.crafting.CraftingBookCategory;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.Level;
 
-import net.minecraft.core.NonNullList;
+import net.minecraft.world.item.crafting.PlacementInfo;
+import net.minecraft.world.item.crafting.display.RecipeDisplay;
+import java.util.List;
 import java.util.Set;
 
 /** Keeps the original recipe but rejects configured material variants at craft time. */
@@ -39,16 +40,20 @@ public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
     }
 
     @Override public ItemStack assemble(CraftingInput input, HolderLookup.Provider registries) { return delegate.assemble(input, registries); }
-    @Override public boolean canCraftInDimensions(int width, int height) { return delegate.canCraftInDimensions(width, height); }
-    @Override public ItemStack getResultItem(HolderLookup.Provider registries) { return delegate.getResultItem(registries); }
-    @Override public RecipeSerializer<?> getSerializer() { return delegate.getSerializer(); }
+    @Override public RecipeSerializer<? extends CraftingRecipe> getSerializer() { return delegate.getSerializer(); }
     @Override public CraftingBookCategory category() { return delegate.category(); }
     /**
      * The vanilla recipe book cannot express "this recipe except birch planks".
      * Hiding it avoids its auto-fill selecting a blocked material and leaving a
      * broken crafting grid behind.
      */
-    @Override public NonNullList<Ingredient> getIngredients() { return delegate.getIngredients(); }
-    @Override public String getGroup() { return delegate.getGroup(); }
+    @Override public PlacementInfo placementInfo() { return delegate.placementInfo(); }
+    /**
+     * A material-specific disable is not representable by the recipe-book or
+     * REI display protocols. Hide that display entirely so neither UI offers
+     * an entry that can fail with the blocked material variant.
+     */
+    @Override public List<RecipeDisplay> display() { return List.of(); }
+    @Override public String group() { return delegate.group(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }
 }

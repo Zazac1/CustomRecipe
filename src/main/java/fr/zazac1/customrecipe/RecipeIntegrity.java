@@ -3,7 +3,7 @@ package fr.zazac1.customrecipe;
 import net.neoforged.fml.ModList;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -30,8 +30,8 @@ public final class RecipeIntegrity {
     public static List<String> missingItems(CustomRecipeEntry recipe) {
         List<String> missing = new ArrayList<>();
         for (String rawId : referencedItemIds(recipe)) {
-            ResourceLocation id = ResourceLocation.tryParse(rawId);
-            if (id == null || !BuiltInRegistries.ITEM.containsKey(id) || BuiltInRegistries.ITEM.get(id) == Items.AIR) {
+            Identifier id = Identifier.tryParse(rawId);
+            if (id == null || !BuiltInRegistries.ITEM.containsKey(id) || BuiltInRegistries.ITEM.getValue(id) == Items.AIR) {
                 missing.add(rawId);
             }
         }
@@ -42,7 +42,7 @@ public final class RecipeIntegrity {
     public static void rememberRequiredMods(CustomRecipeEntry recipe) {
         if (recipe.required_mods == null) recipe.required_mods = new LinkedHashMap<>();
         for (String rawId : referencedItemIds(recipe)) {
-            ResourceLocation itemId = ResourceLocation.tryParse(rawId);
+            Identifier itemId = Identifier.tryParse(rawId);
             if (itemId == null || "minecraft".equals(itemId.getNamespace())) continue;
             recipe.required_mods.computeIfAbsent(itemId.getNamespace(), RecipeIntegrity::installedVersion);
         }
@@ -52,7 +52,7 @@ public final class RecipeIntegrity {
         LinkedHashSet<String> ids = new LinkedHashSet<>();
         if (recipe.required_mods != null) ids.addAll(recipe.required_mods.keySet());
         for (String rawId : referencedItemIds(recipe)) {
-            ResourceLocation itemId = ResourceLocation.tryParse(rawId);
+            Identifier itemId = Identifier.tryParse(rawId);
             if (itemId != null && !"minecraft".equals(itemId.getNamespace())) ids.add(itemId.getNamespace());
         }
         return ids;

@@ -3,7 +3,7 @@ package fr.zazac1.customrecipe;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -34,10 +34,10 @@ public final class ModNetworking {
         });
     }
 
-    public static void save(String json) { PacketDistributor.sendToServer(new C2SPayload(Action.SAVE, json)); }
-    public static void validate(String json) { PacketDistributor.sendToServer(new C2SPayload(Action.VALIDATE, json)); }
-    public static void queryVanilla(String json) { PacketDistributor.sendToServer(new C2SPayload(Action.VANILLA_QUERY, json)); }
-    public static void queryVanillaDetails(String id) { PacketDistributor.sendToServer(new C2SPayload(Action.VANILLA_DETAILS, id)); }
+    public static void save(String json) { net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new C2SPayload(Action.SAVE, json)); }
+    public static void validate(String json) { net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new C2SPayload(Action.VALIDATE, json)); }
+    public static void queryVanilla(String json) { net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new C2SPayload(Action.VANILLA_QUERY, json)); }
+    public static void queryVanillaDetails(String id) { net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new C2SPayload(Action.VANILLA_DETAILS, id)); }
     public static boolean canSend(ServerPlayer player) { return player != null && player.connection.hasChannel(S2CPayload.TYPE); }
     public static void send(ServerPlayer player, Action action, String data) { if (canSend(player)) PacketDistributor.sendToPlayer(player, new S2CPayload(action, data)); }
 
@@ -46,12 +46,12 @@ public final class ModNetworking {
     private static void write(RegistryFriendlyByteBuf b, Packet payload) { b.writeVarInt(payload.action().ordinal()); b.writeUtf(payload.data() == null ? "" : payload.data(), MAX_JSON_CHARS); }
     public interface Packet extends CustomPacketPayload { Action action(); String data(); }
     public record C2SPayload(Action action, String data) implements Packet {
-        public static final Type<C2SPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "editor_c2s"));
+        public static final Type<C2SPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "editor_c2s"));
         public static final StreamCodec<RegistryFriendlyByteBuf, C2SPayload> STREAM_CODEC = StreamCodec.of((b,p)->write(b,p), b->read(b,C2SPayload::new));
         @Override public Type<C2SPayload> type() { return TYPE; }
     }
     public record S2CPayload(Action action, String data) implements Packet {
-        public static final Type<S2CPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "editor_s2c"));
+        public static final Type<S2CPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "editor_s2c"));
         public static final StreamCodec<RegistryFriendlyByteBuf, S2CPayload> STREAM_CODEC = StreamCodec.of((b,p)->write(b,p), b->read(b,S2CPayload::new));
         @Override public Type<S2CPayload> type() { return TYPE; }
     }

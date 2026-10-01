@@ -41,14 +41,16 @@ final class ImportConfigurationScreen extends Screen {
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        // Render the parent background explicitly: the active modal's empty
+        // background hook does not invoke it automatically.
+        returnTo.renderBackground(context, mouseX, mouseY, delta);
         // Keep the imported configuration's menu visible as the contextual
         // background, just as the Fabric editor does; the overlay below keeps
         // it non-interactive while the confirmation is pending.
         returnTo.render(context, mouseX, mouseY, delta);
         // ConfigScreen has deferred labels/widgets.  Draw the complete modal
         // above that batch, otherwise those labels bleed through its panel.
-        context.pose().pushPose();
-        context.pose().translate(0.0f, 0.0f, 200.0f);
+        context.pose().pushMatrix();
         context.fill(0, 0, width, height, 0x98000000);
         int panelWidth = 340;
         int panelHeight = 136;
@@ -61,7 +63,7 @@ final class ImportConfigurationScreen extends Screen {
         context.drawCenteredString(font, "Custom recipes: " + recipeCount, width / 2, panelY + 38, 0xFFE0E6E3);
         context.drawCenteredString(font, "Vanilla settings: " + vanillaCount, width / 2, panelY + 54, 0xFFE0E6E3);
         context.drawCenteredString(font, "Save will apply the import.", width / 2, panelY + 78, 0xFFB8C7C1);
-        context.pose().popPose();
+        context.pose().popMatrix();
     }
 
     private static void border(GuiGraphics context, int x, int y, int width, int height) {

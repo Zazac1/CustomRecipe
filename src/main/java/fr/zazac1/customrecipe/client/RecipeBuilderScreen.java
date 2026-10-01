@@ -1,5 +1,8 @@
 package fr.zazac1.customrecipe.client;
 
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.KeyEvent;
+
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.RecipeIntegrity;
 import net.minecraft.client.gui.GuiGraphics;
@@ -11,7 +14,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import com.mojang.math.Axis;
 
 import java.util.*;
@@ -612,7 +615,7 @@ public class RecipeBuilderScreen extends Screen {
                             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SLOT_SELECTED, sx, sy, SLOT, SLOT);
                     String itemId = slotItems[slot];
                     if (itemId != null && !itemId.isEmpty()) {
-                        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(itemId));
+                        var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemId));
                         if (item != null && item != Items.AIR)
                             ctx.renderItem(new ItemStack(item), sx + 1, sy + 1);
                     }
@@ -632,7 +635,7 @@ public class RecipeBuilderScreen extends Screen {
                     rx, ry, OUTPUT_SLOT, OUTPUT_SLOT);
         }
         if (!resultItemId.isEmpty()) {
-            var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(resultItemId));
+            var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(resultItemId));
             if (item != null && item != Items.AIR)
                 ctx.renderItem(new ItemStack(item), rx + 5, ry + 5);
         }
@@ -647,7 +650,7 @@ public class RecipeBuilderScreen extends Screen {
                 int ry2 = sy + (i - suggestionScroll) * SUGG_H;
                 if (mx >= leftX() && mx < leftX() + leftW() && my >= ry2 && my < ry2 + SUGG_H)
                     ctx.fill(leftX() + 1, ry2, leftX() + leftW() - 1, ry2 + SUGG_H, 0x553355BB);
-                var item2 = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(itemMatches.get(i)));
+                var item2 = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemMatches.get(i)));
                 if (item2 != null && item2 != Items.AIR)
                     ctx.renderItem(new ItemStack(item2), leftX() + 2, ry2);
             }
@@ -682,7 +685,7 @@ public class RecipeBuilderScreen extends Screen {
             if (empty) {
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, x + 1, y + 1, 18, 18);
             } else {
-                var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(used.get(i - 1)));
+                var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(used.get(i - 1)));
                 if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x + 2, y + 2);
             }
         }
@@ -710,7 +713,7 @@ public class RecipeBuilderScreen extends Screen {
             if (heldItemId.isEmpty()) {
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, ghostX - 1, ghostY - 1, 18, 18);
             } else {
-                var heldItem = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(heldItemId));
+                var heldItem = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(heldItemId));
                 if (heldItem != null && heldItem != Items.AIR) {
                 ctx.renderItem(new ItemStack(heldItem), ghostX, ghostY);
                 // This GUI item pipeline has no alpha overload. Its
@@ -727,7 +730,7 @@ public class RecipeBuilderScreen extends Screen {
                 int ry = sy + (i - suggestionScroll) * SUGG_H;
                 if (mouseX >= leftX() && mouseX < leftX() + leftW()
                         && mouseY >= ry && mouseY < ry + SUGG_H) {
-                    ctx.renderTooltip(font,
+                    ctx.setTooltipForNextFrame(font,
                             List.of(Component.literal(itemMatches.get(i)).getVisualOrderText()),
                             mouseX, mouseY);
                     break;
@@ -742,7 +745,7 @@ public class RecipeBuilderScreen extends Screen {
             int x = paletteX + 8 + (i % paletteColumns()) * 24;
             int y = paletteY + 6 + (i / paletteColumns()) * 24;
             if (mouseX >= x && mouseX < x + 20 && mouseY >= y && mouseY < y + 20) {
-                ctx.renderTooltip(font,
+                ctx.setTooltipForNextFrame(font,
                         List.of(i == 0 ? Component.translatable("customrecipe.builder.empty_remove").getVisualOrderText() : Component.literal(used.get(i - 1)).getVisualOrderText()), mouseX, mouseY);
                 break;
             }
@@ -753,7 +756,9 @@ public class RecipeBuilderScreen extends Screen {
     // ── mouse events ──────────────────────────────────────────────────────
 
     @Override
-    public boolean mouseClicked(double mx, double my, int button) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
+        double mx = click.x(), my = click.y();
+        int button = click.button();
         // Right-clicking the preview area cancels the item currently carried
         // by the cursor; it never edits a recipe slot.
         if (button == 1
@@ -833,7 +838,7 @@ public class RecipeBuilderScreen extends Screen {
             }
             // Dispatch directly: Screen's child traversal could miss this first
             // click after the search field was rebuilt.
-            itemField.mouseClicked(mx, my, button);
+            itemField.mouseClicked(click, focused);
             return true;
         }
 
@@ -872,7 +877,7 @@ public class RecipeBuilderScreen extends Screen {
             }
         }
 
-        return super.mouseClicked(mx, my, button);
+        return super.mouseClicked(click, focused);
     }
 
     @Override
@@ -910,18 +915,21 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double my, int button, double deltaX, double deltaY) {
+    public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
+        double mouseX = click.x(), my = click.y();
         if (draggingSuggestionScrollbar) {
             updateSuggestionScrollbar(my);
             return true;
         }
-        return super.mouseDragged(mouseX, my, button, deltaX, deltaY);
+        return super.mouseDragged(click, deltaX, deltaY);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(MouseButtonEvent click) {
+        double mouseX = click.x(), mouseY = click.y();
+        int button = click.button();
         draggingSuggestionScrollbar = false;
-        return super.mouseReleased(mouseX, mouseY, button);
+        return super.mouseReleased(click);
     }
 
     private void updateSuggestionScrollbar(double mouseY) {
@@ -945,12 +953,12 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256) { // Escape
+    public boolean keyPressed(KeyEvent keyEvent) {
+        if (keyEvent.isEscape()) {
             onClose();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(keyEvent);
     }
 
     // ── save ──────────────────────────────────────────────────────────────
@@ -1069,7 +1077,7 @@ public class RecipeBuilderScreen extends Screen {
                     x + 4, rowY + 4, SLOT, SLOT);
             ctx.drawString(font, (i + 1) + ")", x + 26, rowY + 8, 0xFF3F3F3F, false);
             if (itemId != null && !itemId.isEmpty()) {
-                var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(itemId));
+                var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemId));
                 if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x + 5, rowY + 5);
                 String name = font.plainSubstrByWidth(toDisplayName(itemId), Math.max(20, minusX - x - 68));
                 ctx.drawString(font, name, x + 42, rowY + 8, 0xFFDDDDDD, false);
@@ -1095,17 +1103,17 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     private void drawShapelessScrollArrow(GuiGraphics ctx, int x, int y, boolean up, boolean hovered) {
-        ResourceLocation texture = hovered ? CustomRecipeSprites.MOVE_DOWN_HIGHLIGHTED : CustomRecipeSprites.MOVE_DOWN;
+        Identifier texture = hovered ? CustomRecipeSprites.MOVE_DOWN_HIGHLIGHTED : CustomRecipeSprites.MOVE_DOWN;
         if (!up) {
             CustomRecipeSprites.draw(ctx, texture, x, y, 32, 32);
             return;
         }
-        ctx.pose().pushPose();
-        ctx.pose().translate(x + 16, y + 16, 0);
-        ctx.pose().mulPose(Axis.ZP.rotationDegrees(180));
-        ctx.pose().translate(-x - 16, -y - 16, 0);
+        ctx.pose().pushMatrix();
+        ctx.pose().translate(x + 16, y + 16);
+        ctx.pose().rotate((float) Math.PI);
+        ctx.pose().translate(-x - 16, -y - 16);
         CustomRecipeSprites.draw(ctx, texture, x, y, 32, 32);
-        ctx.pose().popPose();
+        ctx.pose().popMatrix();
     }
 
     /** Closed lock: fixed shaped layout. Open lock: free shapeless ingredient order. */

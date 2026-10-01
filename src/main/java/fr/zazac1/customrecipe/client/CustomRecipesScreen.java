@@ -1,6 +1,10 @@
 package fr.zazac1.customrecipe.client;
 
+import net.minecraft.client.input.MouseButtonEvent;
+
 import fr.zazac1.customrecipe.ConfigLoader;
+import fr.zazac1.customrecipe.BuiltinRecipeIds;
+import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.RecipeIntegrity;
@@ -12,7 +16,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -216,9 +220,9 @@ public class CustomRecipesScreen extends Screen {
                         rowColor, (rowColor & 0x00FFFFFF) | 0x18000000);
                 // Icône de l'item résultat
                 String resId = recipes.get(i).result;
-                ResourceLocation resultId = resId == null ? null : ResourceLocation.tryParse(resId);
+                Identifier resultId = resId == null ? null : Identifier.tryParse(resId);
                 if (resultId != null && BuiltInRegistries.ITEM.containsKey(resultId)) {
-                    ctx.renderItem(new ItemStack(BuiltInRegistries.ITEM.get(resultId)), itemIconX(), y + 2);
+                    ctx.renderItem(new ItemStack(BuiltInRegistries.ITEM.getValue(resultId)), itemIconX(), y + 2);
                 }
                 drawRecipeStatusIcon(ctx, warningIconX(), y + 2, corrupted, conflict);
                 boolean shapedType = "shaped".equalsIgnoreCase(recipes.get(i).type);
@@ -500,7 +504,7 @@ public class CustomRecipesScreen extends Screen {
                     warning.setMaxRows(1);
                     addRenderableWidget(warning);
                     addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.disable_conflict").withColor(0xFFCC55), b -> {
-                        if (!parent.disabledRecipes.contains(conflict)) parent.disabledRecipes.add(conflict);
+                        disableConflict(conflict);
                         clearWidgets(); init();
                     }).bounds(detailRight() - 204, detailY() + 26, 198, 18).build());
                 } else if (!known) {
@@ -593,9 +597,9 @@ public class CustomRecipesScreen extends Screen {
         String result = quickAddIsBuiltin(quickIndex)
                 ? BuiltinRecipesScreen.quickAddResult(quickAddBuiltinIndex(quickIndex))
                 : quickAddCustomRecipeIndex(quickIndex) < 0 ? "" : parent.quickAddRecipes.get(quickAddCustomRecipeIndex(quickIndex)).result;
-        ResourceLocation id = ResourceLocation.tryParse(result);
+        Identifier id = Identifier.tryParse(result);
         if (id != null && BuiltInRegistries.ITEM.containsKey(id))
-            ctx.renderItem(new ItemStack(BuiltInRegistries.ITEM.get(id)), x, y);
+            ctx.renderItem(new ItemStack(BuiltInRegistries.ITEM.getValue(id)), x, y);
     }
 
     private void renderDetailFills(GuiGraphics ctx, CustomRecipeEntry e, boolean quickAddPreview) {
@@ -633,7 +637,7 @@ public class CustomRecipesScreen extends Screen {
                 drawBox(ctx, sx, sy, MINI, MINI, 0xFF555555);
                 String id = grid[r][c];
                 if (id != null && !id.isEmpty()) {
-                    var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
+                    var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(id));
                     if (item != null && item != Items.AIR)
                         ctx.renderItem(new ItemStack(item), sx + 1, sy + 1);
                 }
@@ -646,7 +650,7 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
         drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
         if (e.result != null && !e.result.isEmpty()) {
-            var ri = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(e.result));
+            var ri = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(e.result));
             if (ri != null && ri != Items.AIR)
                 ctx.renderItem(new ItemStack(ri), resultX + 1, resultY + 1);
         }
@@ -701,7 +705,7 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
         drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
         if (e.result != null && !e.result.isEmpty()) {
-            var result = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(e.result));
+            var result = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(e.result));
             if (result != null && result != Items.AIR) ctx.renderItem(new ItemStack(result), resultX + 1, resultY + 1);
         }
     }
@@ -710,7 +714,7 @@ public class CustomRecipesScreen extends Screen {
         for (int i = 0; i < rows.size(); i++) {
             ShapelessIngredient row = rows.get(i);
             int rowY = y + i * MINI;
-            var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(row.itemId()));
+            var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(row.itemId()));
             if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, rowY + 1);
             String name = font.plainSubstrByWidth(toName(row.itemId()), 104);
             ctx.drawString(font, name, x + 20, rowY + 5, 0xFFDDDDDD, false);
@@ -736,7 +740,7 @@ public class CustomRecipesScreen extends Screen {
     }
 
     private void renderIngredientRow(GuiGraphics ctx, ShapelessIngredient row, int x, int y) {
-        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(row.itemId()));
+        var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(row.itemId()));
         if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, y + 1);
         String name = font.plainSubstrByWidth(toName(row.itemId()), 104);
         ctx.drawString(font, name, x + 20, y + 5, 0xFFDDDDDD, false);
@@ -835,7 +839,9 @@ public class CustomRecipesScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mx, double my, int button) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
+        double mx = click.x(), my = click.y();
+        int button = click.button();
         if (quickAddEditMode && button == 1) {
             quickAddEditMode = false;
             clearWidgets(); init();
@@ -869,7 +875,7 @@ public class CustomRecipesScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(mx, my, button);
+        return super.mouseClicked(click, focused);
     }
 
     @Override
@@ -894,18 +900,21 @@ public class CustomRecipesScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+    public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
+        double mouseX = click.x(), mouseY = click.y();
         if (draggingRecipeScrollbar) {
             updateRecipeScrollbar(mouseY);
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+        return super.mouseDragged(click, deltaX, deltaY);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(MouseButtonEvent click) {
+        double mouseX = click.x(), mouseY = click.y();
+        int button = click.button();
         draggingRecipeScrollbar = false;
-        return super.mouseReleased(mouseX, mouseY, button);
+        return super.mouseReleased(click);
     }
 
     private void updateRecipeScrollbar(double mouseY) {
@@ -992,7 +1001,7 @@ public class CustomRecipesScreen extends Screen {
     private String firstEnabledConflict(CustomRecipeEntry entry) {
         if (entry.conflicting_recipes == null) return null;
         return entry.conflicting_recipes.stream()
-                .filter(id -> id != null && !parent.disabledRecipes.contains(id))
+                .filter(this::isConflictEnabled)
                 .findFirst()
                 .orElse(null);
     }
@@ -1000,9 +1009,52 @@ public class CustomRecipesScreen extends Screen {
     private String firstEnabledSameShapeRecipe(CustomRecipeEntry entry) {
         if (entry.same_shape_recipes == null) return null;
         return entry.same_shape_recipes.stream()
-                .filter(id -> id != null && !parent.disabledRecipes.contains(id))
+                .filter(this::isConflictEnabled)
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * Conflict ids can name vanilla/mod recipes, optional bundled templates, or
+     * another Custom Recipe entry. Each category stores its enabled state in a
+     * different place, so checking disabledRecipes alone left stale warnings.
+     */
+    private boolean isConflictEnabled(String id) {
+        if (id == null || parent.disabledRecipes.contains(id)) return false;
+
+        Identifier recipeId = Identifier.tryParse(id);
+        if (recipeId != null
+                && recipeId.getNamespace().equals(CustomRecipeMod.MOD_ID)
+                && BuiltinRecipeIds.contains(recipeId.getPath())) {
+            return !parent.isBuiltinRecipeDisabled(recipeId.getPath());
+        }
+
+        for (CustomRecipeEntry candidate : recipes) {
+            if (candidate != null && candidate.serverRecipeId().toString().equals(id)) {
+                return isActiveForThisScreen(candidate);
+            }
+        }
+        return true;
+    }
+
+    private void disableConflict(String id) {
+        Identifier recipeId = Identifier.tryParse(id);
+        if (recipeId != null
+                && recipeId.getNamespace().equals(CustomRecipeMod.MOD_ID)
+                && BuiltinRecipeIds.contains(recipeId.getPath())) {
+            parent.initializeBuiltinRecipes();
+            if (!parent.disabled.contains(recipeId.getPath())) parent.disabled.add(recipeId.getPath());
+            return;
+        }
+
+        for (CustomRecipeEntry candidate : recipes) {
+            if (candidate != null && candidate.serverRecipeId().toString().equals(id)) {
+                candidate.enabled = Boolean.FALSE;
+                return;
+            }
+        }
+
+        if (!parent.disabledRecipes.contains(id)) parent.disabledRecipes.add(id);
     }
 
     private boolean isActiveForThisScreen(CustomRecipeEntry entry) {

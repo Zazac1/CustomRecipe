@@ -12,6 +12,12 @@ public final class WorldRecipeConfig {
     public List<CustomRecipeEntry> custom_recipes = new ArrayList<>();
     public List<String> disabled_builtin = new ArrayList<>();
     public List<String> known_by_default_builtin = new ArrayList<>();
+
+    /**
+     * Built-in templates are opt-in. False means this target has never
+     * selected any of the bundled data-pack recipes, so none is loaded.
+     */
+    public boolean builtin_recipes_initialized = false;
     public List<String> disabled_recipes = new ArrayList<>();
     public List<RecipeVariantRule> disabled_recipe_variants = new ArrayList<>();
 

@@ -31,7 +31,7 @@ public abstract class CraftingScreenHandlerMixin {
             RecipeHolder<CraftingRecipe> requested) {
         if (input instanceof CraftingInput craftingInput
                 && requested != null
-                && requested.id().getNamespace().equals(CustomRecipeMod.MOD_ID)
+                && requested.id().identifier().getNamespace().equals(CustomRecipeMod.MOD_ID)
                 && requested.value().matches(craftingInput, level)) {
             return Optional.of(requested);
         }

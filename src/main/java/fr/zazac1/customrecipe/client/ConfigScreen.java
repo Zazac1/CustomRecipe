@@ -1,6 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
+import fr.zazac1.customrecipe.BuiltinRecipeIds;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.ModConfig;
@@ -11,6 +12,7 @@ import fr.zazac1.customrecipe.WorldRecipeConfig;
 import fr.zazac1.customrecipe.WorldRecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.Minecraft;
@@ -18,7 +20,7 @@ import net.minecraft.client.gui.components.MultiLineTextWidget;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,6 +48,7 @@ public class ConfigScreen extends Screen {
     final List<RecipeVariantRule> disabledRecipeVariants;
     final List<String> hiddenQuickAddBuiltin;
     final List<CustomRecipeEntry> quickAddRecipes;
+    private boolean builtinRecipesInitialized;
 
     public ConfigScreen(Screen parent) {
         this(parent, ConfigLoader.get(), "Custom Recipe", false, ConfigLoader::saveAndInvalidate, null, false);
@@ -126,6 +129,7 @@ public class ConfigScreen extends Screen {
         this.disabledRecipeVariants = new ArrayList<>(targetConfig.disabled_recipe_variants);
         this.hiddenQuickAddBuiltin = new ArrayList<>(targetConfig.hidden_quick_add_builtin);
         this.quickAddRecipes = new ArrayList<>(targetConfig.quick_add_recipes);
+        this.builtinRecipesInitialized = targetConfig.builtin_recipes_initialized;
         this.initialConfigJson = ConfigLoader.toJson(baseConfig);
     }
 
@@ -156,7 +160,7 @@ public class ConfigScreen extends Screen {
         addRenderableWidget(Button.builder(Component.empty(), b -> minecraft.setScreen(new ModSettingsScreen(this)))
                 .bounds(width - 28, height - 28, 20, 20).build());
         addRenderableOnly((ctx, mouseX, mouseY, delta) -> CustomRecipeSprites.draw(ctx,
-                ResourceLocation.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "textures/gui/icons/settings.png"), width - 26, height - 26, 16, 16));
+                Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "textures/gui/icons/settings.png"), width - 26, height - 26, 16, 16));
 
         Button selectWorld = Button.builder(Component.empty(),
                 b -> minecraft.setScreen(new RecipeTargetSelectScreen(this)))
@@ -220,8 +224,8 @@ public class ConfigScreen extends Screen {
             int iconX = x + 10;
             int iconY = y + 6;
             if (label.equals(Component.translatable("customrecipe.home.select_world").getString())) {
-                ResourceLocation globe = ResourceLocation.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "textures/gui/world_globe.png");
-                ctx.blit(globe, iconX + 1, y + 6,
+                Identifier globe = Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "textures/gui/world_globe.png");
+                ctx.blit(RenderPipelines.GUI_TEXTURED, globe, iconX + 1, y + 6,
                         0, 0, 16, 16, 16, 16);
             } else {
                 ctx.renderItem(new ItemStack(icon), iconX + 2, iconY);
@@ -494,6 +498,7 @@ public class ConfigScreen extends Screen {
         targetConfig.custom_recipes = new ArrayList<>(recipes);
         targetConfig.disabled_builtin = new ArrayList<>(disabled);
         targetConfig.known_by_default_builtin = new ArrayList<>(knownByDefaultBuiltin);
+        targetConfig.builtin_recipes_initialized = builtinRecipesInitialized;
         targetConfig.disabled_recipes = new ArrayList<>(disabledRecipes);
         targetConfig.disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
         targetConfig.hidden_quick_add_builtin = new ArrayList<>(hiddenQuickAddBuiltin);
@@ -509,6 +514,7 @@ public class ConfigScreen extends Screen {
         disabled.addAll(replacement.disabled_builtin);
         knownByDefaultBuiltin.clear();
         knownByDefaultBuiltin.addAll(replacement.known_by_default_builtin);
+        builtinRecipesInitialized = replacement.builtin_recipes_initialized;
         disabledRecipes.clear();
         disabledRecipes.addAll(replacement.disabled_recipes);
         disabledRecipeVariants.clear();
@@ -517,6 +523,18 @@ public class ConfigScreen extends Screen {
         hiddenQuickAddBuiltin.addAll(replacement.hidden_quick_add_builtin);
         quickAddRecipes.clear();
         quickAddRecipes.addAll(replacement.quick_add_recipes);
+    }
+
+    boolean isBuiltinRecipeDisabled(String id) {
+        return !builtinRecipesInitialized || disabled.contains(id);
+    }
+
+    /** Starts an explicit built-in selection with every template disabled. */
+    void initializeBuiltinRecipes() {
+        if (builtinRecipesInitialized) return;
+        disabled.clear();
+        disabled.addAll(BuiltinRecipeIds.ALL);
+        builtinRecipesInitialized = true;
     }
 
     @Override

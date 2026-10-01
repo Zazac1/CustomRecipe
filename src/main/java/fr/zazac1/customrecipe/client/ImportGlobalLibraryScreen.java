@@ -44,10 +44,12 @@ final class ImportGlobalLibraryScreen extends Screen {
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        // The modal owns the active Screen background pass, so reproduce the
+        // library screen's background before drawing its contextual contents.
+        returnTo.renderBackground(context, mouseX, mouseY, delta);
         returnTo.render(context, mouseX, mouseY, delta);
         // Keep the confirmation above deferred labels from the library table.
-        context.pose().pushPose();
-        context.pose().translate(0.0f, 0.0f, 200.0f);
+        context.pose().pushMatrix();
         context.fill(0, 0, width, height, 0x98000000);
 
         int panelWidth = 340;
@@ -65,7 +67,7 @@ final class ImportGlobalLibraryScreen extends Screen {
                 width / 2, panelY + 31, 0xFFE0E6E3);
         context.drawCenteredString(font, Component.translatable("customrecipe.import.safe"),
                 width / 2, panelY + 45, 0xFFB8C7C1);
-        context.pose().popPose();
+        context.pose().popMatrix();
     }
 
     private void drawBorder(GuiGraphics context, int x, int y, int width, int height, int color) {

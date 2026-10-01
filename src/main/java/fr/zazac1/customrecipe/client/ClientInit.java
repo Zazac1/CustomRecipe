@@ -92,8 +92,8 @@ public final class ClientInit {
             }
             Component editorLink = Component.translatable("customrecipe.chat.world_tip.link")
                     .setStyle(Style.EMPTY.withColor(ChatFormatting.AQUA).withUnderlined(true)
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_open_local"))
-                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("customrecipe.chat.world_tip.hover"))));
+                            .withClickEvent(new ClickEvent.RunCommand("/customrecipe_open_local"))
+                            .withHoverEvent(new HoverEvent.ShowText(Component.translatable("customrecipe.chat.world_tip.hover"))));
             client.player.displayClientMessage(Component.translatable("customrecipe.chat.world_tip", editorLink), false);
             CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
     }

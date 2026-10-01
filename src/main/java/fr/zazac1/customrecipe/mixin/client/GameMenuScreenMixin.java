@@ -6,8 +6,9 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -16,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Adds the local-world entry point without altering vanilla pause-menu layout. */
 @Mixin(value = PauseScreen.class, remap = false)
 public abstract class GameMenuScreenMixin extends Screen {
-    private static final ResourceLocation RECIPE_CREATOR_LOGO = ResourceLocation.fromNamespaceAndPath(CustomRecipeMod.MOD_ID,
+    private static final Identifier RECIPE_CREATOR_LOGO = Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID,
             "textures/gui/pause_button.png");
 
     protected GameMenuScreenMixin(Component title) {
@@ -34,7 +35,7 @@ public abstract class GameMenuScreenMixin extends Screen {
                 .tooltip(Tooltip.create(Component.translatable("customrecipe.tooltip.open")))
                 .bounds(buttonX, buttonY, 20, 20).build());
         addRenderableOnly((context, mouseX, mouseY, delta) -> context.blit(
-                RECIPE_CREATOR_LOGO,
+                RenderPipelines.GUI_TEXTURED, RECIPE_CREATOR_LOGO,
                 buttonX + 2, buttonY + 2, 0, 0, 16, 16, 16, 16));
     }
 }

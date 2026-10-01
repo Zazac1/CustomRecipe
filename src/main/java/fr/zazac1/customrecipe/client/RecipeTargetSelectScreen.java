@@ -1,10 +1,13 @@
 package fr.zazac1.customrecipe.client;
 
+import net.minecraft.client.input.MouseButtonEvent;
+
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import fr.zazac1.customrecipe.WorldRecipeTarget;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -16,7 +19,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -122,19 +125,19 @@ final class RecipeTargetSelectScreen extends Screen {
     private WorldDetails readWorldDetails(Path directory, String fallbackName) {
         try {
             CompoundTag data = NbtIo.readCompressed(directory.resolve("level.dat"), NbtAccounter.unlimitedHeap())
-                    .getCompound("Data");
-            String name = data.contains("LevelName", 8) ? data.getString("LevelName") : fallbackName;
-            long lastPlayed = data.contains("LastPlayed", 4) ? data.getLong("LastPlayed") : 0L;
-            int gameType = data.contains("GameType", 3) ? data.getInt("GameType") : 0;
+                    .getCompound("Data").orElse(new CompoundTag());
+            String name = data.getString("LevelName").orElse(fallbackName);
+            long lastPlayed = data.getLong("LastPlayed").orElse(0L);
+            int gameType = data.getInt("GameType").orElse(0);
             String mode = switch (gameType) {
                 case 1 -> Component.translatable("customrecipe.world.creative").getString();
                 case 2 -> Component.translatable("customrecipe.world.adventure").getString();
                 case 3 -> Component.translatable("customrecipe.world.spectator").getString();
                 default -> Component.translatable("customrecipe.world.survival").getString();
             };
-            String commands = data.contains("allowCommands", 1) && data.getBoolean("allowCommands") ? Component.translatable("customrecipe.world.commands").getString() : "";
-            CompoundTag versionData = data.contains("Version", 10) ? data.getCompound("Version") : new CompoundTag();
-            String version = versionData.contains("Name", 8) ? versionData.getString("Name") : Component.translatable("customrecipe.world.unknown_version").getString();
+            String commands = data.getBoolean("allowCommands").orElse(false) ? Component.translatable("customrecipe.world.commands").getString() : "";
+            CompoundTag versionData = data.getCompound("Version").orElse(new CompoundTag());
+            String version = versionData.getString("Name").orElse(Component.translatable("customrecipe.world.unknown_version").getString());
             String played = lastPlayed > 0 ? name + " (" + LAST_PLAYED_FORMAT.format(Instant.ofEpochMilli(lastPlayed)) + ")" : name;
             return new WorldDetails(name, played, mode + commands + Component.translatable("customrecipe.world.version", version).getString());
         } catch (IOException | RuntimeException ignored) {
@@ -147,11 +150,11 @@ final class RecipeTargetSelectScreen extends Screen {
         if (!Files.isRegularFile(iconPath)) return null;
         try (InputStream input = Files.newInputStream(iconPath)) {
             NativeImage image = NativeImage.read(input);
-            ResourceLocation textureId = ResourceLocation.fromNamespaceAndPath(CustomRecipeMod.MOD_ID,
+            Identifier textureId = Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID,
                     "dynamic/target_worlds/" + id.replaceAll("[^a-z0-9_./-]", "_"));
             WorldIcon icon = new WorldIcon(textureId, image.getWidth(), image.getHeight());
             minecraft.getTextureManager().register(textureId,
-                    new DynamicTexture(image));
+                    new DynamicTexture(() -> "customrecipe_target_world", image));
             return icon;
         } catch (IOException | RuntimeException ignored) {
             return null;
@@ -185,7 +188,9 @@ final class RecipeTargetSelectScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
+        double mouseX = click.x(), mouseY = click.y();
+        int button = click.button();
         if (hasScrollBar() && mouseX >= scrollBarX() - 2 && mouseX <= scrollBarX() + 8
                 && mouseY >= rowsTop() && mouseY < rowsBottom()) {
             setScrollFromMouse(mouseY);
@@ -203,7 +208,7 @@ final class RecipeTargetSelectScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(click, focused);
     }
 
     @Override
@@ -229,7 +234,7 @@ final class RecipeTargetSelectScreen extends Screen {
             context.fill(listX(), y, listX() + listW(), y + ROW - 1, hovered ? 0x77335A42 : 0x66101010);
             drawBox(context, listX(), y, listW(), ROW, hovered ? 0xFFFFFFFF : 0xFF505050);
             if (world.icon != null) {
-                context.blit(world.icon.id, listX() + 4, y + 5, 0, 0,
+                context.blit(RenderPipelines.GUI_TEXTURED, world.icon.id, listX() + 4, y + 5, 0, 0,
                         32, 32, world.icon.width, world.icon.height);
             } else {
                 context.renderItem(new ItemStack(Items.GRASS_BLOCK), listX() + 12, y + 13);
@@ -267,7 +272,7 @@ final class RecipeTargetSelectScreen extends Screen {
     @Override
     public void onClose() { minecraft.setScreen(settingsParent != null ? settingsParent : parent); }
 
-    private record WorldIcon(ResourceLocation id, int width, int height) {}
+    private record WorldIcon(Identifier id, int width, int height) {}
     private record WorldDetails(String name, String lastPlayed, String description) {}
     private record LocalWorld(String id, String name, String lastPlayed, String description, WorldIcon icon) {}
 }

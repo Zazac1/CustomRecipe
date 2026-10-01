@@ -1,4 +1,4 @@
-# Modrinth release - Custom Recipe 1.3.5 NeoForge
+# Modrinth release - Custom Recipe 1.3.5 NeoForge 1.21.11
 
 ## Version type
 
@@ -6,11 +6,11 @@ Release
 
 ## Version number
 
-1.3.5-1.21.1-(NeoForge)
+1.3.5+1.21.11-neoforge
 
 ## Version subtitle
 
-v1.3.5 for Minecraft 1.21.1 (NeoForge)
+v1.3.5 for Minecraft 1.21.11 (NeoForge)
 
 ## Loader
 
@@ -18,17 +18,17 @@ NeoForge
 
 ## Game version
 
-1.21.1
+1.21.11
 
 ## File
 
-`build/libs/customrecipe-1.3.5+1.21.1.jar`
+`build/libs/customrecipe-1.3.5+1.21.11.jar`
 
 ## Version changelog
 
-### NeoForge 1.21.1 support
+### NeoForge 1.21.11 support
 
-- Added support for Minecraft 1.21.1 using NeoForge.
+- Added support for Minecraft 1.21.11 using NeoForge.
 - Adapted the Custom Recipe editor, Global Library, per-world configurations, and backup import/export flow for NeoForge.
 - Existing Custom Recipe configurations and recipe IDs remain supported.
 
@@ -36,8 +36,13 @@ NeoForge
 
 - Adapted `/customrecipe` so server operators edit the world currently loaded by the server.
 - Global Library recipes can be staged in the server editor, then added selectively to that server world.
-- Disabled recipes are removed from crafting, the recipe book, and synchronized recipe catalogs used by recipe viewers.
-- Fixed disabled recipes still appearing as craftable in REI after saving a server configuration.
+- Disabled recipes are removed from crafting and the recipe book while remaining manageable in the editor.
+- Fixed recipe-conflict warnings for recipes affected by disabled or material-filtered recipe rules.
+
+### REI compatibility
+
+- Preserved Roughly Enough Items (REI) compatibility for NeoForge 1.21.11.
+- REI refreshes after joining a world and after server recipe changes, so it follows the enabled recipe catalogue.
 
 ### Recipe browsing
 

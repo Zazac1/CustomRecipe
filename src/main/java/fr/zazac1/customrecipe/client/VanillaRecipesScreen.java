@@ -18,7 +18,7 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.repository.ServerPacksSource;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -285,10 +285,10 @@ public class VanillaRecipesScreen extends Screen {
         String loweredQuery = query.trim().toLowerCase(Locale.ROOT);
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
         Set<String> matchedIds = new HashSet<>();
-        Map<ResourceLocation, Resource> resources = minecraft.getResourceManager().listResources("recipe",
+        Map<Identifier, Resource> resources = minecraft.getResourceManager().listResources("recipe",
                 id -> id.getPath().endsWith(".json"));
 
-        for (Map.Entry<ResourceLocation, Resource> resource : resources.entrySet()) {
+        for (Map.Entry<Identifier, Resource> resource : resources.entrySet()) {
             try (var input = resource.getValue().open()) {
                 String json = new String(input.readAllBytes(), StandardCharsets.UTF_8);
                 String recipeId = resource.getKey().getNamespace() + ":" + resource.getKey().getPath()
@@ -503,9 +503,9 @@ public class VanillaRecipesScreen extends Screen {
 
     /** Mirrors the server variant query using the vanilla JSON and minecraft item tags. */
     private fr.zazac1.customrecipe.VanillaRecipeDetails findLocalRecipeDetails(String recipeId) {
-        ResourceLocation id = ResourceLocation.tryParse(recipeId);
+        Identifier id = Identifier.tryParse(recipeId);
         if (id == null) return new fr.zazac1.customrecipe.VanillaRecipeDetails(recipeId, List.of());
-        ResourceLocation resourceId = ResourceLocation.fromNamespaceAndPath(id.getNamespace(), "recipe/" + id.getPath() + ".json");
+        Identifier resourceId = Identifier.fromNamespaceAndPath(id.getNamespace(), "recipe/" + id.getPath() + ".json");
         Optional<String> json = readLocalRecipeJson(resourceId);
         if (json.isEmpty()) return new fr.zazac1.customrecipe.VanillaRecipeDetails(recipeId, List.of());
 
@@ -547,7 +547,7 @@ public class VanillaRecipesScreen extends Screen {
         }
     }
 
-    private Optional<String> readLocalRecipeJson(ResourceLocation resourceId) {
+    private Optional<String> readLocalRecipeJson(Identifier resourceId) {
         try {
             var resource = minecraft.getResourceManager().getResource(resourceId).orElse(null);
             if (resource != null) {
@@ -599,7 +599,7 @@ public class VanillaRecipesScreen extends Screen {
         if (element.isJsonPrimitive()) {
             String raw = element.getAsString();
             if (raw.startsWith("#")) {
-                ResourceLocation tagId = ResourceLocation.tryParse(raw.substring(1));
+                Identifier tagId = Identifier.tryParse(raw.substring(1));
                 if (tagId != null) collectLocalTagItems(tagId, choices, new HashSet<>());
             } else if (!raw.isBlank()) {
                 choices.add(raw);
@@ -617,23 +617,26 @@ public class VanillaRecipesScreen extends Screen {
             return;
         }
         if (object.has("tag")) {
-            ResourceLocation tagId = ResourceLocation.tryParse(object.get("tag").getAsString());
+            Identifier tagId = Identifier.tryParse(object.get("tag").getAsString());
             if (tagId != null) collectLocalTagItems(tagId, choices, new HashSet<>());
         }
     }
 
     /** Reads tag JSON too, so variants are available from ModMenu before joining a world. */
-    private void collectLocalTagItems(ResourceLocation tagId, Set<String> choices, Set<ResourceLocation> visited) {
+    private void collectLocalTagItems(Identifier tagId, Set<String> choices, Set<Identifier> visited) {
         if (!visited.add(tagId)) return;
         try {
-            BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, tagId)).ifPresent(entries -> {
-                for (var entry : entries) choices.add(BuiltInRegistries.ITEM.getKey(entry.value()).toString());
-            });
+            if (minecraft.level != null) {
+                minecraft.level.registryAccess().lookupOrThrow(Registries.ITEM)
+                        .get(TagKey.create(Registries.ITEM, tagId)).ifPresent(entries -> {
+                            for (var entry : entries) choices.add(BuiltInRegistries.ITEM.getKey(entry.value()).toString());
+                        });
+            }
             if (!choices.isEmpty()) return;
         } catch (IllegalStateException ignored) {
             // At the title screen tags may not be bound yet; use their JSON below.
         }
-        ResourceLocation tagResource = ResourceLocation.fromNamespaceAndPath(tagId.getNamespace(), "tags/item/" + tagId.getPath() + ".json");
+        Identifier tagResource = Identifier.fromNamespaceAndPath(tagId.getNamespace(), "tags/item/" + tagId.getPath() + ".json");
         Optional<String> json = readLocalRecipeJson(tagResource);
         if (json.isEmpty()) return;
         try {
@@ -644,7 +647,7 @@ public class VanillaRecipesScreen extends Screen {
                         : value.isJsonObject() && value.getAsJsonObject().has("id")
                         ? value.getAsJsonObject().get("id").getAsString() : "";
                 if (raw.startsWith("#")) {
-                    ResourceLocation nested = ResourceLocation.tryParse(raw.substring(1));
+                    Identifier nested = Identifier.tryParse(raw.substring(1));
                     if (nested != null) collectLocalTagItems(nested, choices, visited);
                 } else if (!raw.isBlank()) {
                     choices.add(raw);
@@ -688,7 +691,7 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     private String itemName(String id) {
-        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
+        var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(id));
         return item == null || item == Items.AIR ? shortId(id) : new ItemStack(item).getHoverName().getString();
     }
 
@@ -725,7 +728,7 @@ public class VanillaRecipesScreen extends Screen {
             int rowColor = recipe.special() ? 0x22335566
                     : parent.disabledRecipes.contains(recipe.id()) ? 0x44550000 : 0x22005500;
             ctx.fill(6, y, width - 88, y + ROW - 1, rowColor);
-            var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(recipe.result()));
+            var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(recipe.result()));
             if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), 10, y + 2);
         }
         if (loading) ctx.drawString(font, Component.translatable("customrecipe.vanilla.loading_more"), 8, height - 42, 0xFFBBBBBB, false);

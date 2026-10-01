@@ -10,7 +10,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.List;
 
@@ -139,12 +139,12 @@ public final class VanillaRecipeDetailsScreen extends Screen {
 
     private void drawItem(GuiGraphics ctx, String id, int x, int y) {
         if (id == null || id.isBlank() || id.startsWith("#")) return;
-        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
+        var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(id));
         if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, y);
     }
 
     private String itemName(String id) {
-        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
+        var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(id));
         return item == null || item == Items.AIR ? id : new ItemStack(item).getHoverName().getString();
     }
 

@@ -7,6 +7,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.ShapedRecipe;
@@ -17,8 +18,11 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.protocol.game.ClientboundUpdateRecipesPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.ChatFormatting;
+import net.minecraft.server.permissions.Permissions;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -46,7 +50,7 @@ public final class ServerConfigNetworking {
     private static final int VANILLA_PAGE_SIZE = 40;
     private static final Gson GSON = new Gson();
     /** Known book entries hidden temporarily by this mod, per connected player. */
-    private static final Map<UUID, Set<ResourceLocation>> HIDDEN_RECIPE_BOOK_ENTRIES = new HashMap<>();
+    private static final Map<UUID, Set<Identifier>> HIDDEN_RECIPE_BOOK_ENTRIES = new HashMap<>();
     /** Players awaiting the filtered recipe catalogue after vanilla's data-pack packet. */
     private static final Set<UUID> PENDING_RECIPE_CATALOGUES = new LinkedHashSet<>();
 
@@ -59,8 +63,11 @@ public final class ServerConfigNetworking {
     }
 
     private static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player && player.getServer() != null) {
-            awardDefaultRecipes(player, player.getServer(), false);
+        if (event.getEntity() instanceof ServerPlayer player && server(player) != null) {
+            awardDefaultRecipes(player, server(player), false);
+            // Queue a post-sync refresh so REI reads the final server recipe
+            // catalogue after the vanilla login packet.
+            PENDING_RECIPE_CATALOGUES.add(player.getUUID());
         }
     }
 
@@ -76,44 +83,45 @@ public final class ServerConfigNetworking {
     private static void onServerTickPost(ServerTickEvent.Post event) {
         if (PENDING_RECIPE_CATALOGUES.isEmpty()) return;
         net.minecraft.server.MinecraftServer server = event.getServer();
+        WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
         Set<UUID> pending = new HashSet<>(PENDING_RECIPE_CATALOGUES);
         PENDING_RECIPE_CATALOGUES.removeAll(pending);
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (!pending.contains(player.getUUID())) continue;
             syncVisibleRecipes(player, server);
             awardDefaultRecipes(player, server, true);
-            // This follows the replacement packet, so REI reads the same
-            // enabled-only client recipe manager as the recipe book.
+            // This follows the replacement packet, so REI rebuilds displays
+            // from the same enabled-only client catalogue as the recipe book.
             ModNetworking.send(player, ModNetworking.Action.REFRESH_REI, "");
         }
     }
 
     /**
      * Keep disabled recipes in the server manager for the 1.21.1 recipe codec,
-     * while publishing an enabled-only catalogue to clients. REI and JEI both
-     * build their displays from this synchronized client catalogue, so neither
-     * can advertise a recipe that Custom Recipe rejects on the server.
+     * while publishing an enabled-only catalogue to clients, including REI.
      */
     private static void syncVisibleRecipes(ServerPlayer player, net.minecraft.server.MinecraftServer server) {
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
-        Set<String> blockedIds = new HashSet<>(config.disabled_recipes);
-        for (RecipeVariantRule rule : config.disabled_recipe_variants) {
-            if (rule != null && rule.recipe_id != null && !rule.recipe_id.isBlank()) blockedIds.add(rule.recipe_id);
-        }
-        List<RecipeHolder<?>> visible = server.getRecipeManager().getRecipes().stream()
-                .filter(recipe -> !blockedIds.contains(recipe.id().toString()))
-                .toList();
-        player.connection.send(new ClientboundUpdateRecipesPacket(visible));
+        player.connection.send(new ClientboundUpdateRecipesPacket(
+                server.getRecipeManager().getSynchronizedItemProperties(),
+                server.getRecipeManager().getSynchronizedStonecutterRecipes()));
     }
 
     private static void registerCommands(RegisterCommandsEvent event) {
+        // The local editor is opened from the client configuration screen.
+        // Do not expose the server-authoritative command from an integrated
+        // single-player server: its configuration flow is intentionally for
+        // dedicated servers only.
+        net.minecraft.server.MinecraftServer server =
+                net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
+        if (server == null || !server.isDedicatedServer()) return;
         event.getDispatcher().register(literal("customrecipe")
-                .requires(source -> source.hasPermission(2))
+                .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
                 .executes(context -> openEditor(context.getSource())));
     }
 
     public static void handleSave(ServerPlayer player, String json) {
-            if (!player.hasPermissions(2)) {
+            if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)) {
                 player.sendSystemMessage(Component.translatable("customrecipe.chat.permission_denied"));
                 return;
             }
@@ -134,32 +142,32 @@ public final class ServerConfigNetworking {
             // SAVE_RESULT is the single user-facing acknowledgement.  Sending it here as
             // chat as well made NeoForge clients display the same confirmation twice.
             ModNetworking.send(player, ModNetworking.Action.SAVE_RESULT, "customrecipe.chat.server_applying");
-            if (player.getServer() != null) player.getServer().getCommands().performPrefixedCommand(
+            if (server(player) != null) server(player).getCommands().performPrefixedCommand(
                     player.createCommandSourceStack().withSuppressedOutput(), "reload");
     }
 
     public static void handleValidate(ServerPlayer player, String json) {
-            if (!player.hasPermissions(2)
-                    || json.length() > MAX_JSON_CHARS || player.getServer() == null) return;
+            if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)
+                    || json.length() > MAX_JSON_CHARS || server(player) == null) return;
             ModConfig config = ConfigLoader.fromJson(json);
             if (config == null) return;
-            validateProposedConfig(player.getServer(), config);
+            validateProposedConfig(server(player), config);
             String validated = ConfigLoader.toJson(config);
             if (validated.length() <= MAX_JSON_CHARS) ModNetworking.send(player, ModNetworking.Action.VALIDATED_CONFIG, validated);
     }
 
     public static void handleVanillaQuery(ServerPlayer player, String json) {
-            if (!player.hasPermissions(2) || player.getServer() == null || json.length() > MAX_JSON_CHARS) return;
+            if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER) || server(player) == null || json.length() > MAX_JSON_CHARS) return;
             RecipeQuery query = GSON.fromJson(json, RecipeQuery.class);
             if (query == null) return;
-            VanillaRecipePage page = findVanillaRecipes(player.getServer(), query);
+            VanillaRecipePage page = findVanillaRecipes(server(player), query);
             String result = GSON.toJson(page);
             if (result.length() <= MAX_JSON_CHARS) ModNetworking.send(player, ModNetworking.Action.VANILLA_PAGE, result);
     }
 
     public static void handleVanillaDetailsQuery(ServerPlayer player, String recipeId) {
-            if (!player.hasPermissions(2) || player.getServer() == null || recipeId.length() > 512) return;
-            VanillaRecipeDetails details = findVanillaRecipeDetails(player.getServer(), recipeId);
+            if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER) || server(player) == null || recipeId.length() > 512) return;
+            VanillaRecipeDetails details = findVanillaRecipeDetails(server(player), recipeId);
             String result = GSON.toJson(details);
             if (result.length() <= MAX_JSON_CHARS) ModNetworking.send(player, ModNetworking.Action.VANILLA_DETAILS_PAGE, result);
     }
@@ -173,14 +181,19 @@ public final class ServerConfigNetworking {
             List<String> conflicts = new ArrayList<>();
             List<String> sameShape = new ArrayList<>();
             RecipeHolder<?> customEntry = server.getRecipeManager()
-                    .byKey(entry.serverRecipeId()).orElse(null);
-            if (customEntry != null && customEntry.value() instanceof CraftingRecipe custom) {
+                    .byKey(recipeKey(entry.serverRecipeId())).orElse(null);
+            if (customEntry != null && customEntry.value() instanceof CraftingRecipe wrappedCustom) {
+                CraftingRecipe custom = unwrap(wrappedCustom);
                 for (RecipeHolder<?> candidate : server.getRecipeManager().getRecipes()) {
-                    ResourceLocation id = candidate.id();
-                    if (!(candidate.value() instanceof CraftingRecipe existing)
+                    Identifier id = candidate.id().identifier();
+                    if (!(candidate.value() instanceof CraftingRecipe wrappedExisting)
                             || (id.getNamespace().equals(CustomRecipeMod.MOD_ID) && id.getPath().startsWith("custom/"))) {
                         continue;
                     }
+                    // The NeoForge recipe manager wraps disabled recipes and
+                    // material-filtered variants. Compare their real shaped /
+                    // shapeless structure, not the wrapper class itself.
+                    CraftingRecipe existing = unwrap(wrappedExisting);
                     if (sameExactInputs(custom, existing)) {
                         if (sameOutputItem(custom, existing, server)) conflicts.add(id.toString());
                         else sameShape.add(id.toString());
@@ -209,7 +222,7 @@ public final class ServerConfigNetworking {
             RecipeSignature signature = Boolean.TRUE.equals(entry.corrupted) ? null : signatureOf(entry);
             if (signature != null) {
                 for (RecipeHolder<?> candidate : server.getRecipeManager().getRecipes()) {
-                    ResourceLocation id = candidate.id();
+                    Identifier id = candidate.id().identifier();
                     if (!(candidate.value() instanceof CraftingRecipe wrapped)
                             || (id.getNamespace().equals(CustomRecipeMod.MOD_ID) && id.getPath().startsWith("custom/"))) {
                         continue;
@@ -257,7 +270,7 @@ public final class ServerConfigNetworking {
 
     private static boolean sameOutputItem(CustomRecipeEntry entry, CraftingRecipe candidate,
                                           net.minecraft.server.MinecraftServer server) {
-        ResourceLocation resultId = ResourceLocation.tryParse(entry.result);
+        Identifier resultId = Identifier.tryParse(entry.result);
         if (resultId == null) return false;
         try {
             ItemStack result = candidate.assemble(CraftingInput.EMPTY, server.registryAccess());
@@ -295,12 +308,12 @@ public final class ServerConfigNetworking {
     private static RecipeSignature signatureOf(CraftingRecipe recipe) {
         if (recipe instanceof ShapedRecipe shaped) {
             List<String> slots = new ArrayList<>();
-            for (Ingredient ingredient : shaped.getIngredients()) {
-                slots.add(ingredient.isEmpty() ? "" : ingredientSignature(ingredient));
+            for (java.util.Optional<Ingredient> ingredient : shaped.getIngredients()) {
+                slots.add(ingredient.map(ServerConfigNetworking::ingredientSignature).orElse(""));
             }
             return trimSignature(true, shaped.getWidth(), shaped.getHeight(), slots);
         }
-        List<String> ingredients = recipe.getIngredients().stream()
+        List<String> ingredients = recipe.placementInfo().ingredients().stream()
                 .map(ServerConfigNetworking::ingredientSignature).sorted().toList();
         return new RecipeSignature(false, ingredients.size(), 1, ingredients);
     }
@@ -336,20 +349,21 @@ public final class ServerConfigNetworking {
             ShapedRecipe a = (ShapedRecipe) first;
             ShapedRecipe b = (ShapedRecipe) second;
             if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) return false;
-            List<Ingredient> ingredientsA = a.getIngredients();
-            List<Ingredient> ingredientsB = b.getIngredients();
+            List<java.util.Optional<Ingredient>> ingredientsA = a.getIngredients();
+            List<java.util.Optional<Ingredient>> ingredientsB = b.getIngredients();
             if (ingredientsA.size() != ingredientsB.size()) return false;
             for (int i = 0; i < ingredientsA.size(); i++) {
-                if (!ingredientSignature(ingredientsA.get(i)).equals(ingredientSignature(ingredientsB.get(i)))) {
+                if (!ingredientsA.get(i).map(ServerConfigNetworking::ingredientSignature).orElse("")
+                        .equals(ingredientsB.get(i).map(ServerConfigNetworking::ingredientSignature).orElse(""))) {
                     return false;
                 }
             }
             return true;
         }
 
-        List<String> firstIngredients = first.getIngredients().stream()
+        List<String> firstIngredients = first.placementInfo().ingredients().stream()
                 .map(ServerConfigNetworking::ingredientSignature).sorted().toList();
-        List<String> secondIngredients = second.getIngredients().stream()
+        List<String> secondIngredients = second.placementInfo().ingredients().stream()
                 .map(ServerConfigNetworking::ingredientSignature).sorted().toList();
         return firstIngredients.equals(secondIngredients);
     }
@@ -368,7 +382,7 @@ public final class ServerConfigNetworking {
     }
 
     private static String ingredientSignature(Ingredient ingredient) {
-        return java.util.Arrays.stream(ingredient.getItems())
+        return ingredient.items().map(net.minecraft.core.Holder::value).map(ItemStack::new)
                 .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
                 .sorted()
                 .collect(java.util.stream.Collectors.joining(","));
@@ -384,14 +398,15 @@ public final class ServerConfigNetworking {
                     || Boolean.TRUE.equals(entry.corrupted)) {
                 continue;
             }
-            server.getRecipeManager().byKey(entry.serverRecipeId())
+            server.getRecipeManager().byKey(recipeKey(entry.serverRecipeId()))
                     .ifPresent(recipes::add);
         }
         for (String builtinId : config.known_by_default_builtin) {
+            if (!config.builtin_recipes_initialized) continue;
             if (builtinId == null || config.disabled_builtin.contains(builtinId)) continue;
-            ResourceLocation id = ResourceLocation.tryParse(CustomRecipeMod.MOD_ID + ":" + builtinId);
+            Identifier id = Identifier.tryParse(CustomRecipeMod.MOD_ID + ":" + builtinId);
             if (id == null) continue;
-            server.getRecipeManager().byKey(id)
+            server.getRecipeManager().byKey(recipeKey(id))
                     .ifPresent(recipes::add);
         }
 
@@ -399,7 +414,7 @@ public final class ServerConfigNetworking {
         boolean changed = syncDisabledRecipeBookEntries(player, server, config);
         for (RecipeHolder<?> recipe : recipes) {
             if (!book.contains(recipe.id())) {
-                book.add(recipe);
+                book.add(recipe.id());
                 changed = true;
             }
         }
@@ -416,34 +431,34 @@ public final class ServerConfigNetworking {
      */
     private static boolean syncDisabledRecipeBookEntries(ServerPlayer player, net.minecraft.server.MinecraftServer server,
                                                          WorldRecipeConfig config) {
-        Set<ResourceLocation> blockedIds = new HashSet<>();
+        Set<Identifier> blockedIds = new HashSet<>();
         for (String rawId : config.disabled_recipes) {
-            ResourceLocation id = ResourceLocation.tryParse(rawId);
+            Identifier id = Identifier.tryParse(rawId);
             if (id != null) blockedIds.add(id);
         }
         for (RecipeVariantRule rule : config.disabled_recipe_variants) {
             if (rule == null) continue;
-            ResourceLocation id = ResourceLocation.tryParse(rule.recipe_id);
+            Identifier id = Identifier.tryParse(rule.recipe_id);
             if (id != null) blockedIds.add(id);
         }
 
         var book = player.getRecipeBook();
-        Set<ResourceLocation> previouslyHidden = HIDDEN_RECIPE_BOOK_ENTRIES
+        Set<Identifier> previouslyHidden = HIDDEN_RECIPE_BOOK_ENTRIES
                 .computeIfAbsent(player.getUUID(), ignored -> new HashSet<>());
         boolean changed = false;
 
         // Restore only recipes that were known before Custom Recipe hid them.
-        for (ResourceLocation id : new HashSet<>(previouslyHidden)) {
+        for (Identifier id : new HashSet<>(previouslyHidden)) {
             if (blockedIds.contains(id)) continue;
-            server.getRecipeManager().byKey(id).ifPresent(recipe -> book.add(recipe));
+            server.getRecipeManager().byKey(recipeKey(id)).ifPresent(recipe -> book.add(recipe.id()));
             previouslyHidden.remove(id);
             changed = true;
         }
 
         List<RecipeHolder<?>> toHide = new ArrayList<>();
-        for (ResourceLocation id : blockedIds) {
-            server.getRecipeManager().byKey(id).ifPresent(recipe -> {
-                if (book.contains(recipe)) {
+        for (Identifier id : blockedIds) {
+            server.getRecipeManager().byKey(recipeKey(id)).ifPresent(recipe -> {
+                if (book.contains(recipe.id())) {
                     toHide.add(recipe);
                     previouslyHidden.add(id);
                 }
@@ -507,7 +522,7 @@ public final class ServerConfigNetworking {
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
 
         for (RecipeHolder<?> entry : server.getRecipeManager().getRecipes()) {
-            ResourceLocation recipeId = entry.id();
+            Identifier recipeId = entry.id().identifier();
             if (!(entry.value() instanceof CraftingRecipe wrappedRecipe)
                     // Recipes owned by Custom Recipe are library templates or generated
                     // custom recipes, never entries in the vanilla/mod recipe browser.
@@ -522,7 +537,7 @@ public final class ServerConfigNetworking {
                 // Their recipe ID remains searchable and they can still be disabled.
             }
             boolean special = result.isEmpty();
-            String resultId = result.isEmpty() ? entry.id().toString()
+            String resultId = result.isEmpty() ? entry.id().identifier().toString()
                     : BuiltInRegistries.ITEM.getKey(result.getItem()).toString();
             int gridWidth = 0;
             int gridHeight = 0;
@@ -533,11 +548,11 @@ public final class ServerConfigNetworking {
                 gridWidth = shaped.getWidth();
                 gridHeight = shaped.getHeight();
                 for (var ingredient : shaped.getIngredients()) {
-                    ingredients.add(ingredient.isEmpty() ? "" : firstMatchingId(ingredient));
+                    ingredients.add(ingredient.map(ServerConfigNetworking::firstMatchingId).orElse(""));
                 }
             } else {
                 // Shapeless recipes deliberately keep the JSON ingredient order.
-                for (Ingredient ingredient : recipe.getIngredients()) {
+                for (Ingredient ingredient : recipe.placementInfo().ingredients()) {
                     ingredients.add(firstMatchingId(ingredient));
                 }
             }
@@ -561,7 +576,7 @@ public final class ServerConfigNetworking {
             };
             if (statusMatch && sourceMatch && (query.isEmpty() || recipeIdMatch || outputMatch || ingredientMatch)) {
                 matches.add(new VanillaRecipePage.VanillaRecipeInfo(
-                        entry.id().toString(), resultId,
+                        entry.id().identifier().toString(), resultId,
                         toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
                         gridWidth, gridHeight, shapeless, special));
             }
@@ -576,7 +591,7 @@ public final class ServerConfigNetworking {
     }
 
     private static String firstMatchingId(Ingredient ingredient) {
-        return java.util.Arrays.stream(ingredient.getItems())
+        return ingredient.items().map(net.minecraft.core.Holder::value).map(ItemStack::new)
                 .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
                 .findFirst()
                 .orElse("");
@@ -584,10 +599,10 @@ public final class ServerConfigNetworking {
 
     /** Returns details from the server-owned recipe manager for both local and remote editors. */
     public static VanillaRecipeDetails findVanillaRecipeDetails(net.minecraft.server.MinecraftServer server, String rawId) {
-        var identifier = net.minecraft.resources.ResourceLocation.tryParse(rawId);
+        var identifier = net.minecraft.resources.Identifier.tryParse(rawId);
         if (identifier == null) return new VanillaRecipeDetails(rawId, List.of());
         var id = identifier;
-        RecipeHolder<?> entry = server.getRecipeManager().byKey(id).orElse(null);
+        RecipeHolder<?> entry = server.getRecipeManager().byKey(recipeKey(id)).orElse(null);
         if (entry == null || !(entry.value() instanceof CraftingRecipe wrappedRecipe)) return new VanillaRecipeDetails(rawId, List.of());
         CraftingRecipe recipe = unwrap(wrappedRecipe);
         List<List<String>> choices = new ArrayList<>(java.util.Collections.nCopies(9, List.of()));
@@ -597,16 +612,16 @@ public final class ServerConfigNetworking {
         if (recipe instanceof ShapedRecipe shaped) {
             gridWidth = shaped.getWidth();
             gridHeight = shaped.getHeight();
-            List<Ingredient> ingredients = shaped.getIngredients();
+            List<java.util.Optional<Ingredient>> ingredients = shaped.getIngredients();
             for (int row = 0; row < gridHeight && row < 3; row++) {
                 for (int column = 0; column < gridWidth && column < 3; column++) {
                     int source = row * gridWidth + column;
                     choices.set(row * 3 + column, source < ingredients.size()
-                            ? ingredientChoices(ingredients.get(source)) : List.of());
+                            ? ingredients.get(source).map(ServerConfigNetworking::ingredientChoices).orElse(List.of()) : List.of());
                 }
             }
         } else {
-            List<Ingredient> ingredients = recipe.getIngredients();
+            List<Ingredient> ingredients = recipe.placementInfo().ingredients();
             for (int slot = 0; slot < ingredients.size() && slot < 9; slot++) choices.set(slot, ingredientChoices(ingredients.get(slot)));
         }
 
@@ -635,7 +650,15 @@ public final class ServerConfigNetworking {
 
     private static List<String> ingredientChoices(Ingredient ingredient) {
         if (ingredient == null) return List.of();
-        return java.util.Arrays.stream(ingredient.getItems()).map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()).sorted().toList();
+        return ingredient.items().map(net.minecraft.core.Holder::value).map(ItemStack::new).map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()).sorted().toList();
+    }
+
+    private static ResourceKey<Recipe<?>> recipeKey(Identifier id) {
+        return ResourceKey.create(Registries.RECIPE, id);
+    }
+
+    private static net.minecraft.server.MinecraftServer server(ServerPlayer player) {
+        return net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
     }
 
     /** Always send a final 3x3 layout so no client-side axis interpretation is needed. */

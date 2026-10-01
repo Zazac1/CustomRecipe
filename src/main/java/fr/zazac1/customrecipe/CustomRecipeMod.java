@@ -18,7 +18,7 @@ public final class CustomRecipeMod {
         ModNetworking.initialize(modBus);
         WorldRecipeAssignments.initialize();
         ServerConfigNetworking.initialize();
-        if (FMLEnvironment.dist == Dist.CLIENT) fr.zazac1.customrecipe.client.ClientInit.initialize(modBus, container);
-        LOGGER.info("[CustomRecipe] NeoForge 1.21.1 initialized.");
+        if (FMLEnvironment.getDist() == Dist.CLIENT) fr.zazac1.customrecipe.client.ClientInit.initialize(modBus, container);
+        LOGGER.info("[CustomRecipe] NeoForge 1.21.11 initialized.");
     }
 }

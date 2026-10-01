@@ -7,7 +7,7 @@ import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.packs.resources.Resource;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -68,10 +68,10 @@ final class LocalRecipeConflictDetector {
     private static List<DefaultRecipe> loadDefaults(Minecraft minecraft) {
         List<DefaultRecipe> recipes = new ArrayList<>();
         Set<String> seenIds = new HashSet<>();
-        Map<ResourceLocation, Resource> resources = minecraft.getResourceManager().listResources("recipe",
+        Map<Identifier, Resource> resources = minecraft.getResourceManager().listResources("recipe",
                 id -> id.getPath().endsWith(".json"));
-        for (Map.Entry<ResourceLocation, Resource> resource : resources.entrySet()) {
-            ResourceLocation resourceId = resource.getKey();
+        for (Map.Entry<Identifier, Resource> resource : resources.entrySet()) {
+            Identifier resourceId = resource.getKey();
             if (resourceId.getNamespace().equals(CustomRecipeMod.MOD_ID)
                     && resourceId.getPath().startsWith("recipe/custom/")) continue;
             try (var input = resource.getValue().open()) {
