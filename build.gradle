@@ -100,6 +100,19 @@ tasks.withType(JavaExec).configureEach {
         standardInput = System.in
     }
 }
+
+// ForgeGradle exposes these tasks without descriptions.  Development tools
+// that read `gradlew tasks --all` use the standard "task - description"
+// format to discover launch targets, so advertise both targets explicitly.
+tasks.configureEach {
+    if (name == 'runClient') {
+        group = 'ForgeGradle runs'
+        description = 'Launches the Custom Recipe development client.'
+    } else if (name == 'runServer') {
+        group = 'ForgeGradle runs'
+        description = 'Launches the Custom Recipe development server.'
+    }
+}
 java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
 
 jar {
