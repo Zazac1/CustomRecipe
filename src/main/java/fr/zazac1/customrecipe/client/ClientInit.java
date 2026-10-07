@@ -45,7 +45,9 @@ public class ClientInit implements ClientModInitializer {
     public void onInitializeClient() {
         // Used only by the clickable local-world tip; it never reaches a server.
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
-                literal("customrecipe_open_local").executes(context -> {
+                literal("customrecipe_solo")
+                        .requires(source -> MinecraftClient.getInstance().getServer() != null)
+                        .executes(context -> {
                     MinecraftClient client = MinecraftClient.getInstance();
                     // This client-only helper is for the clickable new-world tip.
                     // Never expose the local editor while connected to a remote server.
@@ -85,7 +87,7 @@ public class ClientInit implements ClientModInitializer {
             }
             Text editorLink = Text.translatable("customrecipe.chat.world_tip.link")
                     .setStyle(Style.EMPTY.withColor(Formatting.AQUA).withUnderline(true)
-                            .withClickEvent(new ClickEvent.RunCommand("/customrecipe_open_local"))
+                            .withClickEvent(new ClickEvent.RunCommand("/customrecipe_solo"))
                             .withHoverEvent(new HoverEvent.ShowText(Text.translatable("customrecipe.chat.world_tip.hover"))));
             client.player.sendMessage(Text.translatable("customrecipe.chat.world_tip", editorLink), false);
             CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
@@ -120,7 +122,9 @@ public class ClientInit implements ClientModInitializer {
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsPayload.ID, (payload, context) -> {
             VanillaRecipeDetails details = GSON.fromJson(payload.json(), VanillaRecipeDetails.class);
-            if (details != null && context.client().currentScreen instanceof VanillaRecipeDetailsScreen screen) {
+            if (details != null && context.client().currentScreen instanceof VanillaRecipesScreen screen) {
+                screen.applyDetails(details);
+            } else if (details != null && context.client().currentScreen instanceof VanillaRecipeDetailsScreen screen) {
                 screen.applyDetails(details);
             }
         });

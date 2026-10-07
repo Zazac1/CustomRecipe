@@ -244,7 +244,7 @@ final class RecipeTargetSelectScreen extends Screen {
         int thumbHeight = Math.max(12, trackHeight * visibleRows() / visibleWorlds().size());
         int travel = trackHeight - thumbHeight;
         int thumbY = trackTop + (maxScroll() == 0 ? 0 : travel * scroll / maxScroll());
-        context.fill(scrollBarX(), trackTop, scrollBarX() + 6, rowsBottom(), 0x88000000);
+        context.fill(scrollBarX(), trackTop, scrollBarX() + 6, rowsBottom(), 0xFF5A5A5A);
         context.fill(scrollBarX(), thumbY, scrollBarX() + 6, thumbY + thumbHeight, 0xFFAAAAAA);
         drawBox(context, scrollBarX(), thumbY, 6, thumbHeight, 0xFFEEEEEE);
     }

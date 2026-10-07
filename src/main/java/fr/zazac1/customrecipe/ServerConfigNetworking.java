@@ -70,7 +70,7 @@ public final class ServerConfigNetworking {
             // This is the dedicated-server editor only. Local worlds use the pause-menu editor.
             if (!environment.dedicated) return;
             dispatcher.register(
-                    literal("customrecipe")
+                    literal("customrecipe_server")
                             .requires(source -> source.getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
                             .executes(context -> openEditor(context.getSource()))
             );
