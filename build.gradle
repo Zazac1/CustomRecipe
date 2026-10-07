@@ -32,19 +32,34 @@ loom {
     runs {
         client {
             runDir = "run-client"
-            // Work around a JDK 25 C2 crash while Minecraft reads model resources.
-            // This applies only to the local development client, never the built mod.
-            vmArg "-XX:TieredStopAtLevel=1"
+            // Match the stable memory/stack settings used by the working
+            // Modrinth 26.3 profile. This affects the dev client only.
+            vmArgs "-Xmx4096M", "-XX:StackShadowPages=32"
         }
         // Isolated diagnostic profile. Its separate run directory has no optional
         // development mods, so it does not alter the normal client profile.
         clientClean {
             client()
             runDir = "run-client-clean"
-            vmArg "-XX:TieredStopAtLevel=1"
+            vmArgs "-Xmx4096M", "-XX:StackShadowPages=32"
         }
         server {
             runDir = "run-server"
+        }
+    }
+}
+
+// Gradle and compilation stay on the project JDK.  Only the local Fabric client
+// uses Modrinth's known-good Zulu JRE when it is installed on this workstation.
+// JavaExec requires java.exe to match Gradle's Java toolchain identity.
+def modrinthAppData = System.getenv("APPDATA")
+if (modrinthAppData != null) {
+    def modrinthClientJava = file("${modrinthAppData}/ModrinthApp/meta/java_versions/zulu25.36.205-ca-jre25.0.4.1-win_x64/bin/java.exe")
+    if (modrinthClientJava.isFile()) {
+        ["runClient", "runClientClean"].each { taskName ->
+            tasks.named(taskName, JavaExec).configure {
+                executable = modrinthClientJava.absolutePath
+            }
         }
     }
 }
