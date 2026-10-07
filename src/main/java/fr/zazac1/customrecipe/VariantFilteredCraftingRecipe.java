@@ -1,5 +1,6 @@
 package fr.zazac1.customrecipe;
 
+import java.util.Set;
 import net.minecraft.item.ItemStack;
 import net.minecraft.recipe.CraftingRecipe;
 import net.minecraft.recipe.Ingredient;
@@ -7,46 +8,63 @@ import net.minecraft.recipe.RecipeSerializer;
 import net.minecraft.recipe.book.CraftingRecipeCategory;
 import net.minecraft.recipe.input.CraftingRecipeInput;
 import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.util.Identifier;
+import net.minecraft.registry.RegistryWrapper.WrapperLookup;
+import net.minecraft.util.collection.DefaultedList;
 import net.minecraft.world.World;
 
-import net.minecraft.util.collection.DefaultedList;
-import java.util.Set;
-
-/** Keeps the original recipe but rejects configured material variants at craft time. */
 public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
-    private final CraftingRecipe delegate;
-    private final Set<String> blockedMaterials;
+   private final CraftingRecipe delegate;
+   private final Set<String> blockedMaterials;
 
-    public VariantFilteredCraftingRecipe(CraftingRecipe delegate, Set<String> blockedMaterials) {
-        this.delegate = delegate;
-        this.blockedMaterials = Set.copyOf(blockedMaterials);
-    }
+   public VariantFilteredCraftingRecipe(CraftingRecipe delegate, Set<String> blockedMaterials) {
+      this.delegate = delegate;
+      this.blockedMaterials = Set.copyOf(blockedMaterials);
+   }
 
-    public CraftingRecipe delegate() { return delegate; }
+   public CraftingRecipe delegate() {
+      return this.delegate;
+   }
 
-    @Override
-    public boolean matches(CraftingRecipeInput input, World world) {
-        if (!delegate.matches(input, world)) return false;
-        return input.getStacks().stream()
-                .filter(stack -> !stack.isEmpty())
-                .map(stack -> Registries.ITEM.getId(stack.getItem()).toString())
-                .noneMatch(blockedMaterials::contains);
-    }
+   public boolean matches(CraftingRecipeInput input, World world) {
+      return !this.delegate.matches(input, world)
+         ? false
+         : input.getStacks()
+            .stream()
+            .filter(stack -> !stack.isEmpty())
+            .map(stack -> Registries.ITEM.getId(stack.getItem()).toString())
+            .noneMatch(this.blockedMaterials::contains);
+   }
 
-    @Override public ItemStack craft(CraftingRecipeInput input, RegistryWrapper.WrapperLookup registries) { return delegate.craft(input, registries); }
-    @Override public boolean fits(int width, int height) { return delegate.fits(width, height); }
-    @Override public ItemStack getResult(RegistryWrapper.WrapperLookup registries) { return delegate.getResult(registries); }
-    @Override public RecipeSerializer<?> getSerializer() { return delegate.getSerializer(); }
-    @Override public CraftingRecipeCategory getCategory() { return delegate.getCategory(); }
-    /**
-     * The vanilla recipe book cannot express "this recipe except birch planks".
-     * Hiding it avoids its auto-fill selecting a blocked material and leaving a
-     * broken crafting grid behind.
-     */
-    @Override public DefaultedList<Ingredient> getIngredients() { return delegate.getIngredients(); }
-    @Override public String getGroup() { return delegate.getGroup(); }
-    @Override public boolean showNotification() { return delegate.showNotification(); }
+   public ItemStack craft(CraftingRecipeInput input, WrapperLookup registries) {
+      return this.delegate.craft(input, registries);
+   }
+
+   public boolean fits(int width, int height) {
+      return this.delegate.fits(width, height);
+   }
+
+   public ItemStack getResult(WrapperLookup registries) {
+      return this.delegate.getResult(registries);
+   }
+
+   public RecipeSerializer<?> getSerializer() {
+      return this.delegate.getSerializer();
+   }
+
+   public CraftingRecipeCategory getCategory() {
+      return this.delegate.getCategory();
+   }
+
+   public DefaultedList<Ingredient> getIngredients() {
+      return this.delegate.getIngredients();
+   }
+
+   public String getGroup() {
+      return this.delegate.getGroup();
+   }
+
+   public boolean showNotification() {
+      return this.delegate.showNotification();
+   }
 }
 

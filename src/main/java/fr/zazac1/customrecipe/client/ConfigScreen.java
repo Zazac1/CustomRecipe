@@ -54,7 +54,10 @@ public class ConfigScreen extends Screen {
     }
 
     public static ConfigScreen fromModMenu(Screen parent) {
-        return new ConfigScreen(parent);
+        ModConfig config = ConfigLoader.get();
+        if ("global".equals(config.default_editor_target_id)) return new ConfigScreen(parent);
+        return new ConfigScreen(parent, config, "Custom Recipe", false, ConfigLoader::saveAndInvalidate,
+                new WorldRecipeTarget(config.default_editor_target_id, config.default_editor_target_name), false);
     }
 
     public static ConfigScreen fromPauseMenu(Screen parent) {

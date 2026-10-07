@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import fr.zazac1.customrecipe.VanillaRecipePage;
+import fr.zazac1.customrecipe.VanillaRecipeDetails;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.loader.api.FabricLoader;
@@ -40,9 +41,15 @@ public class VanillaRecipesScreen extends Screen {
     private static List<VanillaRecipePage.VanillaRecipeInfo> startupRecipeCache = List.of();
     private static boolean startupPreloadStarted;
     private static final int ROW = 20;
-    private static final int HEADER_Y = 34;
-    private static final int SEARCH_Y = 52;
-    private static final int ROWS_Y = 78;
+    private static final int LEFT_HEADER_Y = 34;
+    private static final int LEFT_SEARCH_Y = 52;
+    private static final int LEFT_ROWS_Y = 78;
+    private static final int PREVIEW_TOOLBAR_Y = 32;
+    private static final int PREVIEW_PANEL_Y = 54;
+    private static final int RECIPE_STATE_W = 76;
+    private static final int SCROLLBAR_W = 12;
+    private static final int SCROLLBAR_TRACK_W = SCROLLBAR_W - 1;
+    private static final int SCROLLBAR_TRACK_COLOR = 0xFF5A5A5A;
 
     private enum StatusFilter {
         ALL, ENABLED, DISABLED, SPECIAL
@@ -66,6 +73,54 @@ public class VanillaRecipesScreen extends Screen {
     private int pendingSearchTicks = -1;
     private boolean restoreSearchFocus;
     private TextFieldWidget searchField;
+    private boolean draggingRecipeScrollbar;
+    private VanillaRecipePage.VanillaRecipeInfo selectedRecipe;
+    private VanillaRecipeDetails selectedDetails;
+    private VanillaRecipeDetails.VariantPreview selectedVariant;
+
+    private int recipeContentX() { return recipeBoxX() + 2; }
+    private int recipeContentRight() { return recipeBoxX() + recipeBoxW() - 2; }
+    private int recipeListX() { return recipeContentX(); }
+    private int recipeLabelX() { return recipeListX() + 22; }
+    private int recipeLabelW() { return Math.min(360, Math.max(220, width / 3)); }
+    private int recipeStateX() { return recipeLabelX() + recipeLabelW() + 4; }
+    private int recipeScrollbarX() { return recipeBoxX() + recipeBoxW() - SCROLLBAR_W; }
+    private int recipeScrollbarY() { return recipeBoxY() + 1; }
+    private int recipeScrollbarH() { return Math.max(1, recipeBoxH() - 2); }
+    private int recipeBoxX() { return 6; }
+    private int recipeBoxY() { return LEFT_ROWS_Y - 4; }
+    private int recipeBoxW() { return recipeStateX() + RECIPE_STATE_W + 4 + SCROLLBAR_W - recipeBoxX() + 1; }
+    private int recipeBoxH() { return visibleRows() * ROW + 6; }
+    private int previewBoxX() { return recipeBoxX() + recipeBoxW() + 12; }
+    private int previewBoxW() { return Math.max(80, width - previewBoxX() - 8); }
+    private int previewBoxY() { return PREVIEW_PANEL_Y; }
+    private int previewBoxH() { return recipeBoxY() + recipeBoxH() - previewBoxY(); }
+    private int filterToolbarX() { return recipeStateX(); }
+    private int filterToolbarW() { return Math.max(4, width - filterToolbarX() - 8); }
+    private int filterButtonW() { return Math.max(40, (filterToolbarW() - 12) / 4); }
+    private int filterButtonX(int index) { return filterToolbarX() + index * (filterButtonW() + 4); }
+    private int previewGridX() { return previewBoxX() + previewBoxW() / 2 - 66; }
+    private int previewGridY() { return previewBoxY() + 60; }
+    private int previewVariantColumns() { return Math.min(10, Math.max(1, (previewBoxW() - 32) / 24)); }
+    private int previewVariantGridX() { return previewBoxX() + previewBoxW() / 2 - previewVariantColumns() * 12 + 2; }
+    private int previewVariantGridY() { return previewGridY() + 100; }
+    private int previewVariantActionsX() { return previewBoxX() + previewBoxW() / 2 - 71; }
+    private int previewVariantActionsY() {
+        int count = selectedDetails == null ? 0 : Math.min(48, selectedDetails.variants().size());
+        return previewVariantGridY() + ((count + previewVariantColumns() - 1) / previewVariantColumns()) * 24 + 6;
+    }
+    private int maxScroll(List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes) {
+        return Math.max(0, shownRecipes.size() - visibleRows());
+    }
+    private boolean hasRecipeScrollbar(List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes) {
+        return maxScroll(shownRecipes) > 0;
+    }
+    private boolean isOverRecipeScrollbar(double mouseX, double mouseY,
+                                           List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes) {
+        return hasRecipeScrollbar(shownRecipes)
+                && mouseX >= recipeScrollbarX() && mouseX < recipeScrollbarX() + SCROLLBAR_TRACK_W
+                && mouseY >= recipeScrollbarY() && mouseY < recipeScrollbarY() + recipeScrollbarH();
+    }
 
     /** Applies the local status/special view without changing the server search result. */
     private List<VanillaRecipePage.VanillaRecipeInfo> filteredRecipes() {
@@ -151,14 +206,9 @@ public class VanillaRecipesScreen extends Screen {
 
         addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client, parent.target(),
                 parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
-        int searchButtonW = Math.max(72, textRenderer.getWidth(Text.translatable("customrecipe.vanilla.search").getString()) + 16);
-        int sourceFilterX = width - 100;
-        int statusFilterX = sourceFilterX - 96;
-        int outputFilterX = statusFilterX - 74;
-        int ingredientFilterX = outputFilterX - 92;
-        int searchButtonX = ingredientFilterX - 4 - searchButtonW;
-        int clearSearchX = searchButtonX - 20;
-        searchField = addDrawableChild(new TextFieldWidget(textRenderer, 8, SEARCH_Y, clearSearchX - 8, 18,
+        int clearSearchX = recipeContentRight() - 18;
+        searchField = addDrawableChild(new TextFieldWidget(textRenderer, recipeContentX(), LEFT_SEARCH_Y,
+                clearSearchX - recipeContentX(), 18,
                 Text.translatable("customrecipe.vanilla.search_hint")));
         searchField.setText(query);
         searchField.setChangedListener(this::onQueryChanged);
@@ -172,37 +222,37 @@ public class VanillaRecipesScreen extends Screen {
             searchField.setText("");
             pendingSearchTicks = -1;
             resetSearch();
-        }).dimensions(clearSearchX, SEARCH_Y, 18, 18).build());
+        }).dimensions(clearSearchX, LEFT_SEARCH_Y, 18, 18).build());
         addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
-                CustomRecipeSprites.REJECT, clearSearchX, SEARCH_Y, 18, 18));
+                CustomRecipeSprites.REJECT, clearSearchX, LEFT_SEARCH_Y, 18, 18));
 
-        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.vanilla.search"), b -> resetSearch())
-                .dimensions(searchButtonX, SEARCH_Y, searchButtonW, 18).build());
         addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.vanilla.ingredient", Text.translatable(matchIngredients ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), b -> {
             matchIngredients = !matchIngredients;
             resetSearch();
-        }).dimensions(ingredientFilterX, SEARCH_Y, 88, 18).build());
+        }).dimensions(filterButtonX(0), PREVIEW_TOOLBAR_Y, filterButtonW(), 18).build());
         addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.vanilla.output", Text.translatable(matchOutput ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), b -> {
             matchOutput = !matchOutput;
             resetSearch();
-        }).dimensions(outputFilterX, SEARCH_Y, 70, 18).build());
+        }).dimensions(filterButtonX(1), PREVIEW_TOOLBAR_Y, filterButtonW(), 18).build());
         addDrawableChild(ButtonWidget.builder(statusFilterLabel(), b -> cycleStatusFilter())
-                .dimensions(statusFilterX, SEARCH_Y, 92, 18).build());
+                .dimensions(filterButtonX(2), PREVIEW_TOOLBAR_Y, filterButtonW(), 18).build());
         addDrawableChild(ButtonWidget.builder(sourceFilterLabel(), b -> cycleSourceFilter())
-                .dimensions(sourceFilterX, SEARCH_Y, 92, 18).build());
+                .dimensions(filterButtonX(3), PREVIEW_TOOLBAR_Y, filterButtonW(), 18).build());
 
         int visibleRows = visibleRows();
         List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
         for (int i = 0; i < visibleRows && scroll + i < shownRecipes.size(); i++) {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
-            int y = ROWS_Y + i * ROW;
+            int y = LEFT_ROWS_Y + i * ROW;
             boolean disabled = parent.disabledRecipes.contains(recipe.id());
-            addDrawableChild(ButtonWidget.builder(recipeLabel(recipe), b -> client.setScreen(new VanillaRecipeDetailsScreen(this, recipe)))
-                    .dimensions(30, y + 1, width - 122, 18).build());
+            addDrawableChild(ButtonWidget.builder(recipeLabel(recipe), b -> selectRecipe(recipe))
+                    .dimensions(recipeLabelX(), y, recipeLabelW(), ROW).build());
             addDrawableChild(ButtonWidget.builder(disabled ? Text.translatable("customrecipe.state.disabled").withColor(0xFF5555)
                             : Text.translatable("customrecipe.state.enabled").withColor(0x55FF55), b -> toggle(recipe.id()))
-                    .dimensions(width - 84, y + 1, 76, 18).build());
+                    .dimensions(recipeStateX(), y, RECIPE_STATE_W, ROW).build());
         }
+
+        addPreviewControls();
 
         int bottom = height - 26;
         String saveLabel = Text.translatable("customrecipe.button.save").getString();
@@ -215,6 +265,34 @@ public class VanillaRecipesScreen extends Screen {
         });
 
         if (!searchStarted) resetSearch();
+    }
+
+    private void addPreviewControls() {
+        if (selectedRecipe == null || selectedDetails == null || selectedDetails.variants().isEmpty()) return;
+        int variantsX = previewVariantGridX();
+        int variantColumns = previewVariantColumns();
+        for (int index = 0; index < Math.min(48, selectedDetails.variants().size()); index++) {
+            VanillaRecipeDetails.VariantPreview variant = selectedDetails.variants().get(index);
+            int x = variantsX + (index % variantColumns) * 24;
+            int y = previewVariantGridY() + (index / variantColumns) * 24;
+            addDrawableChild(ButtonWidget.builder(Text.empty(), b -> {
+                selectedVariant = variant;
+                clearAndInit();
+            }).dimensions(x, y, 20, 20).build());
+        }
+        String material = selectedVariant == null ? selectedDetails.variants().getFirst().materialId() : selectedVariant.materialId();
+        boolean blocked = isVariantDisabled(selectedRecipe.id(), material);
+        addDrawableChild(ButtonWidget.builder(blocked ? Text.translatable("customrecipe.details.variant_disabled").withColor(0xFF5555)
+                        : Text.translatable("customrecipe.details.disable_variant").withColor(0xFF5555), b -> {
+                    toggleVariant(selectedRecipe.id(), material);
+                    clearAndInit();
+                }).dimensions(previewVariantActionsX(), previewVariantActionsY(), 142, 20).build());
+        boolean allDisabled = isRecipeDisabled(selectedRecipe.id());
+        addDrawableChild(ButtonWidget.builder(allDisabled ? Text.translatable("customrecipe.details.variants_disabled").withColor(0xFF5555)
+                        : Text.translatable("customrecipe.details.disable_variants").withColor(0xFF5555), b -> {
+                    toggleAllVariants(selectedRecipe.id());
+                    clearAndInit();
+                }).dimensions(previewVariantActionsX(), previewVariantActionsY() + 24, 142, 20).build());
     }
 
     void applyResult(VanillaRecipePage page) {
@@ -276,10 +354,7 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     private VanillaRecipePage findLocalRecipes() {
-        if (query.isBlank() && matchIngredients && matchOutput
-                && sourceFilter == SourceFilter.ALL && !startupRecipeCache.isEmpty()) {
-            return new VanillaRecipePage(startupRecipeCache, 0, startupRecipeCache.size());
-        }
+        if (!startupRecipeCache.isEmpty()) return filterLocalRecipeCache();
         String loweredQuery = query.trim().toLowerCase(Locale.ROOT);
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
         Set<String> matchedIds = new HashSet<>();
@@ -303,6 +378,27 @@ public class VanillaRecipesScreen extends Screen {
         loadInstalledModRecipes(matches, matchedIds, loweredQuery);
 
         matches.sort(java.util.Comparator.comparing(VanillaRecipePage.VanillaRecipeInfo::id));
+        if (query.isBlank() && matchIngredients && matchOutput && sourceFilter == SourceFilter.ALL) {
+            startupRecipeCache = List.copyOf(matches);
+        }
+        return new VanillaRecipePage(matches, 0, matches.size());
+    }
+
+    private VanillaRecipePage filterLocalRecipeCache() {
+        String loweredQuery = query.trim().toLowerCase(Locale.ROOT);
+        List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
+        for (VanillaRecipePage.VanillaRecipeInfo recipe : startupRecipeCache) {
+            boolean vanillaRecipe = recipe.id().startsWith("minecraft:");
+            if ((sourceFilter == SourceFilter.VANILLA && !vanillaRecipe)
+                    || (sourceFilter == SourceFilter.MODDED && vanillaRecipe)) continue;
+            boolean outputMatch = matchOutput && itemMatchesQuery(recipe.result(), loweredQuery);
+            boolean ingredientMatch = matchIngredients && recipe.slots().stream()
+                    .anyMatch(slot -> itemMatchesQuery(slot, loweredQuery));
+            if (loweredQuery.isEmpty() || recipe.id().toLowerCase(Locale.ROOT).contains(loweredQuery)
+                    || outputMatch || ingredientMatch) {
+                matches.add(recipe);
+            }
+        }
         return new VanillaRecipePage(matches, 0, matches.size());
     }
 
@@ -482,9 +578,28 @@ public class VanillaRecipesScreen extends Screen {
 
     private void toggle(String recipeId) {
         if (!parent.disabledRecipes.remove(recipeId)) parent.disabledRecipes.add(recipeId);
-        // The server receives the staged disabled IDs, so refresh its exact
-        // filtered page and total instead of filtering a stale local page.
-        resetSearch();
+        scroll = Math.min(scroll, maxScroll(filteredRecipes()));
+        clearAndInit();
+    }
+
+    private void selectRecipe(VanillaRecipePage.VanillaRecipeInfo recipe) {
+        if (recipe.id().equals(selectedRecipe == null ? "" : selectedRecipe.id())) return;
+        selectedRecipe = recipe;
+        selectedDetails = null;
+        selectedVariant = null;
+        if (localMode) {
+            client.execute(() -> applyDetails(findLocalRecipeDetails(recipe.id())));
+        } else {
+            ClientServerConfigNetworking.requestVanillaDetails(recipe.id());
+        }
+        clearAndInit();
+    }
+
+    void applyDetails(VanillaRecipeDetails details) {
+        if (selectedRecipe == null || !selectedRecipe.id().equals(details.recipeId())) return;
+        selectedDetails = details;
+        selectedVariant = details.variants().isEmpty() ? null : details.variants().getFirst();
+        clearAndInit();
     }
 
     void requestDetails(VanillaRecipeDetailsScreen screen, String recipeId) {
@@ -674,16 +789,11 @@ public class VanillaRecipesScreen extends Screen {
     void toggleAllVariants(String recipeId) { toggle(recipeId); }
 
     private int visibleRows() {
-        return Math.max(1, (height - ROWS_Y - 32) / ROW);
+        return Math.max(1, (height - LEFT_ROWS_Y - 32) / ROW);
     }
 
     private Text recipeLabel(VanillaRecipePage.VanillaRecipeInfo recipe) {
-        if (recipe.special()) {
-            return Text.translatable("customrecipe.vanilla.special").withColor(0x77BBFF)
-                    .append(Text.literal(shortId(recipe.id())).withColor(0xCCCCCC));
-        }
-        return Text.literal(itemName(recipe.result()))
-                .append(Text.literal("  " + shortId(recipe.id())).withColor(0xAAAAAA));
+        return Text.literal(recipe.result()).withColor(recipe.special() ? 0x77BBFF : 0xFFFFFF);
     }
 
     private String itemName(String id) {
@@ -699,30 +809,137 @@ public class VanillaRecipesScreen extends Screen {
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
+        renderPanels(ctx);
         super.render(ctx, mouseX, mouseY, delta);
         if (loading && recipes.isEmpty()) {
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.vanilla.loading"), 8, ROWS_Y + 2, 0xBBBBBB, false);
+            ctx.drawText(textRenderer, Text.translatable("customrecipe.vanilla.loading"), 8, LEFT_ROWS_Y + 2, 0xBBBBBB, false);
             return;
         }
 
         List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
-        String countText = statusFilter == StatusFilter.ALL
-                ? "Found " + total + " recipes"
-                : "Showing " + shownRecipes.size() + " " + statusFilter.name().toLowerCase(Locale.ROOT) + " recipes";
-        ctx.drawText(textRenderer, Text.translatable("customrecipe.vanilla.browse", countText), 8, HEADER_Y, 0xFFFFEE88, false);
+        String countText = "Found " + total + " recipes";
+        ctx.drawText(textRenderer, Text.literal(countText), 8, LEFT_HEADER_Y, 0xFFFFEE88, false);
         if (shownRecipes.isEmpty()) {
-            ctx.drawText(textRenderer, Text.translatable("customrecipe.vanilla.none"), 8, ROWS_Y + 2, 0xFFBBBBBB, false);
+            ctx.drawText(textRenderer, Text.translatable("customrecipe.vanilla.none"), 8, LEFT_ROWS_Y + 2, 0xFFBBBBBB, false);
         }
         for (int i = 0; i < visibleRows() && scroll + i < shownRecipes.size(); i++) {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
-            int y = ROWS_Y + i * ROW;
+            int y = LEFT_ROWS_Y + i * ROW;
             int rowColor = recipe.special() ? 0x22335566
                     : parent.disabledRecipes.contains(recipe.id()) ? 0x44550000 : 0x22005500;
-            ctx.fill(6, y, width - 88, y + ROW - 1, rowColor);
+            ctx.fill(recipeListX(), y, recipeScrollbarX() - 4, y + ROW, rowColor);
             var item = Registries.ITEM.get(Identifier.tryParse(recipe.result()));
-            if (item != null && item != Items.AIR) ctx.drawItem(new ItemStack(item), 10, y + 2);
+            if (item != null && item != Items.AIR) ctx.drawItem(new ItemStack(item), recipeListX() + 2, y + 2);
         }
+        renderPreview(ctx);
+        if (hasRecipeScrollbar(shownRecipes)) renderRecipeScrollbar(ctx, shownRecipes);
         if (loading) ctx.drawText(textRenderer, Text.translatable("customrecipe.vanilla.loading_more"), 8, height - 42, 0xFFBBBBBB, false);
+    }
+
+    private void renderRecipeScrollbar(DrawContext ctx, List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes) {
+        int trackX = recipeScrollbarX();
+        int trackY = recipeScrollbarY();
+        int trackH = recipeScrollbarH();
+        int maxScroll = maxScroll(shownRecipes);
+        int thumbH = 15;
+        int thumbY = trackY + (trackH - thumbH) * scroll / maxScroll;
+        ctx.fill(trackX, trackY, trackX + SCROLLBAR_TRACK_W, trackY + trackH, SCROLLBAR_TRACK_COLOR);
+        CustomRecipeSprites.draw(ctx,
+                draggingRecipeScrollbar ? CustomRecipeSprites.SCROLLER_ACTIVE : CustomRecipeSprites.SCROLLER_IDLE,
+                trackX, thumbY, SCROLLBAR_W, thumbH);
+    }
+
+    private void renderPanels(DrawContext ctx) {
+        drawPanel(ctx, recipeBoxX(), recipeBoxY(), recipeBoxW(), recipeBoxH(), 0x99141A20, 0xFF40506A);
+        drawPanel(ctx, previewBoxX(), previewBoxY(), previewBoxW(), previewBoxH(), 0x99141A20, 0xFF40506A);
+    }
+
+    private void renderPreview(DrawContext ctx) {
+        int centerX = previewBoxX() + previewBoxW() / 2;
+        if (selectedRecipe == null) {
+            ctx.drawCenteredTextWithShadow(textRenderer, Text.literal("Select a recipe to preview"), centerX,
+                    previewBoxY() + 14, 0xFFAAAAAA);
+            return;
+        }
+        ctx.drawCenteredTextWithShadow(textRenderer, Text.literal("Recipe Preview"), centerX, previewBoxY() + 10, 0xFFFFFFFF);
+        ctx.drawCenteredTextWithShadow(textRenderer, Text.literal(selectedRecipe.id()), centerX, previewBoxY() + 26, 0xFFAAAAAA);
+
+        int gridX = previewGridX();
+        int gridY = previewGridY();
+        List<String> slots = selectedVariant == null ? selectedRecipe.slots() : selectedVariant.slots();
+        for (int slot = 0; slot < 9; slot++) {
+            int x = gridX + (slot % 3) * 24;
+            int y = gridY + (slot / 3) * 24;
+            ctx.fill(x, y, x + 20, y + 20, 0xFF303030);
+            if (slot < slots.size()) drawPreviewItem(ctx, slots.get(slot), x + 2, y + 2);
+        }
+        ctx.drawText(textRenderer, "->", gridX + 82, gridY + 27, 0xFFFFFFFF, true);
+        ctx.fill(gridX + 108, gridY + 24, gridX + 132, gridY + 48, 0xFF303030);
+        drawPreviewItem(ctx, selectedRecipe.result(), gridX + 112, gridY + 28);
+        String layout = selectedRecipe.shapeless() ? "Shapeless: JSON ingredient order"
+                : "Shaped: " + selectedRecipe.gridWidth() + "x" + selectedRecipe.gridHeight() + " pattern";
+        ctx.drawCenteredTextWithShadow(textRenderer, Text.literal(layout), centerX, previewBoxY() + 42, 0xFFAAAAAA);
+
+        if (selectedDetails == null) {
+            ctx.drawCenteredTextWithShadow(textRenderer, Text.literal("Loading variants…"), centerX,
+                    previewVariantGridY() - 18, 0xFFAAAAAA);
+            return;
+        }
+        if (selectedDetails.variants().isEmpty()) {
+            ctx.drawCenteredTextWithShadow(textRenderer, Text.literal("No interchangeable material"), centerX,
+                    previewVariantGridY() - 18, 0xFFAAAAAA);
+            return;
+        }
+        ctx.drawCenteredTextWithShadow(textRenderer, Text.literal("Material variants"), centerX,
+                previewVariantGridY() - 18, 0xFFFFFFFF);
+        int variantColumns = previewVariantColumns();
+        int variantsX = previewVariantGridX();
+        for (int index = 0; index < Math.min(48, selectedDetails.variants().size()); index++) {
+            VanillaRecipeDetails.VariantPreview variant = selectedDetails.variants().get(index);
+            int x = variantsX + (index % variantColumns) * 24;
+            int y = previewVariantGridY() + (index / variantColumns) * 24;
+            boolean disabled = isRecipeDisabled(selectedRecipe.id())
+                    || isVariantDisabled(selectedRecipe.id(), variant.materialId());
+            ctx.fill(x, y, x + 20, y + 20, disabled ? 0xAA4A0000 : 0xAA004A18);
+            drawPreviewBorder(ctx, x, y, disabled ? 0xFFFF3333 : 0xFF22DD55);
+            if (selectedVariant != null && selectedVariant.materialId().equals(variant.materialId())) {
+                drawPreviewSelection(ctx, x, y);
+            }
+            drawPreviewItem(ctx, variant.materialId(), x + 2, y + 2);
+        }
+    }
+
+    private void drawPreviewItem(DrawContext ctx, String id, int x, int y) {
+        if (id == null || id.isBlank() || id.startsWith("#")) return;
+        var item = Registries.ITEM.get(Identifier.tryParse(id));
+        if (item != null && item != Items.AIR) ctx.drawItem(new ItemStack(item), x, y);
+    }
+
+    private void drawPreviewBorder(DrawContext ctx, int x, int y, int color) {
+        ctx.fill(x - 2, y - 2, x + 22, y, color);
+        ctx.fill(x - 2, y + 20, x + 22, y + 22, color);
+        ctx.fill(x - 2, y, x, y + 20, color);
+        ctx.fill(x + 20, y, x + 22, y + 20, color);
+    }
+
+    private void drawPreviewSelection(DrawContext ctx, int x, int y) {
+        int color = 0xFFFFFFFF;
+        ctx.fill(x - 3, y - 3, x + 5, y - 1, color);
+        ctx.fill(x - 3, y - 3, x - 1, y + 5, color);
+        ctx.fill(x + 15, y - 3, x + 23, y - 1, color);
+        ctx.fill(x + 21, y - 3, x + 23, y + 5, color);
+        ctx.fill(x - 3, y + 21, x + 5, y + 23, color);
+        ctx.fill(x - 3, y + 15, x - 1, y + 23, color);
+        ctx.fill(x + 15, y + 21, x + 23, y + 23, color);
+        ctx.fill(x + 21, y + 15, x + 23, y + 23, color);
+    }
+
+    private void drawPanel(DrawContext ctx, int x, int y, int w, int h, int fill, int border) {
+        ctx.fill(x, y, x + w, y + h, fill);
+        ctx.drawHorizontalLine(x, x + w - 1, y, border);
+        ctx.drawHorizontalLine(x, x + w - 1, y + h - 1, border);
+        ctx.drawVerticalLine(x, y, y + h - 1, border);
+        ctx.drawVerticalLine(x + w - 1, y, y + h - 1, border);
     }
 
     private String shortId(String id) {
@@ -732,12 +949,51 @@ public class VanillaRecipesScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
-        int maxScroll = Math.max(0, shownRecipes.size() - visibleRows());
+        int maxScroll = maxScroll(shownRecipes);
         int oldScroll = scroll;
         scroll = Math.max(0, Math.min(maxScroll, scroll - (int) Math.signum(verticalAmount)));
         if (scroll != oldScroll) clearAndInit();
         if (scroll + visibleRows() >= shownRecipes.size() - 3) loadMore();
         return true;
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
+        if (button == 0 && isOverRecipeScrollbar(mouseX, mouseY, shownRecipes)) {
+            draggingRecipeScrollbar = true;
+            updateRecipeScrollbar(mouseY, shownRecipes);
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+        if (draggingRecipeScrollbar) {
+            updateRecipeScrollbar(mouseY, filteredRecipes());
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        draggingRecipeScrollbar = false;
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    private void updateRecipeScrollbar(double mouseY, List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes) {
+        int maxScroll = maxScroll(shownRecipes);
+        if (maxScroll <= 0) return;
+        double progress = Math.max(0.0, Math.min(1.0,
+                (mouseY - recipeScrollbarY()) / Math.max(1, recipeScrollbarH() - 1)));
+        int next = (int) Math.round(progress * maxScroll);
+        if (next != scroll) {
+            scroll = next;
+            if (scroll + visibleRows() >= shownRecipes.size() - 3) loadMore();
+            clearAndInit();
+        }
     }
 
     @Override public boolean shouldPause() { return true; }

@@ -11,77 +11,93 @@ import net.minecraft.client.gui.widget.EditBoxWidget;
 import net.minecraft.client.gui.widget.MultilineTextWidget;
 import net.minecraft.text.Text;
 
-/** Advanced raw server JSON editor. */
 @Environment(EnvType.CLIENT)
 public class ServerJsonScreen extends Screen {
-    private static final int MAX_JSON_CHARS = 30_000;
+   private static final int MAX_JSON_CHARS = 30000;
+   private final ConfigScreen parent;
+   private final String initialJson;
+   private EditBoxWidget jsonField;
+   private String error = "";
 
-    private final ConfigScreen parent;
-    private final String initialJson;
-    private EditBoxWidget jsonField;
-    private String error = "";
+   public ServerJsonScreen(ConfigScreen parent, ModConfig config) {
+      super(Text.literal("Manual Edit"));
+      this.parent = parent;
+      this.initialJson = ConfigLoader.toJson(config);
+   }
 
-    public ServerJsonScreen(ConfigScreen parent, ModConfig config) {
-        super(Text.literal("Manual Edit"));
-        this.parent = parent;
-        // Keep Gson's pretty-printed layout: this is an editor, not a single-line field.
-        this.initialJson = ConfigLoader.toJson(config);
-    }
+   protected void init() {
+      this.addDrawable(
+         (ctx, mx, my, d) -> RecipeTargetBadge.draw(
+            ctx, this.client, this.parent.target(), this.parent.target().isWorld() ? this.parent.target().displayName() : "Global Library"
+         )
+      );
+      int margin = 14;
+      this.addDrawableChild(
+         new MultilineTextWidget(
+            margin + 31,
+            12,
+            Text.literal("WARNING: Advanced editor. Invalid or incompatible JSON can erase recipe settings. Use Save only after checking it."),
+            this.textRenderer
+         )
+      );
+      int editorTop = 44;
+      int editorHeight = Math.max(70, this.height - editorTop - 52);
+      this.jsonField = (EditBoxWidget)this.addDrawableChild(
+         new EditBoxWidget(
+            this.textRenderer,
+            margin,
+            editorTop,
+            this.width - margin * 2,
+            editorHeight,
+            Text.literal("Server config JSON"),
+            Text.literal("{\n  \"custom_recipes\": []\n}")
+         )
+      );
+      this.jsonField.setMaxLength(30000);
+      this.jsonField.setText(this.initialJson);
+      this.setFocused(this.jsonField);
+      this.addDrawableChild(
+         ButtonWidget.builder(Text.literal("    Apply JSON"), b -> this.apply()).dimensions(this.width / 2 - 102, this.height - 28, 98, 20).build()
+      );
+      this.addDrawableChild(
+         ButtonWidget.builder(Text.literal("   Cancel"), b -> this.client.setScreen(this.parent))
+            .dimensions(this.width / 2 + 4, this.height - 28, 98, 20)
+            .build()
+      );
+      this.addDrawable((ctx, mx, my, d) -> {
+         CustomRecipeSprites.draw(ctx, CustomRecipeSprites.ACCEPT, this.width / 2 - 98, this.height - 27, 18, 18);
+         CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, this.width / 2 + 8, this.height - 27, 18, 18);
+      });
+   }
 
-    @Override
-    protected void init() {
-        addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client, parent.target(),
-                parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
-        int margin = 14;
-        addDrawableChild(new MultilineTextWidget(margin + 31, 12,
-                Text.literal("WARNING: Advanced editor. Invalid or incompatible JSON can erase recipe settings. Use Save only after checking it."),
-                textRenderer));
+   private void apply() {
+      ModConfig config = ConfigLoader.fromJson(this.jsonField.getText());
+      if (config == null) {
+         this.error = "Invalid JSON";
+      } else {
+         this.parent.replaceConfig(config);
+         this.client.setScreen(this.parent);
+      }
+   }
 
-        int editorTop = 44;
-        int editorHeight = Math.max(70, height - editorTop - 52);
-        jsonField = addDrawableChild(new EditBoxWidget(textRenderer, margin, editorTop,
-                width - margin * 2, editorHeight, Text.literal("Server config JSON"),
-                Text.literal("{\n  \"custom_recipes\": []\n}")));
-        jsonField.setMaxLength(MAX_JSON_CHARS);
-        jsonField.setText(initialJson);
-        setFocused(jsonField);
+   public void close() {
+      if (!this.initialJson.equals(this.jsonField.getText())) {
+         this.client.setScreen(new SaveChangesScreen(this, this::apply, () -> this.client.setScreen(this.parent)));
+      } else {
+         this.client.setScreen(this.parent);
+      }
+   }
 
-        addDrawableChild(ButtonWidget.builder(Text.literal("    Apply JSON"), b -> apply())
-                .dimensions(width / 2 - 102, height - 28, 98, 20).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("   Cancel"), b -> client.setScreen(parent))
-                .dimensions(width / 2 + 4, height - 28, 98, 20).build());
-        addDrawable((ctx, mx, my, d) -> {
-            CustomRecipeSprites.draw(ctx, CustomRecipeSprites.ACCEPT, width / 2 - 98, height - 27, 18, 18);
-            CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, width / 2 + 8, height - 27, 18, 18);
-        });
-    }
+   public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+      ctx.fillGradient(0, 0, this.width, this.height, -1072689136, -804253680);
+      super.render(ctx, mouseX, mouseY, delta);
+      if (!this.error.isEmpty()) {
+         ctx.drawText(this.textRenderer, this.error, 14, this.height - 44, 16733525, false);
+      }
+   }
 
-    private void apply() {
-        ModConfig config = ConfigLoader.fromJson(jsonField.getText());
-        if (config == null) {
-            error = "Invalid JSON";
-            return;
-        }
-        parent.replaceConfig(config);
-        client.setScreen(parent);
-    }
-
-    @Override
-    public void close() {
-        if (!initialJson.equals(jsonField.getText())) {
-            client.setScreen(new SaveChangesScreen(this, this::apply, () -> client.setScreen(parent)));
-        } else {
-            client.setScreen(parent);
-        }
-    }
-
-    @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
-        super.render(ctx, mouseX, mouseY, delta);
-        if (!error.isEmpty()) ctx.drawText(textRenderer, error, 14, height - 44, 0xFF5555, false);
-    }
-
-    @Override public boolean shouldPause() { return true; }
+   public boolean shouldPause() {
+      return true;
+   }
 }
 

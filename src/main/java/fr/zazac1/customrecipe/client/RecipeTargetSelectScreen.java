@@ -4,6 +4,7 @@ import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import fr.zazac1.customrecipe.WorldRecipeTarget;
+import fr.zazac1.customrecipe.RecipeTarget;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
@@ -33,7 +34,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
 import java.util.function.Function;
-import java.util.function.Consumer;
 
 /** Direct save-folder scan: no asynchronous vanilla world-list omissions. */
 @Environment(EnvType.CLIENT)
@@ -42,42 +42,32 @@ final class RecipeTargetSelectScreen extends Screen {
     private static final int ROW = 42;
     private static final DateTimeFormatter LAST_PLAYED_FORMAT =
             DateTimeFormatter.ofPattern("M/d/yy, h:mm a", Locale.US).withZone(ZoneId.systemDefault());
-    private final ConfigScreen parent;
-    private final Function<ConfigScreen, Screen> selectedScreen;
-    private final Screen settingsParent;
-    private final Consumer<fr.zazac1.customrecipe.RecipeTarget> settingsSelection;
+    private final Screen parent;
+    private final Function<RecipeTarget, Screen> selectedScreen;
     private final List<LocalWorld> worlds = new ArrayList<>();
     private TextFieldWidget search;
     private int scroll;
 
     RecipeTargetSelectScreen(ConfigScreen parent) {
-        this(parent, (Function<ConfigScreen, Screen>) null);
+        this(parent, parent::createTargetScreen);
     }
 
     RecipeTargetSelectScreen(ConfigScreen parent, Function<ConfigScreen, Screen> selectedScreen) {
+        this((Screen) parent, (Function<RecipeTarget, Screen>) target -> selectedScreen.apply(parent.createTargetScreen(target)));
+    }
+
+    static RecipeTargetSelectScreen forSettings(Screen parent, Function<RecipeTarget, Screen> selectedScreen) {
+        return new RecipeTargetSelectScreen(parent, selectedScreen);
+    }
+
+    private RecipeTargetSelectScreen(Screen parent, Function<RecipeTarget, Screen> selectedScreen) {
         super(Text.translatable("customrecipe.screen.select_target"));
         this.parent = parent;
         this.selectedScreen = selectedScreen;
-        this.settingsParent = null;
-        this.settingsSelection = null;
     }
 
-    static RecipeTargetSelectScreen forSettings(Screen parent, Consumer<fr.zazac1.customrecipe.RecipeTarget> selection) {
-        return new RecipeTargetSelectScreen(parent, selection);
-    }
-
-    private RecipeTargetSelectScreen(Screen parent, Consumer<fr.zazac1.customrecipe.RecipeTarget> selection) {
-        super(Text.translatable("customrecipe.screen.select_target"));
-        this.parent = null;
-        this.selectedScreen = null;
-        this.settingsParent = parent;
-        this.settingsSelection = selection;
-    }
-
-    private void selectTarget(fr.zazac1.customrecipe.RecipeTarget target) {
-        if (settingsSelection != null) { settingsSelection.accept(target); return; }
-        ConfigScreen next = parent.createTargetScreen(target);
-        client.setScreen(selectedScreen == null ? next : selectedScreen.apply(next));
+    private void selectTarget(RecipeTarget target) {
+        client.setScreen(selectedScreen.apply(target));
     }
 
     @Override
@@ -91,7 +81,7 @@ final class RecipeTargetSelectScreen extends Screen {
         search.setPlaceholder(Text.translatable("customrecipe.screen.search"));
         search.setChangedListener(value -> scroll = 0);
         addDrawableChild(search);
-        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.back"), b -> client.setScreen(settingsParent != null ? settingsParent : parent))
+        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.back"), b -> client.setScreen(parent))
                 .dimensions(width / 2 - 55, height - 28, 110, 20).build());
     }
 
@@ -124,7 +114,7 @@ final class RecipeTargetSelectScreen extends Screen {
     /** Reads only the save metadata, never opens or locks a world. */
     private WorldDetails readWorldDetails(Path directory, String fallbackName) {
         try {
-            NbtCompound data = NbtIo.readCompressed(directory.resolve("level.dat"), NbtSizeTracker.of(104_857_600L))
+            NbtCompound data = NbtIo.readCompressed(directory.resolve("level.dat"), NbtSizeTracker.of(104857600L))
                     .getCompound("Data");
             String name = data.contains("LevelName", 8) ? data.getString("LevelName") : fallbackName;
             long lastPlayed = data.contains("LastPlayed", 4) ? data.getLong("LastPlayed") : 0L;
@@ -253,7 +243,7 @@ final class RecipeTargetSelectScreen extends Screen {
         int thumbHeight = Math.max(12, trackHeight * visibleRows() / visibleWorlds().size());
         int travel = trackHeight - thumbHeight;
         int thumbY = trackTop + (maxScroll() == 0 ? 0 : travel * scroll / maxScroll());
-        context.fill(scrollBarX(), trackTop, scrollBarX() + 6, rowsBottom(), 0x88000000);
+        context.fill(scrollBarX(), trackTop, scrollBarX() + 6, rowsBottom(), 0xFF5A5A5A);
         context.fill(scrollBarX(), thumbY, scrollBarX() + 6, thumbY + thumbHeight, 0xFFAAAAAA);
         drawBox(context, scrollBarX(), thumbY, 6, thumbHeight, 0xFFEEEEEE);
     }
@@ -269,7 +259,7 @@ final class RecipeTargetSelectScreen extends Screen {
     public boolean shouldPause() { return true; }
 
     @Override
-    public void close() { client.setScreen(settingsParent != null ? settingsParent : parent); }
+    public void close() { client.setScreen(parent); }
 
     private record WorldIcon(Identifier id, int width, int height) {}
     private record WorldDetails(String name, String lastPlayed, String description) {}

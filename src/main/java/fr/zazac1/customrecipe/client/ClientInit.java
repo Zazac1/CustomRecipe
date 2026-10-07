@@ -37,7 +37,9 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
 @Environment(EnvType.CLIENT)
 public class ClientInit implements ClientModInitializer {
     private static String activeClientWorldId = "";
-    /** Exact GUI-scale option value (including Auto = 0) before entering the editor flow. */
+    /** Delays opening past ChatScreen's command-submit close operation. */
+    private static boolean pendingSoloEditorOpen;
+    /** The exact option value (including Auto = 0) from before the editor flow. */
     private static Integer guiScaleBeforeCustomRecipe;
     private static final Gson GSON = new Gson();
 
@@ -45,17 +47,19 @@ public class ClientInit implements ClientModInitializer {
     public void onInitializeClient() {
         // Used only by the clickable local-world tip; it never reaches a server.
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
-                literal("customrecipe_open_local").executes(context -> {
-                    MinecraftClient client = MinecraftClient.getInstance();
-                    // This client-only helper is for the clickable new-world tip.
-                    // Never expose the local editor while connected to a remote server.
-                    if (client.getServer() == null) return 0;
-                    client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new GameMenuScreen(true))));
-                    return 1;
-                })
+                literal("customrecipe_solo")
+                        .requires(source -> MinecraftClient.getInstance().getServer() != null)
+                        .executes(context -> openSoloEditor())
         ));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (pendingSoloEditorOpen) {
+                pendingSoloEditorOpen = false;
+                if (client.getServer() != null) {
+                    client.setScreen(ConfigScreen.fromPauseMenu(new GameMenuScreen(true)));
+                }
+            }
             updateGuiScaleForScreen(client, client.currentScreen);
+            if (ConfigLoader.get().preload_recipes_on_startup) VanillaRecipesScreen.preloadAtStartup(client);
             if (client.getServer() == null) {
                 activeClientWorldId = "";
                 return;
@@ -84,7 +88,7 @@ public class ClientInit implements ClientModInitializer {
             }
             Text editorLink = Text.translatable("customrecipe.chat.world_tip.link")
                     .setStyle(Style.EMPTY.withColor(Formatting.AQUA).withUnderline(true)
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_open_local"))
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_solo"))
                             .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.translatable("customrecipe.chat.world_tip.hover"))));
             client.player.sendMessage(Text.translatable("customrecipe.chat.world_tip", editorLink), false);
             CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
@@ -119,28 +123,46 @@ public class ClientInit implements ClientModInitializer {
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsPayload.ID, (payload, context) -> {
             VanillaRecipeDetails details = GSON.fromJson(payload.json(), VanillaRecipeDetails.class);
-            if (details != null && context.client().currentScreen instanceof VanillaRecipeDetailsScreen screen) {
+            if (details != null && context.client().currentScreen instanceof VanillaRecipesScreen screen) {
+                screen.applyDetails(details);
+            } else if (details != null && context.client().currentScreen instanceof VanillaRecipeDetailsScreen screen) {
                 screen.applyDetails(details);
             }
         });
     }
 
-    /** Applies scale 3 only while a Custom Recipe screen is open and restores the saved value on exit. */
+    /**
+     * Opens the same local editor invoked by the new-world chat link.
+     * ChatScreen closes itself after a typed command, so opening synchronously
+     * here would immediately be replaced with the game screen.
+     */
+    private static int openSoloEditor() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        // Keep this command strictly local: it must not open an editor on a remote server.
+        if (client.getServer() == null) return 0;
+        pendingSoloEditorOpen = true;
+        return 1;
+    }
+
+    /** Keeps the editor readable while preserving the player's exact original scale. */
     private static void updateGuiScaleForScreen(MinecraftClient client, Screen screen) {
-        boolean editorScreen = screen != null && screen.getClass().getPackageName().startsWith("fr.zazac1.customrecipe.client");
-        if (editorScreen && ConfigLoader.get().automatic_gui_scale) {
+        if (screen != null && screen.getClass().getPackageName().startsWith("fr.zazac1.customrecipe.client")) {
+            if (!ConfigLoader.get().automatic_gui_scale) {
+                restoreGuiScale(client);
+                return;
+            }
             if (guiScaleBeforeCustomRecipe == null) guiScaleBeforeCustomRecipe = client.options.getGuiScale().getValue();
             setGuiScale(client, 3);
-        } else {
-            restoreGuiScale(client);
+            return;
         }
+        restoreGuiScale(client);
     }
 
     private static void restoreGuiScale(MinecraftClient client) {
         if (guiScaleBeforeCustomRecipe == null) return;
-        int scale = guiScaleBeforeCustomRecipe;
+        int originalScale = guiScaleBeforeCustomRecipe;
         guiScaleBeforeCustomRecipe = null;
-        setGuiScale(client, scale);
+        setGuiScale(client, originalScale);
     }
 
     private static void setGuiScale(MinecraftClient client, int scale) {
