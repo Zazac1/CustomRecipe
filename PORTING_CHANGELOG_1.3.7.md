@@ -1,4 +1,8 @@
-# Cross-version port notes
+# 1.3.7+26.3 cross-version porting changelog
+
+This is the technical change log to apply when porting the 1.3.7 polishing
+work to another Minecraft version. It records the required behaviour, geometry,
+and compatibility constraints; it is not the public Modrinth release text.
 
 ## Development-client Java runtime
 
@@ -69,6 +73,17 @@ following details in `RecipeBuilderScreen`:
 `MouseButtonEvent` uses one-based buttons in 26.3. Keep left click as `1` and
 right click as `3`; ports from zero-based GLFW code must adapt these values.
 
+## Context-specific editor commands
+
+- Register `/customrecipe_solo` as a client command only when
+  `Minecraft.getInstance().getSingleplayerServer() != null`. Keep this condition
+  on the command node itself (not only in its execute callback), so the command
+  is absent from multiplayer suggestions and cannot be called on a remote server.
+- Register `/customrecipe_server` only when the server command-registration
+  environment is `DEDICATED`, and keep its `GAMEMASTERS` permission requirement.
+  Local worlds use the pause-menu editor instead; do not restore either legacy
+  name (`/customrecipe_open_local` or `/customrecipe`).
+
 ## Default Recipes compact browser
 
 The `VanillaRecipesScreen` browser intentionally displays the complete result item ID
@@ -134,3 +149,17 @@ loading when the scroll position nears the final visible rows.
   horizontal width first—up to ten 24 px cells per row—then add rows; derive click
   hitboxes, rendered cells, action-button Y position and action-button centering
   from the same column count.
+
+## Custom Recipes action rhythm
+
+In `CustomRecipesScreen`, keep every standard below-table action at 200×18 px
+with a 4 px vertical gap. Save is the sole exception at 200×22 px because its
+16 px icon needs the additional vertical room; retain the same 4 px gap above it.
+For a world, move Enable All and Disable All out of the bottom stack into the
+free header strip directly above the table, aligned to the table's right edge as
+two 98×18 px buttons with a 4 px separation. Recalculate `bottomReserve()` after
+that move: the world table must reserve only the Library, Add Recipe, Save stack
+and its leading gap (74 px), allowing the table to gain the old bulk-action row.
+The library picker reserves 26 px for its Back button; the global-library editor
+reserves 52 px for Add Recipe and Save. Keep these values derived from the same
+button dimensions if another version changes its UI scale.
