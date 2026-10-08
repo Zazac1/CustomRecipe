@@ -51,7 +51,7 @@ public class ConfigScreen extends Screen {
         this(parent, ConfigLoader.get(), "Custom Recipe", false, ConfigLoader::saveAndInvalidate, null, false);
     }
 
-    public static ConfigScreen fromModMenu(Screen parent) {
+    public static ConfigScreen fromConfigButton(Screen parent) {
         return new ConfigScreen(parent);
     }
 

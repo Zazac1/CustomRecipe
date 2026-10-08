@@ -107,7 +107,11 @@ public final class ServerConfigNetworking {
     }
 
     private static void registerCommands(RegisterCommandsEvent event) {
-        event.getDispatcher().register(literal("customrecipe")
+        // The server editor is deliberately unavailable from an integrated
+        // server.  Single-player uses the client-only /customrecipe_solo
+        // command, which cannot be sent to a remote server.
+        if (event.getCommandSelection() != net.minecraft.commands.Commands.CommandSelection.DEDICATED) return;
+        event.getDispatcher().register(literal("customrecipe_server")
                 .requires(source -> source.hasPermission(2))
                 .executes(context -> openEditor(context.getSource())));
     }

@@ -30,10 +30,27 @@ final class WorldRecipesScreen extends Screen {
     @Override
     protected void init() {
         int x = width / 2 - 170;
-        int y = 40;
+        int y = 46;
         List<CustomRecipeEntry> recipes = orderedRecipes();
-        int visible = Math.max(1, (height - 92) / 22);
+        int visible = Math.max(1, (height - 98) / 22);
         scroll = Math.max(0, Math.min(scroll, Math.max(0, recipes.size() - visible)));
+
+        // Keep these bulk actions in the header so the list retains its full
+        // vertical space and they remain available when the list is scrolled.
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.enable_all"), b -> {
+            for (CustomRecipeEntry recipe : recipes) {
+                if (!isEnabled(recipe)) config.setWorldAssigned(recipe, worldId, worldName, true);
+            }
+            config.persistLocalWorldAssignments();
+            clearWidgets(); init();
+        }).bounds(x, 22, 164, 18).build());
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.disable_all"), b -> {
+            for (CustomRecipeEntry recipe : recipes) {
+                if (isEnabled(recipe)) config.setWorldAssigned(recipe, worldId, worldName, false);
+            }
+            config.persistLocalWorldAssignments();
+            clearWidgets(); init();
+        }).bounds(x + 176, 22, 164, 18).build());
 
         boolean wroteEnabledHeader = false;
         boolean wroteDisabledHeader = false;
@@ -100,7 +117,7 @@ final class WorldRecipesScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        int max = Math.max(0, orderedRecipes().size() - Math.max(1, (height - 92) / 22));
+        int max = Math.max(0, orderedRecipes().size() - Math.max(1, (height - 98) / 22));
         int next = Math.max(0, Math.min(max, scroll - (int) verticalAmount));
         if (next != scroll) {
             scroll = next;

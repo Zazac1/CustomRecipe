@@ -33,6 +33,8 @@ import static net.minecraft.commands.Commands.literal;
 
 public final class ClientInit {
     private static String activeClientWorldId = "";
+    /** Chat closes after a command completes, so the editor opens on the next tick. */
+    private static boolean pendingSoloEditorOpen;
     /** Exact GUI-scale option value (including Auto = 0) before entering the editor flow. */
     private static Integer guiScaleBeforeCustomRecipe;
     private static final Gson GSON = new Gson();
@@ -42,28 +44,31 @@ public final class ClientInit {
                 // This extension is opened by the NeoForge/Cloth configuration
                 // flow, not by the in-game pause-menu button. Keep the global
                 // editor target selectable here.
-                (IConfigScreenFactory) (mod, parent) -> ConfigScreen.fromModMenu(parent));
+                (IConfigScreenFactory) (mod, parent) -> ConfigScreen.fromConfigButton(parent));
         NeoForge.EVENT_BUS.addListener(ClientInit::registerClientCommands);
         NeoForge.EVENT_BUS.addListener(ClientInit::onClientTick);
     }
 
     private static void registerClientCommands(RegisterClientCommandsEvent event) {
-        // Used only by the clickable local-world tip; it never reaches a server.
         event.getDispatcher().register(
-                literal("customrecipe_open_local").executes(context -> {
-                    Minecraft client = Minecraft.getInstance();
-                    // This client-only helper is for the clickable new-world tip.
-                    // Never expose the local editor while connected to a remote server.
-                    if (client.getSingleplayerServer() == null) return 0;
-                    client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true))));
-                    return 1;
-                })
+                literal("customrecipe_solo")
+                        .requires(source -> Minecraft.getInstance().getSingleplayerServer() != null)
+                        .executes(context -> openSoloEditor())
         );
     }
 
     private static void onClientTick(ClientTickEvent.Post event) {
             Minecraft client = Minecraft.getInstance();
+            if (pendingSoloEditorOpen) {
+                pendingSoloEditorOpen = false;
+                if (client.getSingleplayerServer() != null) {
+                    client.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true)));
+                }
+            }
             updateGuiScaleForScreen(client, client.screen);
+            if (ConfigLoader.get().preload_recipes_on_startup) {
+                VanillaRecipesScreen.preloadAtStartup(client);
+            }
             if (client.getSingleplayerServer() == null) {
                 activeClientWorldId = "";
                 return;
@@ -92,7 +97,7 @@ public final class ClientInit {
             }
             Component editorLink = Component.translatable("customrecipe.chat.world_tip.link")
                     .setStyle(Style.EMPTY.withColor(ChatFormatting.AQUA).withUnderlined(true)
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_open_local"))
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_solo"))
                             .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.translatable("customrecipe.chat.world_tip.hover"))));
             client.player.displayClientMessage(Component.translatable("customrecipe.chat.world_tip", editorLink), false);
             CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
@@ -136,20 +141,33 @@ public final class ClientInit {
 
     public static void receiveVanillaRecipeDetails(String json) {
             VanillaRecipeDetails details = GSON.fromJson(json, VanillaRecipeDetails.class);
-            if (details != null && Minecraft.getInstance().screen instanceof VanillaRecipeDetailsScreen screen) {
+            if (details != null && Minecraft.getInstance().screen instanceof VanillaRecipesScreen screen) {
+                screen.applyDetails(details);
+            } else if (details != null && Minecraft.getInstance().screen instanceof VanillaRecipeDetailsScreen screen) {
                 screen.applyDetails(details);
             }
+    }
+
+    private static int openSoloEditor() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.getSingleplayerServer() == null) return 0;
+        pendingSoloEditorOpen = true;
+        return 1;
     }
 
     /** Applies scale 3 only while a Custom Recipe screen is open and restores the saved value on exit. */
     private static void updateGuiScaleForScreen(Minecraft client, Screen screen) {
         boolean editorScreen = screen != null && screen.getClass().getPackageName().startsWith("fr.zazac1.customrecipe.client");
-        if (editorScreen && ConfigLoader.get().automatic_gui_scale) {
-            if (guiScaleBeforeCustomRecipe == null) guiScaleBeforeCustomRecipe = client.options.guiScale().get();
-            setGuiScale(client, 3);
-        } else {
+        if (!editorScreen) {
             restoreGuiScale(client);
+            return;
         }
+        if (!ConfigLoader.get().automatic_gui_scale) {
+            restoreGuiScale(client);
+            return;
+        }
+        if (guiScaleBeforeCustomRecipe == null) guiScaleBeforeCustomRecipe = client.options.guiScale().get();
+        setGuiScale(client, 3);
     }
 
     private static void restoreGuiScale(Minecraft client) {

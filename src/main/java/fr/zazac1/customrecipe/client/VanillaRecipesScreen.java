@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import fr.zazac1.customrecipe.VanillaRecipePage;
+import fr.zazac1.customrecipe.VanillaRecipeDetails;
 import net.neoforged.fml.loading.FMLPaths;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -37,11 +38,19 @@ import java.util.jar.JarFile;
 /** Server-filtered default crafting recipe browser for OPs, including installed mods. */
 public class VanillaRecipesScreen extends Screen {
     private static List<VanillaRecipePage.VanillaRecipeInfo> startupRecipeCache = List.of();
+    /** Raw client-side recipe data is indexed once and reused for every local search. */
+    private static final Map<String, String> localRecipeJsonCache = new java.util.LinkedHashMap<>();
     private static boolean startupPreloadStarted;
     private static final int ROW = 20;
     private static final int HEADER_Y = 34;
     private static final int SEARCH_Y = 52;
     private static final int ROWS_Y = 78;
+    private static final int PREVIEW_TOOLBAR_Y = 32;
+    private static final int PREVIEW_PANEL_Y = 54;
+    private static final int RECIPE_STATE_W = 76;
+    private static final int SCROLLBAR_W = 12;
+    private static final int SCROLLBAR_TRACK_W = SCROLLBAR_W - 1;
+    private static final int SCROLLBAR_TRACK_COLOR = 0xFF5A5A5A;
 
     private enum StatusFilter {
         ALL, ENABLED, DISABLED, SPECIAL
@@ -65,6 +74,51 @@ public class VanillaRecipesScreen extends Screen {
     private int pendingSearchTicks = -1;
     private boolean restoreSearchFocus;
     private EditBox searchField;
+    private boolean draggingRecipeScrollbar;
+    /** The browser keeps the selected recipe and its lazy-loaded detail payload in one screen. */
+    private VanillaRecipePage.VanillaRecipeInfo selectedRecipe;
+    private VanillaRecipeDetails selectedDetails;
+    private VanillaRecipeDetails.VariantPreview selectedVariant;
+
+    /** Shared inner bounds keep search and rows aligned in the left browser. */
+    private int recipeContentX() { return recipeBoxX() + 2; }
+    private int recipeContentRight() { return recipeBoxX() + recipeBoxW() - 2; }
+    private int recipeListX() { return recipeContentX(); }
+    private int recipeLabelX() { return recipeListX() + 22; }
+    private int recipeLabelWidth() { return Math.min(360, Math.max(220, width / 3)); }
+    private int recipeStateX() { return recipeLabelX() + recipeLabelWidth() + 4; }
+    private int recipeScrollbarX() { return recipeBoxX() + recipeBoxW() - SCROLLBAR_W; }
+    private int recipeScrollbarY() { return recipeBoxY() + 1; }
+    private int recipeScrollbarH() { return Math.max(1, recipeBoxH() - 2); }
+    private int recipeBoxX() { return 6; }
+    private int recipeBoxY() { return ROWS_Y - 4; }
+    private int recipeBoxW() { return recipeStateX() + RECIPE_STATE_W + 4 + SCROLLBAR_W - recipeBoxX() + 1; }
+    private int recipeBoxH() { return visibleRows() * ROW + 6; }
+    private int previewBoxX() { return recipeBoxX() + recipeBoxW() + 12; }
+    private int previewBoxW() { return Math.max(80, width - previewBoxX() - 8); }
+    private int previewBoxY() { return PREVIEW_PANEL_Y; }
+    private int previewBoxH() { return recipeBoxY() + recipeBoxH() - previewBoxY(); }
+    private int filterToolbarX() { return recipeStateX(); }
+    private int filterToolbarW() { return Math.max(4, width - filterToolbarX() - 8); }
+    private int filterButtonW() { return Math.max(40, (filterToolbarW() - 12) / 4); }
+    private int filterButtonX(int index) { return filterToolbarX() + index * (filterButtonW() + 4); }
+    private int previewGridX() { return previewBoxX() + previewBoxW() / 2 - 66; }
+    private int previewGridY() { return previewBoxY() + 60; }
+    private int previewVariantColumns() { return Math.min(10, Math.max(1, (previewBoxW() - 32) / 24)); }
+    private int previewVariantGridX() { return previewBoxX() + previewBoxW() / 2 - previewVariantColumns() * 12 + 2; }
+    private int previewVariantGridY() { return previewGridY() + 100; }
+    private int previewVariantActionsX() { return previewBoxX() + previewBoxW() / 2 - 71; }
+    private int previewVariantActionsY() {
+        int count = selectedDetails == null ? 0 : Math.min(48, selectedDetails.variants().size());
+        return previewVariantGridY() + ((count + previewVariantColumns() - 1) / previewVariantColumns()) * 24 + 6;
+    }
+    private int maxScroll(List<VanillaRecipePage.VanillaRecipeInfo> shown) { return Math.max(0, shown.size() - visibleRows()); }
+    private boolean hasRecipeScrollbar(List<VanillaRecipePage.VanillaRecipeInfo> shown) { return maxScroll(shown) > 0; }
+    private boolean isOverRecipeScrollbar(double mouseX, double mouseY, List<VanillaRecipePage.VanillaRecipeInfo> shown) {
+        return hasRecipeScrollbar(shown)
+                && mouseX >= recipeScrollbarX() && mouseX < recipeScrollbarX() + SCROLLBAR_TRACK_W
+                && mouseY >= recipeScrollbarY() && mouseY < recipeScrollbarY() + recipeScrollbarH();
+    }
 
     /** Applies the local status/special view without changing the server search result. */
     private List<VanillaRecipePage.VanillaRecipeInfo> filteredRecipes() {
@@ -139,7 +193,8 @@ public class VanillaRecipesScreen extends Screen {
             VanillaRecipePage page = scanner.findLocalRecipes();
             startupRecipeCache = List.copyOf(page.recipes());
         } catch (RuntimeException exception) {
-            startupPreloadStarted = false;
+            // A failed optional local scan must not retry every client tick.
+            // The regular browser can still perform a later fresh query.
         }
     }
 
@@ -147,16 +202,14 @@ public class VanillaRecipesScreen extends Screen {
 
     @Override
     protected void init() {
-
+        // Must be registered before widgets: Screen.render applies the blurred
+        // background first, then renderables in insertion order. Drawing this
+        // content directly before super.render would put it behind that blur.
+        addRenderableOnly((ctx, mx, my, d) -> renderBrowserContent(ctx));
         addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, parent.target(), parent.targetLabel()));
-        int searchButtonW = Math.max(72, font.width(Component.translatable("customrecipe.vanilla.search").getString()) + 16);
-        int sourceFilterX = width - 100;
-        int statusFilterX = sourceFilterX - 96;
-        int outputFilterX = statusFilterX - 74;
-        int ingredientFilterX = outputFilterX - 92;
-        int searchButtonX = ingredientFilterX - 4 - searchButtonW;
-        int clearSearchX = searchButtonX - 20;
-        searchField = addRenderableWidget(new EditBox(font, 8, SEARCH_Y, clearSearchX - 8, 18,
+        int clearSearchX = recipeContentRight() - 18;
+        searchField = addRenderableWidget(new EditBox(font, recipeContentX(), SEARCH_Y,
+                clearSearchX - recipeContentX(), 18,
                 Component.translatable("customrecipe.vanilla.search_hint")));
         searchField.setValue(query);
         searchField.setResponder(this::onQueryChanged);
@@ -174,20 +227,18 @@ public class VanillaRecipesScreen extends Screen {
         addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                 CustomRecipeSprites.REJECT, clearSearchX, SEARCH_Y, 18, 18));
 
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.vanilla.search"), b -> resetSearch())
-                .bounds(searchButtonX, SEARCH_Y, searchButtonW, 18).build());
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.vanilla.ingredient", Component.translatable(matchIngredients ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), b -> {
             matchIngredients = !matchIngredients;
             resetSearch();
-        }).bounds(ingredientFilterX, SEARCH_Y, 88, 18).build());
+        }).bounds(filterButtonX(0), PREVIEW_TOOLBAR_Y, filterButtonW(), 18).build());
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.vanilla.output", Component.translatable(matchOutput ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), b -> {
             matchOutput = !matchOutput;
             resetSearch();
-        }).bounds(outputFilterX, SEARCH_Y, 70, 18).build());
+        }).bounds(filterButtonX(1), PREVIEW_TOOLBAR_Y, filterButtonW(), 18).build());
         addRenderableWidget(Button.builder(statusFilterLabel(), b -> cycleStatusFilter())
-                .bounds(statusFilterX, SEARCH_Y, 92, 18).build());
+                .bounds(filterButtonX(2), PREVIEW_TOOLBAR_Y, filterButtonW(), 18).build());
         addRenderableWidget(Button.builder(sourceFilterLabel(), b -> cycleSourceFilter())
-                .bounds(sourceFilterX, SEARCH_Y, 92, 18).build());
+                .bounds(filterButtonX(3), PREVIEW_TOOLBAR_Y, filterButtonW(), 18).build());
 
         int visibleRows = visibleRows();
         List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
@@ -195,12 +246,14 @@ public class VanillaRecipesScreen extends Screen {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
             int y = ROWS_Y + i * ROW;
             boolean disabled = parent.disabledRecipes.contains(recipe.id());
-            addRenderableWidget(Button.builder(recipeLabel(recipe), b -> minecraft.setScreen(new VanillaRecipeDetailsScreen(this, recipe)))
-                    .bounds(30, y + 1, width - 122, 18).build());
+            addRenderableWidget(Button.builder(recipeLabel(recipe), b -> selectRecipe(recipe))
+                    .bounds(recipeLabelX(), y, recipeLabelWidth(), ROW).build());
             addRenderableWidget(Button.builder(disabled ? Component.translatable("customrecipe.state.disabled").withColor(0xFF5555)
                             : Component.translatable("customrecipe.state.enabled").withColor(0x55FF55), b -> toggle(recipe.id()))
-                    .bounds(width - 84, y + 1, 76, 18).build());
+                    .bounds(recipeStateX(), y, RECIPE_STATE_W, ROW).build());
         }
+
+        addPreviewControls();
 
         int bottom = height - 26;
         String saveLabel = Component.translatable("customrecipe.button.save").getString();
@@ -229,6 +282,55 @@ public class VanillaRecipesScreen extends Screen {
         nextPage = page.page() + 1;
         loading = false;
         clearWidgets(); init();
+    }
+
+    private void selectRecipe(VanillaRecipePage.VanillaRecipeInfo recipe) {
+        if (recipe.id().equals(selectedRecipe == null ? "" : selectedRecipe.id())) return;
+        selectedRecipe = recipe;
+        selectedDetails = null;
+        selectedVariant = null;
+        if (localMode) {
+            minecraft.execute(() -> applyDetails(findLocalRecipeDetails(recipe.id())));
+        } else {
+            ClientServerConfigNetworking.requestVanillaDetails(recipe.id());
+        }
+        clearWidgets(); init();
+    }
+
+    /** Called from the S2C payload handler while this two-panel browser is active. */
+    void applyDetails(VanillaRecipeDetails details) {
+        if (selectedRecipe == null || !selectedRecipe.id().equals(details.recipeId())) return;
+        selectedDetails = details;
+        selectedVariant = details.variants().isEmpty() ? null : details.variants().getFirst();
+        clearWidgets(); init();
+    }
+
+    private void addPreviewControls() {
+        if (selectedRecipe == null || selectedDetails == null || selectedDetails.variants().isEmpty()) return;
+        int columns = previewVariantColumns();
+        for (int index = 0; index < Math.min(48, selectedDetails.variants().size()); index++) {
+            VanillaRecipeDetails.VariantPreview variant = selectedDetails.variants().get(index);
+            int x = previewVariantGridX() + (index % columns) * 24;
+            int y = previewVariantGridY() + (index / columns) * 24;
+            addRenderableWidget(Button.builder(Component.empty(), b -> {
+                selectedVariant = variant;
+                clearWidgets(); init();
+            }).bounds(x, y, 20, 20).build());
+        }
+        int actionY = previewVariantActionsY();
+        String material = selectedVariant == null ? selectedDetails.variants().getFirst().materialId() : selectedVariant.materialId();
+        boolean disabled = isVariantDisabled(selectedRecipe.id(), material);
+        addRenderableWidget(Button.builder(disabled ? Component.translatable("customrecipe.details.variant_disabled").withColor(0xFF5555)
+                        : Component.translatable("customrecipe.details.disable_variant").withColor(0xFF5555), b -> {
+                    toggleVariant(selectedRecipe.id(), material);
+                    clearWidgets(); init();
+                }).bounds(previewVariantActionsX(), actionY, 142, 20).build());
+        boolean allDisabled = isRecipeDisabled(selectedRecipe.id());
+        addRenderableWidget(Button.builder(allDisabled ? Component.translatable("customrecipe.details.variants_disabled").withColor(0xFF5555)
+                        : Component.translatable("customrecipe.details.disable_variants").withColor(0xFF5555), b -> {
+                    toggleAllVariants(selectedRecipe.id());
+                    clearWidgets(); init();
+                }).bounds(previewVariantActionsX(), actionY + 24, 142, 20).build());
     }
 
     private void resetSearch() {
@@ -285,6 +387,13 @@ public class VanillaRecipesScreen extends Screen {
         String loweredQuery = query.trim().toLowerCase(Locale.ROOT);
         List<VanillaRecipePage.VanillaRecipeInfo> matches = new ArrayList<>();
         Set<String> matchedIds = new HashSet<>();
+        if (!localRecipeJsonCache.isEmpty()) {
+            for (Map.Entry<String, String> cached : localRecipeJsonCache.entrySet()) {
+                addLocalRecipe(matches, matchedIds, cached.getKey(), cached.getValue(), loweredQuery);
+            }
+            matches.sort(java.util.Comparator.comparing(VanillaRecipePage.VanillaRecipeInfo::id));
+            return new VanillaRecipePage(matches, 0, matches.size());
+        }
         Map<ResourceLocation, Resource> resources = minecraft.getResourceManager().listResources("recipe",
                 id -> id.getPath().endsWith(".json"));
 
@@ -311,6 +420,9 @@ public class VanillaRecipesScreen extends Screen {
 
     private void addLocalRecipe(List<VanillaRecipePage.VanillaRecipeInfo> matches, Set<String> matchedIds,
                                 String recipeId, String json, String loweredQuery) {
+        // Cache before filtering: a later ingredient/output query reuses this
+        // raw data rather than walking resource packs and mod archives again.
+        localRecipeJsonCache.putIfAbsent(recipeId, json);
         if (!json.contains("crafting_")) return;
         boolean vanillaRecipe = recipeId.startsWith("minecraft:");
         if ((sourceFilter == SourceFilter.VANILLA && !vanillaRecipe)
@@ -488,9 +600,11 @@ public class VanillaRecipesScreen extends Screen {
 
     private void toggle(String recipeId) {
         if (!parent.disabledRecipes.remove(recipeId)) parent.disabledRecipes.add(recipeId);
-        // The server receives the staged disabled IDs, so refresh its exact
-        // filtered page and total instead of filtering a stale local page.
-        resetSearch();
+        // This is a staged client-side change.  Keep the already-loaded page
+        // and selection: Fabric 1.3.7 deliberately avoids a full server/JAR
+        // search for every Enable/Disable click.
+        scroll = Math.min(scroll, maxScroll(filteredRecipes()));
+        clearWidgets(); init();
     }
 
     void requestDetails(VanillaRecipeDetailsScreen screen, String recipeId) {
@@ -679,12 +793,7 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     private Component recipeLabel(VanillaRecipePage.VanillaRecipeInfo recipe) {
-        if (recipe.special()) {
-            return Component.translatable("customrecipe.vanilla.special").withColor(0x77BBFF)
-                    .append(Component.literal(shortId(recipe.id())).withColor(0xCCCCCC));
-        }
-        return Component.literal(itemName(recipe.result()))
-                .append(Component.literal("  " + shortId(recipe.id())).withColor(0xAAAAAA));
+        return Component.literal(recipe.result()).withColor(recipe.special() ? 0x77BBFF : 0xFFFFFF);
     }
 
     private String itemName(String id) {
@@ -706,16 +815,18 @@ public class VanillaRecipesScreen extends Screen {
     @Override
     public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
         super.render(ctx, mouseX, mouseY, delta);
+    }
+
+    /** Rendered as the first renderable, after the background blur and before widgets. */
+    private void renderBrowserContent(GuiGraphics ctx) {
+        renderPanels(ctx);
         if (loading && recipes.isEmpty()) {
             ctx.drawString(font, Component.translatable("customrecipe.vanilla.loading"), 8, ROWS_Y + 2, 0xBBBBBB, false);
             return;
         }
 
         List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
-        String countComponent = statusFilter == StatusFilter.ALL
-                ? "Found " + total + " recipes"
-                : "Showing " + shownRecipes.size() + " " + statusFilter.name().toLowerCase(Locale.ROOT) + " recipes";
-        ctx.drawString(font, Component.translatable("customrecipe.vanilla.browse", countComponent), 8, HEADER_Y, 0xFFFFEE88, false);
+        ctx.drawString(font, Component.literal("Found " + total + " recipes"), 8, HEADER_Y, 0xFFFFEE88, false);
         if (shownRecipes.isEmpty()) {
             ctx.drawString(font, Component.translatable("customrecipe.vanilla.none"), 8, ROWS_Y + 2, 0xFFBBBBBB, false);
         }
@@ -724,10 +835,12 @@ public class VanillaRecipesScreen extends Screen {
             int y = ROWS_Y + i * ROW;
             int rowColor = recipe.special() ? 0x22335566
                     : parent.disabledRecipes.contains(recipe.id()) ? 0x44550000 : 0x22005500;
-            ctx.fill(6, y, width - 88, y + ROW - 1, rowColor);
+            ctx.fill(recipeListX(), y, recipeScrollbarX() - 4, y + ROW, rowColor);
             var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(recipe.result()));
-            if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), 10, y + 2);
+            if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), recipeListX() + 2, y + 2);
         }
+        renderInlinePreview(ctx);
+        renderRecipeScrollbar(ctx, shownRecipes);
         if (loading) ctx.drawString(font, Component.translatable("customrecipe.vanilla.loading_more"), 8, height - 42, 0xFFBBBBBB, false);
     }
 
@@ -735,15 +848,125 @@ public class VanillaRecipesScreen extends Screen {
         return id.startsWith("minecraft:") ? id.substring("minecraft:".length()) : id;
     }
 
+    private void renderInlinePreview(GuiGraphics ctx) {
+        int center = previewBoxX() + previewBoxW() / 2;
+        if (selectedRecipe == null) {
+            ctx.drawCenteredString(font, Component.literal("Select a recipe to preview"), center, previewBoxY() + 14, 0xFFAAAAAA);
+            return;
+        }
+        ctx.drawCenteredString(font, Component.literal("Recipe Preview"), center, previewBoxY() + 10, 0xFFFFFFFF);
+        ctx.drawCenteredString(font, Component.literal(selectedRecipe.id()), center, previewBoxY() + 26, 0xFFAAAAAA);
+        List<String> slots = selectedVariant == null ? selectedRecipe.slots() : selectedVariant.slots();
+        int gridX = previewGridX();
+        int gridY = previewGridY();
+        for (int slot = 0; slot < 9; slot++) {
+            int sx = gridX + (slot % 3) * 24;
+            int sy = gridY + (slot / 3) * 24;
+            ctx.fill(sx, sy, sx + 20, sy + 20, 0xFF303030);
+            if (slot < slots.size()) drawPreviewItem(ctx, slots.get(slot), sx + 2, sy + 2);
+        }
+        ctx.drawString(font, "->", gridX + 82, gridY + 27, 0xFFFFFFFF, true);
+        ctx.fill(gridX + 108, gridY + 24, gridX + 132, gridY + 48, 0xFF303030);
+        drawPreviewItem(ctx, selectedRecipe.result(), gridX + 112, gridY + 28);
+        String layout = selectedRecipe.shapeless() ? "Shapeless: JSON ingredient order"
+                : "Shaped: " + selectedRecipe.gridWidth() + "x" + selectedRecipe.gridHeight() + " pattern";
+        ctx.drawCenteredString(font, Component.literal(layout), center, previewBoxY() + 42, 0xFFAAAAAA);
+        if (selectedDetails == null) {
+            ctx.drawCenteredString(font, Component.literal("Loading variants..."), center, previewVariantGridY() - 18, 0xFFAAAAAA);
+            return;
+        }
+        if (selectedDetails.variants().isEmpty()) {
+            ctx.drawCenteredString(font, Component.literal("No interchangeable material"), center, previewVariantGridY() - 18, 0xFFAAAAAA);
+            return;
+        }
+        ctx.drawCenteredString(font, Component.literal("Material variants"), center, previewVariantGridY() - 18, 0xFFFFFFFF);
+        int columns = previewVariantColumns();
+        for (int index = 0; index < Math.min(48, selectedDetails.variants().size()); index++) {
+            VanillaRecipeDetails.VariantPreview variant = selectedDetails.variants().get(index);
+            int vx = previewVariantGridX() + (index % columns) * 24;
+            int vy = previewVariantGridY() + (index / columns) * 24;
+            boolean disabled = isRecipeDisabled(selectedRecipe.id()) || isVariantDisabled(selectedRecipe.id(), variant.materialId());
+            ctx.fill(vx, vy, vx + 20, vy + 20, disabled ? 0xAA4A0000 : 0xAA004A18);
+            if (selectedVariant != null && selectedVariant.materialId().equals(variant.materialId())) {
+                ctx.renderOutline(vx - 1, vy - 1, 22, 22, 0xFFFFFFFF);
+            }
+            drawPreviewItem(ctx, variant.materialId(), vx + 2, vy + 2);
+        }
+    }
+
+    private void renderPanels(GuiGraphics ctx) {
+        ctx.fill(recipeBoxX(), recipeBoxY(), recipeBoxX() + recipeBoxW(), recipeBoxY() + recipeBoxH(), 0x99141A20);
+        ctx.renderOutline(recipeBoxX(), recipeBoxY(), recipeBoxW(), recipeBoxH(), 0xFF40506A);
+        ctx.fill(previewBoxX(), previewBoxY(), previewBoxX() + previewBoxW(), previewBoxY() + previewBoxH(), 0x99141A20);
+        ctx.renderOutline(previewBoxX(), previewBoxY(), previewBoxW(), previewBoxH(), 0xFF40506A);
+    }
+
+    private void renderRecipeScrollbar(GuiGraphics ctx, List<VanillaRecipePage.VanillaRecipeInfo> shown) {
+        if (!hasRecipeScrollbar(shown)) return;
+        int max = maxScroll(shown);
+        int thumbH = 15;
+        int thumbY = recipeScrollbarY() + (recipeScrollbarH() - thumbH) * scroll / max;
+        ctx.fill(recipeScrollbarX(), recipeScrollbarY(), recipeScrollbarX() + SCROLLBAR_TRACK_W,
+                recipeScrollbarY() + recipeScrollbarH(), SCROLLBAR_TRACK_COLOR);
+        CustomRecipeSprites.draw(ctx, draggingRecipeScrollbar ? CustomRecipeSprites.SCROLLER_ACTIVE : CustomRecipeSprites.SCROLLER_IDLE,
+                recipeScrollbarX(), thumbY, 12, thumbH);
+    }
+
+    private void drawPreviewItem(GuiGraphics ctx, String id, int x, int y) {
+        if (id == null || id.isBlank() || id.startsWith("#")) return;
+        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
+        if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, y);
+    }
+
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
-        int maxScroll = Math.max(0, shownRecipes.size() - visibleRows());
+        int maxScroll = maxScroll(shownRecipes);
         int oldScroll = scroll;
         scroll = Math.max(0, Math.min(maxScroll, scroll - (int) Math.signum(verticalAmount)));
         if (scroll != oldScroll) clearWidgets(); init();
         if (scroll + visibleRows() >= shownRecipes.size() - 3) loadMore();
         return true;
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        List<VanillaRecipePage.VanillaRecipeInfo> shown = filteredRecipes();
+        // The rail owns its full 12 px hitbox, before row buttons receive the click.
+        if (button == 0 && isOverRecipeScrollbar(mouseX, mouseY, shown)) {
+            draggingRecipeScrollbar = true;
+            updateRecipeScrollbar(mouseY, shown);
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+        if (draggingRecipeScrollbar) {
+            updateRecipeScrollbar(mouseY, filteredRecipes());
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        draggingRecipeScrollbar = false;
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    private void updateRecipeScrollbar(double mouseY, List<VanillaRecipePage.VanillaRecipeInfo> shown) {
+        int max = maxScroll(shown);
+        if (max <= 0) return;
+        double progress = Math.max(0.0, Math.min(1.0,
+                (mouseY - recipeScrollbarY()) / Math.max(1, recipeScrollbarH() - 1)));
+        int next = (int) Math.round(progress * max);
+        if (next != scroll) {
+            scroll = next;
+            if (scroll + visibleRows() >= shown.size() - 3) loadMore();
+            clearWidgets(); init();
+        }
     }
 
     @Override public boolean isPauseScreen() { return true; }
