@@ -38,11 +38,15 @@ public final class ServerConfigNetworking {
     private static final Gson GSON = new Gson();
 
     public static void initialize() {
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> dispatcher.register(
-                literal("customrecipe")
-                        .requires(source -> source.hasPermissionLevel(2))
-                        .executes(context -> openEditor(context.getSource()))
-        ));
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            // The server-side editor is meaningful only for a dedicated server.
+            // Keeping the node out of an integrated server also removes it from
+            // suggestions, rather than merely rejecting it on execution.
+            if (!environment.dedicated) return;
+            dispatcher.register(literal("customrecipe_server")
+                    .requires(source -> source.hasPermissionLevel(2))
+                    .executes(context -> openEditor(context.getSource())));
+        });
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> awardDefaultRecipes(handler.player, server));
         ServerLifecycleEvents.SERVER_STARTED.register(RecipeConflictChecker::refreshAndSave);

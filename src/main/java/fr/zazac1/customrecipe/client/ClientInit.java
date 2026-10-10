@@ -38,6 +38,8 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
 @Environment(EnvType.CLIENT)
 public class ClientInit implements ClientModInitializer {
     private static String activeClientWorldId = "";
+    /** Defers command-originated GUI opening until the following client tick. */
+    private static int pendingSoloEditorTicks;
     /** The exact option value (including Auto = 0) from before the editor flow. */
     private static Integer guiScaleBeforeCustomRecipe;
     private static final Gson GSON = new Gson();
@@ -46,16 +48,27 @@ public class ClientInit implements ClientModInitializer {
     public void onInitializeClient() {
         // Used only by the clickable local-world tip; it never reaches a server.
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
-                literal("customrecipe_open_local").executes(context -> {
+                literal("customrecipe_solo")
+                        // 1.20.1 has a zero-based GLFW input API, but its client
+                        // command dispatcher can still hide this node completely.
+                        .requires(source -> MinecraftClient.getInstance().getServer() != null)
+                        .executes(context -> {
                     MinecraftClient client = MinecraftClient.getInstance();
                     // This client-only helper is for the clickable new-world tip.
                     // Never expose the local editor while connected to a remote server.
                     if (client.getServer() == null) return 0;
-                    client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new GameMenuScreen(true))));
+                    // Chat command handling may restore its previous screen after
+                    // this callback. Opening on the next tick keeps the editor up.
+                    pendingSoloEditorTicks = 1;
                     return 1;
                 })
         ));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (pendingSoloEditorTicks > 0 && --pendingSoloEditorTicks == 0) {
+                if (client.getServer() != null) {
+                    client.setScreen(ConfigScreen.fromPauseMenu(new GameMenuScreen(true)));
+                }
+            }
             updateGuiScaleForScreen(client, client.currentScreen);
             if (ConfigLoader.get().preload_recipes_on_startup) VanillaRecipesScreen.preloadAtStartup(client);
             if (client.getServer() == null) {
@@ -86,7 +99,7 @@ public class ClientInit implements ClientModInitializer {
             }
             Text editorLink = Text.translatable("customrecipe.chat.world_tip.link")
                     .setStyle(Style.EMPTY.withColor(Formatting.AQUA).withUnderline(true)
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_open_local"))
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_solo"))
                             .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                     Text.translatable("customrecipe.chat.world_tip.hover"))));
             client.player.sendMessage(Text.translatable("customrecipe.chat.world_tip", editorLink), false);
@@ -127,7 +140,12 @@ public class ClientInit implements ClientModInitializer {
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsPayload.ID, (client, handler, buffer, responseSender) -> {
             VanillaRecipeDetails details = GSON.fromJson(buffer.readString(), VanillaRecipeDetails.class);
-            client.execute(() -> { if (details != null && client.currentScreen instanceof VanillaRecipeDetailsScreen screen) screen.applyDetails(details); });
+            client.execute(() -> {
+                if (details == null) return;
+                if (client.currentScreen instanceof VanillaRecipesScreen screen) screen.applyDetails(details);
+                // Retain the legacy route for an already-open detail screen.
+                else if (client.currentScreen instanceof VanillaRecipeDetailsScreen screen) screen.applyDetails(details);
+            });
         });
     }
 

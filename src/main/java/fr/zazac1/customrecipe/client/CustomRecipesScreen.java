@@ -26,7 +26,7 @@ import java.util.Map;
 public class CustomRecipesScreen extends Screen {
 
     private static final int PAD      = 8;
-    private static final int ROW      = 20;
+    private static final int ROW      = 22;
     private static final int HEADER_H = 16;
     private static final int MINI     = 18;
     // Compact normal previews so the table can always show one more complete row.
@@ -35,6 +35,10 @@ public class CustomRecipesScreen extends Screen {
     private static final int SHAPELESS_DETAIL_W = 150;
     private static final int QUICK_ADD_W = 24;
     private static final int QUICK_ADD_GAP = 4;
+    private static final int OUTER_BUTTON_W = 200;
+    private static final int OUTER_BUTTON_H = 18;
+    private static final int OUTER_BUTTON_GAP = 4;
+    private static final int SAVE_BUTTON_H = 22;
 
     private final ConfigScreen parent;
     private final List<CustomRecipeEntry> recipes;
@@ -64,15 +68,20 @@ public class CustomRecipesScreen extends Screen {
     private boolean hasDetail() { return selectedRecipe >= 0 || selectedQuickAdd >= 0; }
     private int listH() {
         int available = height - listTop() - (hasDetail() ? detailH() + 4 : 0) - bottomReserve();
-        // Keep the Quick Add column on complete 20 px icon rows: no orphaned gap at the bottom.
+        // Keep the Quick Add column on complete contiguous table rows.
         if (!hasQuickAdd()) return available;
-        return 26 + Math.max(1, (available - 26) / 20) * 20;
+        return 26 + Math.max(1, (available - 26) / ROW) * ROW;
     }
     private int bottomReserve() {
-        if (libraryPicker) return 30;
-        // World mode has two action buttons before Back; keep the table above both.
-        return parent.target().isWorld() ? 92 : 48;
+        if (libraryPicker) return 26;
+        // The two bulk actions now occupy the header, not the bottom action rhythm.
+        return parent.target().isWorld() ? 74 : 52;
     }
+    private int outerButtonX() { return width / 2 - OUTER_BUTTON_W / 2; }
+    private int saveButtonY() { return height - 4 - SAVE_BUTTON_H; }
+    private int addRecipeButtonY() { return saveButtonY() - OUTER_BUTTON_GAP - OUTER_BUTTON_H; }
+    private int addFromLibraryButtonY() { return addRecipeButtonY() - OUTER_BUTTON_GAP - OUTER_BUTTON_H; }
+    private int bulkActionX() { return tableRight() - OUTER_BUTTON_W; }
     private int rowsTop()     { return listTop() + HEADER_H; }
     private int maxVisible()  { return Math.max(1, (listH() - HEADER_H) / ROW); }
     private int rowY(int i)   { return rowsTop() + (i - scroll) * ROW; }
@@ -215,19 +224,19 @@ public class CustomRecipesScreen extends Screen {
                         : on  ? (sel ? 0x44005533 : 0x22005500)
                             : (sel ? 0x44662200 : 0x44550000);
                 // The state tint runs under the action controls too, then gently fades out.
-                ctx.fillGradient(PAD + 1, y, tableRight() - 1, y + ROW - 2,
+                ctx.fillGradient(PAD + 1, y, tableRight() - 1, y + ROW,
                         rowColor, (rowColor & 0x00FFFFFF) | 0x18000000);
                 // Icône de l'item résultat
                 String resId = recipes.get(i).result;
                 Identifier resultId = resId == null ? null : Identifier.tryParse(resId);
                 if (resultId != null && Registries.ITEM.containsId(resultId)) {
-                    ctx.drawItem(new ItemStack(Registries.ITEM.get(resultId)), itemIconX(), y + 2);
+                    ctx.drawItem(new ItemStack(Registries.ITEM.get(resultId)), itemIconX(), y + 3);
                 }
-                drawRecipeStatusIcon(ctx, warningIconX(), y + 2, corrupted, conflict);
+                drawRecipeStatusIcon(ctx, warningIconX(), y + 3, corrupted, conflict);
                 boolean shapedType = "shaped".equalsIgnoreCase(recipes.get(i).type);
-                drawRecipeTypeIcon(ctx, typeIconX() + (shapedType ? 1 : 0), y + (shapedType ? 3 : 2),
+                drawRecipeTypeIcon(ctx, typeIconX() + (shapedType ? 1 : 0), y + (shapedType ? 4 : 3),
                         shapedType, 0xFF8FC7E8);
-                drawKnownByDefaultIcon(ctx, knownTypeIconX(), y + 1,
+                drawKnownByDefaultIcon(ctx, knownTypeIconX(), y + 2,
                         Boolean.TRUE.equals(recipes.get(i).known_by_default));
             }
             if (hasQuickAdd()) renderQuickAddPanel(ctx);
@@ -538,20 +547,20 @@ public class CustomRecipesScreen extends Screen {
             addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.enable_all"), b -> {
                 setAllRecipeStates(true);
                 clearAndInit();
-            }).dimensions(width / 2 - 100, height - 88, 98, 18).build());
+            }).dimensions(bulkActionX(), 4, 98, OUTER_BUTTON_H).build());
             addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.disable_all"), b -> {
                 setAllRecipeStates(false);
                 clearAndInit();
-            }).dimensions(width / 2 + 2, height - 88, 98, 18).build());
+            }).dimensions(bulkActionX() + 102, 4, 98, OUTER_BUTTON_H).build());
             addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.add_from_library"),
                     b -> client.setScreen(new CustomRecipesScreen(parent, true))
-            ).dimensions(width / 2 - 100, height - 66, 200, 18).build());
+            ).dimensions(outerButtonX(), addFromLibraryButtonY(), OUTER_BUTTON_W, OUTER_BUTTON_H).build());
         }
 
         if (!libraryPicker) {
             addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.add_recipe_new"),
                     b -> client.setScreen(new RecipeBuilderScreen(parent, this, null, -1))
-            ).dimensions(width / 2 - 100, height - 44, 200, 18).build());
+            ).dimensions(outerButtonX(), addRecipeButtonY(), OUTER_BUTTON_W, OUTER_BUTTON_H).build());
         }
 
         if (libraryPicker) {
@@ -560,9 +569,9 @@ public class CustomRecipesScreen extends Screen {
             ).dimensions(width / 2 - 75, height - 22, 150, 18).build());
         } else {
             String saveLabel = Text.translatable("customrecipe.button.save").getString();
-            int saveY = height - 26;
+            int saveY = saveButtonY();
             addDrawableChild(ButtonWidget.builder(Text.empty(), b -> parent.saveFromSubmenu())
-                    .dimensions(width / 2 - 100, saveY, 200, 22).build());
+                    .dimensions(outerButtonX(), saveY, OUTER_BUTTON_W, SAVE_BUTTON_H).build());
             addDrawable((ctx, mouseX, mouseY, delta) -> {
                 int iconX = width / 2 - textRenderer.getWidth(saveLabel) / 2 - 20;
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, iconX, saveY + 3, 16, 16);
