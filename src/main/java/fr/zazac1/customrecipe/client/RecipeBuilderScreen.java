@@ -1,6 +1,8 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomRecipeEntry;
+import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.RecipeIntegrity;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -382,6 +384,11 @@ public class RecipeBuilderScreen extends Screen {
     private List<String> findItemMatches(String q) {
         String ql = q.toLowerCase(Locale.ROOT);
         List<String> matches = new ArrayList<>();
+        for (CustomItemEntry custom : parent.customItems) {
+            String reference = CustomItemLibrary.reference(custom.id);
+            String searchable = custom.id + " " + custom.name + " " + custom.item_id;
+            if (searchable.toLowerCase(Locale.ROOT).contains(ql)) matches.add(reference);
+        }
         for (var entry : BuiltInRegistries.ITEM.entrySet()) {
             if (entry.getValue() == Items.AIR) continue;
             String id = entry.getKey().identifier().toString();
@@ -647,9 +654,8 @@ public class RecipeBuilderScreen extends Screen {
                             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SLOT_SELECTED, sx, sy, SLOT, SLOT);
                     String itemId = slotItems[slot];
                     if (itemId != null && !itemId.isEmpty()) {
-                        var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemId));
-                        if (item != null && item != Items.AIR)
-                            ctx.item(ClientItemStacks.fromItem(item), sx + 1, sy + 1);
+                        ItemStack stack = stackFor(itemId);
+                        if (!stack.isEmpty()) ctx.item(stack, sx + 1, sy + 1);
                     }
                 }
             }
@@ -667,9 +673,8 @@ public class RecipeBuilderScreen extends Screen {
                     rx, ry, OUTPUT_SLOT, OUTPUT_SLOT);
         }
         if (!resultItemId.isEmpty()) {
-            var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(resultItemId));
-            if (item != null && item != Items.AIR)
-                ctx.item(ClientItemStacks.fromItem(item), rx + 5, ry + 5);
+            ItemStack stack = stackFor(resultItemId);
+            if (!stack.isEmpty()) ctx.item(stack, rx + 5, ry + 5);
         }
 
         // Suggestion list background + icons
@@ -683,9 +688,8 @@ public class RecipeBuilderScreen extends Screen {
                 if (!isOverSuggestionScrollbar(mx, my)
                         && mx >= leftX() && mx < leftX() + leftW() && my >= ry2 && my < ry2 + SUGG_H)
                     ctx.fill(leftX() + 1, ry2, leftX() + leftW() - 1, ry2 + SUGG_H, 0x553355BB);
-                var item2 = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemMatches.get(i)));
-                if (item2 != null && item2 != Items.AIR)
-                    ctx.item(ClientItemStacks.fromItem(item2), leftX() + 2, ry2);
+                ItemStack stack = stackFor(itemMatches.get(i));
+                if (!stack.isEmpty()) ctx.item(stack, leftX() + 2, ry2);
             }
             if (itemMatches.size() > visibleSuggestions()) {
                 int scrollbarX = suggestionScrollbarX();
@@ -719,8 +723,8 @@ public class RecipeBuilderScreen extends Screen {
             if (empty) {
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, x + 1, y + 1, 18, 18);
             } else {
-                var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(used.get(i - 1)));
-                if (item != null && item != Items.AIR) ctx.item(ClientItemStacks.fromItem(item), x + 2, y + 2);
+                ItemStack stack = stackFor(used.get(i - 1));
+                if (!stack.isEmpty()) ctx.item(stack, x + 2, y + 2);
             }
         }
     }
@@ -742,9 +746,9 @@ public class RecipeBuilderScreen extends Screen {
             if (heldItemId.isEmpty()) {
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, ghostX - 1, ghostY - 1, 18, 18);
             } else {
-                var heldItem = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(heldItemId));
-                if (heldItem != null && heldItem != Items.AIR) {
-                ctx.item(ClientItemStacks.fromItem(heldItem), ghostX, ghostY);
+                ItemStack heldItem = stackFor(heldItemId);
+                if (!heldItem.isEmpty()) {
+                ctx.item(heldItem, ghostX, ghostY);
                 // The 1.21.11 GUI item pipeline has no alpha overload. Its
                 // translucent veil keeps the cursor item at 80% visual weight.
                 ctx.fill(ghostX, ghostY, ghostX + 16, ghostY + 16, 0x33000000);
@@ -1070,6 +1074,8 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     private String toDisplayName(String id) {
+        CustomItemEntry custom = CustomItemLibrary.isReference(id) ? CustomItemLibrary.find(parent.customItems, id) : null;
+        if (custom != null) return custom.name;
         String path = id.contains(":") ? id.split(":")[1] : id;
         String[] words = path.split("_");
         StringBuilder sb = new StringBuilder();
@@ -1078,7 +1084,13 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     private String shortId(String id) {
+        CustomItemEntry custom = CustomItemLibrary.isReference(id) ? CustomItemLibrary.find(parent.customItems, id) : null;
+        if (custom != null) return custom.name;
         return id.startsWith("minecraft:") ? id.substring(10) : id;
+    }
+
+    private ItemStack stackFor(String value) {
+        return ClientItemStacks.fromReference(value, parent.rootConfig());
     }
 
     @Override
@@ -1117,8 +1129,8 @@ public class RecipeBuilderScreen extends Screen {
                     x + 4, rowY + 4, SLOT, SLOT);
             ctx.text(font, (i + 1) + ")", x + 26, rowY + 8, 0xFF3F3F3F, false);
             if (itemId != null && !itemId.isEmpty()) {
-                var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemId));
-                if (item != null && item != Items.AIR) ctx.item(ClientItemStacks.fromItem(item), x + 5, rowY + 5);
+                ItemStack stack = stackFor(itemId);
+                if (!stack.isEmpty()) ctx.item(stack, x + 5, rowY + 5);
                 String name = font.plainSubstrByWidth(toDisplayName(itemId), Math.max(20, minusX - x - 68));
                 ctx.text(font, name, x + 42, rowY + 8, 0xFFDDDDDD, false);
                 ctx.text(font, "×" + row.count(), minusX - 26, rowY + 7, 0xFFEECC77, false);

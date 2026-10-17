@@ -927,10 +927,18 @@ public class VanillaRecipesScreen extends Screen {
             int background = disabled ? 0xAA4A0000 : 0xAA004A18;
             ctx.fill(x, y, x + 20, y + 20, background);
             drawPreviewBorder(ctx, x, y, border);
-            if (selectedVariant != null && selectedVariant.materialId().equals(variant.materialId())) {
-                drawPreviewSelection(ctx, x, y);
-            }
             drawPreviewItem(ctx, variant.materialId(), x + 2, y + 2);
+        }
+        // Draw the selected outline after every neighbouring border.
+        if (selectedVariant != null) {
+            for (int index = 0; index < Math.min(48, selectedDetails.variants().size()); index++) {
+                VanillaRecipeDetails.VariantPreview variant = selectedDetails.variants().get(index);
+                if (!selectedVariant.materialId().equals(variant.materialId())) continue;
+                int x = variantsX + (index % variantColumns) * 24;
+                int y = previewVariantGridY() + (index / variantColumns) * 24;
+                drawPreviewSelection(ctx, x, y);
+                break;
+            }
         }
     }
 

@@ -232,6 +232,8 @@ public final class ConfigLoader {
         if (config.disabled_recipes == null) config.disabled_recipes = new java.util.ArrayList<>();
         if (config.disabled_recipe_variants == null) config.disabled_recipe_variants = new java.util.ArrayList<>();
         if (config.custom_recipes == null) config.custom_recipes = new java.util.ArrayList<>();
+        if (config.custom_items == null) config.custom_items = new ArrayList<>();
+        normalizeCustomItems(config.custom_items);
 
         // Version 0 stored one shared list plus optional world_ids on recipes.
         // Split those recipes once: a library recipe remains in the library and
@@ -260,6 +262,23 @@ public final class ConfigLoader {
         config.known_by_default_builtin = legacyFields.known_by_default_builtin;
         config.disabled_recipes = legacyFields.disabled_recipes;
         config.disabled_recipe_variants = legacyFields.disabled_recipe_variants;
+    }
+
+    private static void normalizeCustomItems(List<CustomItemEntry> items) {
+        Set<String> usedIds = new HashSet<>();
+        items.removeIf(entry -> entry == null || entry.stack_data == null || entry.stack_data.isBlank());
+        for (CustomItemEntry entry : items) {
+            if (entry.name == null) entry.name = "";
+            if (entry.item_id == null) entry.item_id = "minecraft:air";
+            String requested = entry.id == null || entry.id.isBlank() ? entry.name : entry.id;
+            String base = CustomItemLibrary.sanitizeId(requested);
+            if (base.isBlank()) base = "custom_item";
+            String candidate = base;
+            int suffix = 2;
+            while (!usedIds.add(candidate)) candidate = base + "_" + suffix++;
+            entry.id = candidate;
+            if (entry.name.isBlank()) entry.name = candidate;
+        }
     }
 
     /**
@@ -434,6 +453,7 @@ public final class ConfigLoader {
         Map<String, CustomRecipeEntry> legacyRecipes = new LinkedHashMap<>();
         List<CustomRecipeEntry> normalizedRecipes = new ArrayList<>();
         Set<String> usedIds = new HashSet<>();
+        Set<String> usedServerRecipeIds = new HashSet<>();
         for (CustomRecipeEntry recipe : recipeConfig.custom_recipes) {
             if (recipe == null) continue;
             if (recipe.required_mods == null) recipe.required_mods = new LinkedHashMap<>();
@@ -471,6 +491,16 @@ public final class ConfigLoader {
             if (!usedIds.add(recipe.id)) {
                 recipe.id = "duplicate-" + UUID.nameUUIDFromBytes(
                         (recipeFingerprint(recipe) + "#" + normalizedRecipes.size()).getBytes(StandardCharsets.UTF_8));
+                usedIds.add(recipe.id);
+            }
+            // serverRecipeId lower-cases and replaces unsupported characters. Two
+            // distinct editor IDs can therefore otherwise overwrite one another
+            // inside Minecraft's recipe manager.
+            int serverIdSuffix = 0;
+            while (!usedServerRecipeIds.add(recipe.serverRecipeId().toString())) {
+                recipe.id = "duplicate-" + UUID.nameUUIDFromBytes(
+                        (recipeFingerprint(recipe) + "#server#" + normalizedRecipes.size() + "#" + serverIdSuffix++)
+                                .getBytes(StandardCharsets.UTF_8));
                 usedIds.add(recipe.id);
             }
             normalizedRecipes.add(recipe);

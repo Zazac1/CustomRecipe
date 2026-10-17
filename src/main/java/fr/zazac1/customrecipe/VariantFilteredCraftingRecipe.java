@@ -25,6 +25,11 @@ public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
 
     public CraftingRecipe delegate() { return delegate; }
 
+    /** Returns whether this filtered recipe rejects a concrete custom-recipe input. */
+    public boolean blocksAny(java.util.Collection<String> materialIds) {
+        return materialIds.stream().anyMatch(blockedMaterials::contains);
+    }
+
     @Override
     public boolean matches(CraftingInput input, Level world) {
         if (!delegate.matches(input, world)) return false;

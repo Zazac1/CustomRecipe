@@ -68,10 +68,10 @@ public class CustomRecipeEntry {
     /** Missing item IDs that caused {@link #corrupted} to be set. */
     public List<String> missing_items = new ArrayList<>();
 
-    /** Default crafting recipe IDs with the same inputs and the same output item. */
+    /** Active crafting recipe IDs that can match the same grid and produce the same item. */
     public List<String> conflicting_recipes = new ArrayList<>();
 
-    /** Default crafting recipe IDs with the same inputs but a different output item. */
+    /** Active crafting recipe IDs that can match the same grid but produce a different item. */
     public List<String> same_shape_recipes = new ArrayList<>();
 
     /** Stable server key used for recipe loading and automatic recipe-book unlocks. */

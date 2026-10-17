@@ -172,6 +172,8 @@ public class BuiltinRecipesScreen extends Screen {
                                 ? CustomRecipeSprites.KNOWN_BY_DEFAULT_INFO
                                 : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT_INFO,
                         knownIconX(), y + 1, 20, 18);
+                // Clicking a recipe title opens its ingredient preview.
+                CustomRecipeSprites.draw(ctx, CustomRecipeSprites.EYE, recipeX(), y + 2, 16, 16);
             }
 
             // Panneau de détail
@@ -225,12 +227,12 @@ public class BuiltinRecipesScreen extends Screen {
             boolean sel = selectedRecipe == i;
 
             MultiLineTextWidget lbl = new MultiLineTextWidget(
-                    recipeX(), y + (ROW - 8) / 2,
+                    recipeX() + 20, y + (ROW - 8) / 2,
                     Component.literal(quickAddName(i))
                             .withColor(dis ? (sel ? 0xBBAAAA : 0x888888)
                                            : (sel ? 0xFFEE88 : 0xE0E0E0)),
                     font);
-            lbl.setMaxWidth(stateX() - recipeX() - 8);
+            lbl.setMaxWidth(stateX() - recipeX() - 28);
             lbl.setMaxRows(1);
             addRenderableWidget(lbl);
 
