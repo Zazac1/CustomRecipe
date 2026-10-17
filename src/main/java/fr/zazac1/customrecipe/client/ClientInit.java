@@ -2,6 +2,9 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeMod;
+import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
+import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
@@ -40,21 +43,31 @@ public class ClientInit implements ClientModInitializer {
     /** The exact option value (including Auto = 0) from before the editor flow. */
     private static Integer guiScaleBeforeCustomRecipe;
     private static final Gson GSON = new Gson();
+    /** Opening an editor from a command must happen after the command/chat screen has finished closing. */
+    private static Runnable deferredEditorOpen;
+    private static int deferredEditorOpenTicks;
 
     @Override
     public void onInitializeClient() {
         // Used only by the clickable local-world tip; it never reaches a server.
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
-                literal("customrecipe_open_local").executes(context -> {
+                literal("customrecipe_solo")
+                        .requires(source -> MinecraftClient.getInstance().getServer() != null)
+                        .executes(context -> {
                     MinecraftClient client = MinecraftClient.getInstance();
                     // This client-only helper is for the clickable new-world tip.
                     // Never expose the local editor while connected to a remote server.
                     if (client.getServer() == null) return 0;
-                    client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new GameMenuScreen(true))));
+                    deferEditorOpen(() -> {
+                        if (client.getServer() != null) {
+                            client.setScreen(ConfigScreen.fromPauseMenu(new GameMenuScreen(true)));
+                        }
+                    });
                     return 1;
                 })
         ));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            openDeferredEditorIfReady();
             updateGuiScaleForScreen(client, client.currentScreen);
             if (ConfigLoader.get().preload_recipes_on_startup) VanillaRecipesScreen.preloadAtStartup(client);
             if (client.getServer() == null) {
@@ -85,32 +98,37 @@ public class ClientInit implements ClientModInitializer {
             }
             Text editorLink = Text.translatable("customrecipe.chat.world_tip.link")
                     .setStyle(Style.EMPTY.withColor(Formatting.AQUA).withUnderline(true)
-                            .withClickEvent(new ClickEvent.RunCommand("/customrecipe_open_local"))
+                            .withClickEvent(new ClickEvent.RunCommand("/customrecipe_solo"))
                             .withHoverEvent(new HoverEvent.ShowText(Text.translatable("customrecipe.chat.world_tip.hover"))));
             client.player.sendMessage(Text.translatable("customrecipe.chat.world_tip", editorLink), false);
             CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
         });
         ClientPlayNetworking.registerGlobalReceiver(ServerConfigPayload.ID, (payload, context) -> {
+            // A server-management payload is ignored completely unless the
+            // connected player is currently an administrator. In particular,
+            // no validation or local data is ever sent back by a non-admin.
+            if (!ClientServerConfigNetworking.canManageServer()) return;
             var config = ConfigLoader.fromJson(payload.json());
             if (config == null) {
                 context.player().sendMessage(net.minecraft.text.Text.translatable("customrecipe.chat.invalid_server_config"), false);
                 return;
             }
-            int imported = mergeLocalRecipes(config);
-            if (imported > 0) {
+            LocalMergeResult imported = mergeLocalContent(config);
+            if (imported.recipes() > 0 || imported.customItems() > 0) {
                 context.player().sendMessage(net.minecraft.text.Text.translatable(
-                        "customrecipe.chat.local_recipes_ready", imported), false);
+                        "customrecipe.chat.local_content_ready", imported.recipes(), imported.customItems()), false);
             }
             ClientServerConfigNetworking.validate(config);
         });
         ClientPlayNetworking.registerGlobalReceiver(ValidatedServerConfigPayload.ID, (payload, context) -> {
+            if (!ClientServerConfigNetworking.canManageServer()) return;
             var config = ConfigLoader.fromJson(payload.json());
             if (config == null) {
                 context.player().sendMessage(net.minecraft.text.Text.translatable("customrecipe.chat.invalid_server_validation"), false);
                 return;
             }
-            context.client().setScreen(new ConfigScreen(context.client().currentScreen, config,
-                    "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
+            deferEditorOpen(() -> context.client().setScreen(new ConfigScreen(context.client().currentScreen, config,
+                    "Server Recipes (OP)", true, ClientServerConfigNetworking::save)));
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipePagePayload.ID, (payload, context) -> {
             VanillaRecipePage page = GSON.fromJson(payload.json(), VanillaRecipePage.class);
@@ -120,10 +138,29 @@ public class ClientInit implements ClientModInitializer {
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsPayload.ID, (payload, context) -> {
             VanillaRecipeDetails details = GSON.fromJson(payload.json(), VanillaRecipeDetails.class);
-            if (details != null && context.client().currentScreen instanceof VanillaRecipeDetailsScreen screen) {
+            if (details != null && context.client().currentScreen instanceof VanillaRecipesScreen screen) {
+                screen.applyDetails(details);
+            } else if (details != null && context.client().currentScreen instanceof VanillaRecipeDetailsScreen screen) {
                 screen.applyDetails(details);
             }
         });
+    }
+
+    /** Defers the screen transition by one complete client tick. */
+    private static void deferEditorOpen(Runnable open) {
+        deferredEditorOpen = open;
+        deferredEditorOpenTicks = 1;
+    }
+
+    private static void openDeferredEditorIfReady() {
+        if (deferredEditorOpen == null) return;
+        if (deferredEditorOpenTicks > 0) {
+            deferredEditorOpenTicks--;
+            return;
+        }
+        Runnable open = deferredEditorOpen;
+        deferredEditorOpen = null;
+        open.run();
     }
 
     /** Keeps the editor readable while preserving the player's exact original scale. */
@@ -183,29 +220,68 @@ public class ClientInit implements ClientModInitializer {
         return client.getServer().getSavePath(WorldSavePath.ROOT);
     }
 
-    /** Stages local ModMenu recipes in the server editor without sending them automatically. */
-    private static int mergeLocalRecipes(fr.zazac1.customrecipe.ModConfig serverConfig) {
-        int added = 0;
-        for (var localRecipe : ConfigLoader.get().custom_recipes) {
+    private record LocalMergeResult(int recipes, int customItems) {}
+
+    /** Stages the admin's local recipes and full-stack items in the server editor. */
+    private static LocalMergeResult mergeLocalContent(ModConfig serverConfig) {
+        ModConfig localConfig = ConfigLoader.get();
+        java.util.Map<String, String> referenceRemap = new java.util.LinkedHashMap<>();
+        int addedItems = 0;
+        for (CustomItemEntry localItem : localConfig.custom_items) {
+            if (localItem == null) continue;
+            String oldReference = CustomItemLibrary.reference(localItem.id);
+            CustomItemEntry serverItem = CustomItemLibrary.find(serverConfig.custom_items, localItem.id);
+            if (serverItem != null && java.util.Objects.equals(serverItem.stack_data, localItem.stack_data)) {
+                referenceRemap.put(oldReference, CustomItemLibrary.reference(serverItem.id));
+                continue;
+            }
+
+            String importedId = serverItem == null ? localItem.id
+                    : CustomItemLibrary.uniqueId(serverConfig.custom_items, localItem.id + "_local");
+            CustomItemEntry copy = copyLocalCustomItem(localItem, importedId);
+            serverConfig.custom_items.add(copy);
+            referenceRemap.put(oldReference, CustomItemLibrary.reference(importedId));
+            addedItems++;
+        }
+
+        int addedRecipes = 0;
+        for (CustomRecipeEntry localRecipe : localConfig.custom_recipes) {
+            CustomRecipeEntry draft = copyLocalRecipeAsDraft(localRecipe, referenceRemap);
             boolean alreadyOnServer = serverConfig.custom_recipes.stream()
-                    .anyMatch(serverRecipe -> ConfigLoader.sameRecipe(localRecipe, serverRecipe));
+                    .anyMatch(serverRecipe -> ConfigLoader.sameRecipe(draft, serverRecipe));
             if (!alreadyOnServer) {
-                serverConfig.custom_recipes.add(copyLocalRecipeAsDraft(localRecipe));
-                added++;
+                serverConfig.custom_recipes.add(draft);
+                addedRecipes++;
             }
         }
-        return added;
+        return new LocalMergeResult(addedRecipes, addedItems);
     }
 
-    private static fr.zazac1.customrecipe.CustomRecipeEntry copyLocalRecipeAsDraft(
-            fr.zazac1.customrecipe.CustomRecipeEntry source) {
-        var copy = new fr.zazac1.customrecipe.CustomRecipeEntry();
+    private static CustomItemEntry copyLocalCustomItem(CustomItemEntry source, String id) {
+        CustomItemEntry copy = new CustomItemEntry();
+        copy.id = id;
+        copy.name = source.name;
+        copy.item_id = source.item_id;
+        copy.stack_data = source.stack_data;
+        return copy;
+    }
+
+    private static CustomRecipeEntry copyLocalRecipeAsDraft(
+            CustomRecipeEntry source, java.util.Map<String, String> referenceRemap) {
+        var copy = new CustomRecipeEntry();
         copy.id = source.id;
         copy.type = source.type;
-        copy.ingredients = new java.util.ArrayList<>(source.ingredients);
-        copy.pattern = new java.util.ArrayList<>(source.pattern);
-        copy.keys = new java.util.LinkedHashMap<>(source.keys);
-        copy.result = source.result;
+        copy.ingredients = source.ingredients == null ? new java.util.ArrayList<>()
+                : source.ingredients.stream().map(value -> remap(value, referenceRemap))
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+        copy.ingredient_counts = source.ingredient_counts == null ? new java.util.ArrayList<>()
+                : new java.util.ArrayList<>(source.ingredient_counts);
+        copy.pattern = source.pattern == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(source.pattern);
+        copy.keys = new java.util.LinkedHashMap<>();
+        if (source.keys != null) source.keys.forEach((key, value) -> copy.keys.put(key, remap(value, referenceRemap)));
+        copy.key_counts = source.key_counts == null ? new java.util.LinkedHashMap<>()
+                : new java.util.LinkedHashMap<>(source.key_counts);
+        copy.result = remap(source.result, referenceRemap);
         copy.count = source.count;
         copy.enabled = null;
         copy.server_enabled = null;
@@ -213,5 +289,9 @@ public class ClientInit implements ClientModInitializer {
         copy.world_names = new java.util.LinkedHashMap<>();
         copy.known_by_default = source.known_by_default;
         return copy;
+    }
+
+    private static String remap(String value, java.util.Map<String, String> referenceRemap) {
+        return value == null ? null : referenceRemap.getOrDefault(value, value);
     }
 }
