@@ -120,6 +120,7 @@
   ,"customrecipe.builder.empty_remove": "Vide - retirer l’objet"
   ,"customrecipe.builder.shapeless_ingredients": "Ingrédients sans forme (%s/9)"
   ,"customrecipe.builder.result_count": "Résultat × :"
+  ,"customrecipe.builder.ingredient_count": "Ingrédient × :"
   ,"customrecipe.builder.save": "Sauvegarder"
   ,"customrecipe.chat.world_tip": "Vous pouvez modifier les recettes personnalisées de ce monde via le menu pause (Échap), en cliquant sur %s, ou via Mod Menu."
   ,"customrecipe.chat.world_tip.link": "Custom Recipe"

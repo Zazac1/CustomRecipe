@@ -1,5 +1,6 @@
 package fr.zazac1.customrecipe;
 
+import net.minecraft.core.NonNullList;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
@@ -15,8 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/** Adds exact component matching to an otherwise vanilla-compatible recipe. */
-public final class CustomItemCraftingRecipe implements CraftingRecipe {
+/** Adds exact component and per-slot quantity matching to a vanilla-compatible recipe. */
+public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCraftingRecipe {
     private final CraftingRecipe delegate;
     private final CustomRecipeEntry definition;
     private final Map<String, ItemStack> customStacks;
@@ -31,54 +32,90 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe {
     @Override
     public boolean matches(CraftingInput input, Level level) {
         if (!delegate.matches(input, level)) return false;
+        return requiredCounts(input).length == input.size();
+    }
+
+    @Override
+    public int[] requiredCounts(CraftingInput input) {
         return "shaped".equalsIgnoreCase(definition.type)
-                ? matchesShaped(input) : matchesShapeless(input);
+                ? requiredShapedCounts(input, true) : requiredShapelessCounts(input, true);
     }
 
-    private boolean matchesShapeless(CraftingInput input) {
-        List<String> expected = definition.ingredients == null ? List.of()
-                : definition.ingredients.stream().filter(value -> value != null && !value.isBlank()).toList();
-        List<ItemStack> actual = input.items().stream().filter(stack -> !stack.isEmpty()).toList();
-        if (expected.size() != actual.size()) return false;
-        return assign(expected, actual, 0, new boolean[actual.size()]);
+    @Override
+    public int[] placementCounts(CraftingInput input) {
+        return "shaped".equalsIgnoreCase(definition.type)
+                ? requiredShapedCounts(input, false) : requiredShapelessCounts(input, false);
     }
 
-    private boolean assign(List<String> expected, List<ItemStack> actual, int index, boolean[] used) {
+    private int[] requiredShapelessCounts(CraftingInput input, boolean enforceAmounts) {
+        List<Expected> expected = new ArrayList<>();
+        if (definition.ingredients != null) {
+            for (int i = 0; i < definition.ingredients.size(); i++) {
+                String token = definition.ingredients.get(i);
+                if (token != null && !token.isBlank()) {
+                    expected.add(new Expected(token, definition.ingredientCount(i)));
+                }
+            }
+        }
+        List<Actual> actual = new ArrayList<>();
+        for (int i = 0; i < input.size(); i++) {
+            ItemStack stack = input.getItem(i);
+            if (!stack.isEmpty()) actual.add(new Actual(i, stack));
+        }
+        if (expected.size() != actual.size()) return new int[0];
+        int[] required = new int[input.size()];
+        return assign(expected, actual, 0, new boolean[actual.size()], required, enforceAmounts)
+                ? required : new int[0];
+    }
+
+    private boolean assign(List<Expected> expected, List<Actual> actual, int index, boolean[] used,
+                           int[] required, boolean enforceAmounts) {
         if (index == expected.size()) return true;
-        String token = expected.get(index);
+        Expected ingredient = expected.get(index);
         for (int i = 0; i < actual.size(); i++) {
-            if (used[i] || !matchesToken(token, actual.get(i))) continue;
+            Actual candidate = actual.get(i);
+            if (used[i] || !matchesToken(ingredient.token(), candidate.stack(), ingredient.count(), enforceAmounts)) continue;
             used[i] = true;
-            if (assign(expected, actual, index + 1, used)) return true;
+            required[candidate.inputIndex()] = ingredient.count();
+            if (assign(expected, actual, index + 1, used, required, enforceAmounts)) return true;
+            required[candidate.inputIndex()] = 0;
             used[i] = false;
         }
         return false;
     }
 
-    private boolean matchesShaped(CraftingInput input) {
+    private int[] requiredShapedCounts(CraftingInput input, boolean enforceAmounts) {
         List<String> rows = shrink(definition.pattern);
-        if (rows.isEmpty() || input.height() != rows.size() || input.width() != rows.getFirst().length()) return false;
-        return matchesRows(input, rows, false) || matchesRows(input, rows, true);
+        if (rows.isEmpty() || input.height() != rows.size() || input.width() != rows.getFirst().length()) {
+            return new int[0];
+        }
+        int[] normal = requiredRowCounts(input, rows, false, enforceAmounts);
+        return normal.length > 0 ? normal : requiredRowCounts(input, rows, true, enforceAmounts);
     }
 
-    private boolean matchesRows(CraftingInput input, List<String> rows, boolean mirrored) {
+    private int[] requiredRowCounts(CraftingInput input, List<String> rows, boolean mirrored,
+                                    boolean enforceAmounts) {
         int width = rows.getFirst().length();
+        int[] required = new int[input.size()];
         for (int y = 0; y < rows.size(); y++) {
             for (int x = 0; x < width; x++) {
                 char symbol = rows.get(y).charAt(mirrored ? width - x - 1 : x);
                 String token = symbol == ' ' || definition.keys == null ? "" : definition.keys.get(symbol + "");
                 ItemStack actual = input.getItem(x, y);
                 if (token == null || token.isBlank()) {
-                    if (!actual.isEmpty()) return false;
-                } else if (!matchesToken(token, actual)) {
-                    return false;
+                    if (!actual.isEmpty()) return new int[0];
+                } else {
+                    int count = definition.keyCount(symbol + "");
+                    if (!matchesToken(token, actual, count, enforceAmounts)) return new int[0];
+                    required[y * width + x] = count;
                 }
             }
         }
-        return true;
+        return required;
     }
 
-    private boolean matchesToken(String token, ItemStack actual) {
+    private boolean matchesToken(String token, ItemStack actual, int count, boolean enforceAmount) {
+        if (actual == null || (enforceAmount && actual.getCount() < count)) return false;
         ItemStack custom = customStacks.get(token);
         if (custom != null) return CustomItemLibrary.exactMatch(actual, custom);
         Identifier id = Identifier.tryParse(token);
@@ -111,6 +148,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe {
     }
 
     @Override public ItemStack assemble(CraftingInput input) { return delegate.assemble(input); }
+    @Override public NonNullList<ItemStack> getRemainingItems(CraftingInput input) { return delegate.getRemainingItems(input); }
     @Override public RecipeSerializer<? extends CraftingRecipe> getSerializer() { return delegate.getSerializer(); }
     @Override public CraftingBookCategory category() { return delegate.category(); }
     @Override public PlacementInfo placementInfo() { return delegate.placementInfo(); }
@@ -118,4 +156,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe {
     @Override public String group() { return delegate.group(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }
     @Override public List<RecipeDisplay> display() { return delegate.display(); }
+
+    private record Expected(String token, int count) {}
+    private record Actual(int inputIndex, ItemStack stack) {}
 }

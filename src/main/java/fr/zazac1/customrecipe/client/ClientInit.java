@@ -250,9 +250,13 @@ public class ClientInit implements ClientModInitializer {
         copy.ingredients = source.ingredients == null ? new java.util.ArrayList<>()
                 : source.ingredients.stream().map(value -> remap(value, referenceRemap))
                 .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+        copy.ingredient_counts = source.ingredient_counts == null ? new java.util.ArrayList<>()
+                : new java.util.ArrayList<>(source.ingredient_counts);
         copy.pattern = source.pattern == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(source.pattern);
         copy.keys = new java.util.LinkedHashMap<>();
         if (source.keys != null) source.keys.forEach((key, value) -> copy.keys.put(key, remap(value, referenceRemap)));
+        copy.key_counts = source.key_counts == null ? new java.util.LinkedHashMap<>()
+                : new java.util.LinkedHashMap<>(source.key_counts);
         copy.result = remap(source.result, referenceRemap);
         copy.count = source.count;
         copy.enabled = null;

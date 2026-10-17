@@ -122,7 +122,7 @@ public abstract class ServerRecipeManagerMixin {
             }
             idx++;
             if (built != null) {
-                if (usesCustomIngredient(entry)) exactCustomRecipes.add(built);
+                if (usesExactOrCountedIngredient(entry)) exactCustomRecipes.add(built);
                 else customRecipes.add(built);
             }
         }
@@ -138,7 +138,8 @@ public abstract class ServerRecipeManagerMixin {
         return RecipeMap.create(recipes);
     }
 
-    private boolean usesCustomIngredient(CustomRecipeEntry entry) {
+    private boolean usesExactOrCountedIngredient(CustomRecipeEntry entry) {
+        if (entry.hasCountedIngredients()) return true;
         java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
                 ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
                 : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
@@ -199,7 +200,8 @@ public abstract class ServerRecipeManagerMixin {
             net.minecraft.world.item.ItemStack stack = resolveStack(reference, customItems);
             if (!stack.isEmpty()) stacks.put(reference, stack.copyWithCount(1));
         });
-        return stacks.isEmpty() ? recipe : new fr.zazac1.customrecipe.CustomItemCraftingRecipe(recipe, entry, stacks);
+        return stacks.isEmpty() && !entry.hasCountedIngredients()
+                ? recipe : new fr.zazac1.customrecipe.CustomItemCraftingRecipe(recipe, entry, stacks);
     }
 
 
@@ -210,9 +212,14 @@ public abstract class ServerRecipeManagerMixin {
 
     private String recipeInputSignature(CustomRecipeEntry entry) {
         if ("shaped".equalsIgnoreCase(entry.type)) {
-            return "shaped:" + entry.pattern + ":" + entry.keys;
+            return "shaped:" + entry.pattern + ":" + entry.keys + ":" + entry.key_counts;
         }
-        List<String> ingredients = entry.ingredients == null ? List.of() : new ArrayList<>(entry.ingredients);
+        List<String> ingredients = new ArrayList<>();
+        if (entry.ingredients != null) {
+            for (int i = 0; i < entry.ingredients.size(); i++) {
+                ingredients.add(entry.ingredients.get(i) + "×" + entry.ingredientCount(i));
+            }
+        }
         java.util.Collections.sort(ingredients);
         return "shapeless:" + ingredients;
     }
