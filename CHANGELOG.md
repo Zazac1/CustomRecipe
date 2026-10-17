@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.7+1.21.8
+
+### Added
+
+- Default Recipes now provides an integrated two-panel recipe preview, including crafting grid, output, recipe layout, and material variants.
+- Added explicit commands: `/customrecipe_solo` for singleplayer and `/customrecipe_server` for dedicated servers.
+
+### Changed
+
+- Default Recipe searches and filters use cached local recipe metadata after the initial scan.
+- Recipe Builder suggestions and shapeless ingredients use corrected, draggable scrollbars.
+- Custom Recipe library rows and controls are more compact, and bulk world actions now sit in the table header.
+
+### Fixed
+
+- Clicking or dragging the item-suggestion scrollbar no longer selects an item.
+- The Recipe Builder search-clear icon is rendered and clicked directly without the underlying vanilla button artifact.
+- Recipe Builder mouse controls use the Minecraft 1.21.8 left/right button mappings.
+- The selected material-variant outline remains visible on every side.
+- The local and dedicated-server editor commands open only in their intended context.
+- World selector scrollbar contrast is consistent with the rest of the UI.
+
 ## 1.2.1+1.21.8
 
 ### Changed
