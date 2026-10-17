@@ -15,10 +15,13 @@ import net.minecraft.recipe.book.CraftingRecipeCategory;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.RegistryWrapper;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.profiler.Profiler;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Final;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
@@ -34,6 +37,7 @@ import java.util.HashSet;
 
 @Mixin(ServerRecipeManager.class)
 public abstract class ServerRecipeManagerMixin {
+    @Shadow @Final private RegistryWrapper.WrapperLookup registries;
 
     @ModifyVariable(
             method = "apply(Lnet/minecraft/recipe/PreparedRecipes;Lnet/minecraft/resource/ResourceManager;Lnet/minecraft/util/profiler/Profiler;)V",
@@ -42,7 +46,8 @@ public abstract class ServerRecipeManagerMixin {
     )
     private PreparedRecipes customrecipe$applyConfig(PreparedRecipes original) {
         ConfigLoader.invalidate();
-        WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
+        ModConfig rootConfig = ConfigLoader.get();
+        WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
 
         List<RecipeEntry<?>> recipes = new ArrayList<>(original.recipes());
 
@@ -96,15 +101,16 @@ public abstract class ServerRecipeManagerMixin {
         // 2. Inject user custom recipes
         int idx = 0;
         boolean recipeStateChanged = false;
+        List<RecipeEntry<?>> exactCustomRecipes = new ArrayList<>();
         List<RecipeEntry<?>> customRecipes = new ArrayList<>();
         for (CustomRecipeEntry entry : config.custom_recipes) {
             if (entry == null || Boolean.FALSE.equals(entry.enabled) || Boolean.FALSE.equals(entry.server_enabled)) {
                 idx++;
                 continue;
             }
-            recipeStateChanged |= fr.zazac1.customrecipe.RecipeIntegrity.refresh(entry);
+            recipeStateChanged |= fr.zazac1.customrecipe.RecipeIntegrity.refresh(entry, rootConfig.custom_items);
             RecipeEntry<?> built = Boolean.TRUE.equals(entry.corrupted) ? null
-                    : buildCustomRecipe(entry, idx, recipeBookGroup(entry));
+                    : buildCustomRecipe(entry, idx, recipeBookGroup(entry), rootConfig.custom_items);
             if (Boolean.TRUE.equals(entry.corrupted)) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Disabled corrupted recipe {}: missing {}. Reinstall required mods {} or delete the recipe.",
                         entry.id, entry.missing_items, entry.required_mods);
@@ -112,31 +118,44 @@ public abstract class ServerRecipeManagerMixin {
                 continue;
             }
             idx++;
-            if (built != null) customRecipes.add(built);
+            if (built != null) {
+                if (usesExactOrCountedIngredient(entry)) exactCustomRecipes.add(built);
+                else customRecipes.add(built);
+            }
         }
         if (recipeStateChanged) ConfigLoader.saveIntegrityState(ConfigLoader.get());
 
-        // The recipe manager uses the first matching entry. Vanilla entries
-        // stay first, so a custom recipe only takes effect after the matching
-        // vanilla recipe has been disabled. Custom recipes still share groups.
+        // Exact full-stack ingredients are deliberately checked before generic
+        // vanilla ingredients. This lets a component-rich fishing rod select its
+        // custom recipe without changing how ordinary fishing rods craft.
+        recipes.addAll(0, exactCustomRecipes);
+        // Other custom recipes retain the established conflict behaviour.
         recipes.addAll(customRecipes);
 
         return PreparedRecipes.of(recipes);
     }
 
+    private boolean usesExactOrCountedIngredient(CustomRecipeEntry entry) {
+        if (entry.hasCountedIngredients()) return true;
+        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
+                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
+                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
+        return values.anyMatch(fr.zazac1.customrecipe.CustomItemLibrary::isReference);
+    }
+
     // ── dispatch ─────────────────────────────────────────────────────────
 
-    private RecipeEntry<?> buildCustomRecipe(CustomRecipeEntry entry, int idx, String recipeGroup) {
+    private RecipeEntry<?> buildCustomRecipe(CustomRecipeEntry entry, int idx, String recipeGroup,
+                                             List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
         if (entry == null) return null;
         if (entry.result == null || entry.result.isBlank()) return null;
 
-        Identifier resultId = Identifier.tryParse(entry.result);
-        if (resultId == null || !Registries.ITEM.containsId(resultId)) {
+        ItemStack result = resolveStack(entry.result, customItems);
+        if (result.isEmpty()) {
             CustomRecipeMod.LOGGER.warn("[CustomRecipe] Unknown result item: {}", entry.result);
             return null;
         }
-
-        ItemStack result = new ItemStack(Registries.ITEM.get(resultId), Math.max(1, entry.count));
+        result = result.copyWithCount(Math.max(1, entry.count));
 
         RegistryKey<Recipe<?>> key = RegistryKey.of(
                 RegistryKeys.RECIPE,
@@ -144,10 +163,42 @@ public abstract class ServerRecipeManagerMixin {
         );
 
         if ("shaped".equalsIgnoreCase(entry.type)) {
-            return buildShaped(entry, result, key, recipeGroup);
+            return buildShaped(entry, result, key, recipeGroup, customItems);
         } else {
-            return buildShapeless(entry, result, key, recipeGroup);
+            return buildShapeless(entry, result, key, recipeGroup, customItems);
         }
+    }
+
+    private ItemStack resolveStack(String value,
+                                   List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
+        if (fr.zazac1.customrecipe.CustomItemLibrary.isReference(value)) {
+            return fr.zazac1.customrecipe.CustomItemLibrary.decode(
+                    fr.zazac1.customrecipe.CustomItemLibrary.find(customItems, value), registries);
+        }
+        Identifier id = Identifier.tryParse(value);
+        return id != null && Registries.ITEM.containsId(id)
+                ? new ItemStack(Registries.ITEM.get(id))
+                : ItemStack.EMPTY;
+    }
+
+    private String ingredientBaseId(String value, List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
+        if (!fr.zazac1.customrecipe.CustomItemLibrary.isReference(value)) return value;
+        return fr.zazac1.customrecipe.CustomItemLibrary.baseItemId(
+                fr.zazac1.customrecipe.CustomItemLibrary.find(customItems, value));
+    }
+
+    private CraftingRecipe exactWrapper(CraftingRecipe recipe, CustomRecipeEntry entry,
+                                        List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
+        Map<String, ItemStack> stacks = new HashMap<>();
+        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
+                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
+                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
+        values.filter(fr.zazac1.customrecipe.CustomItemLibrary::isReference).distinct().forEach(reference -> {
+            ItemStack stack = resolveStack(reference, customItems);
+            if (!stack.isEmpty()) stacks.put(reference, stack.copyWithCount(1));
+        });
+        return stacks.isEmpty() && !entry.hasCountedIngredients()
+                ? recipe : new fr.zazac1.customrecipe.CustomItemCraftingRecipe(recipe, entry, stacks);
     }
 
 
@@ -158,24 +209,31 @@ public abstract class ServerRecipeManagerMixin {
 
     private String recipeInputSignature(CustomRecipeEntry entry) {
         if ("shaped".equalsIgnoreCase(entry.type)) {
-            return "shaped:" + entry.pattern + ":" + entry.keys;
+            return "shaped:" + entry.pattern + ":" + entry.keys + ":" + entry.key_counts;
         }
-        List<String> ingredients = entry.ingredients == null ? List.of() : new ArrayList<>(entry.ingredients);
+        List<String> ingredients = new ArrayList<>();
+        if (entry.ingredients != null) {
+            for (int i = 0; i < entry.ingredients.size(); i++) {
+                ingredients.add(entry.ingredients.get(i) + "×" + entry.ingredientCount(i));
+            }
+        }
         java.util.Collections.sort(ingredients);
         return "shapeless:" + ingredients;
     }
 
     // ── shapeless ─────────────────────────────────────────────────────────
 
-    private RecipeEntry<ShapelessRecipe> buildShapeless(CustomRecipeEntry entry, ItemStack result,
-                                                         RegistryKey<Recipe<?>> key, String recipeGroup) {
+    private RecipeEntry<?> buildShapeless(CustomRecipeEntry entry, ItemStack result,
+                                           RegistryKey<Recipe<?>> key, String recipeGroup,
+                                           List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
         List<String> rawIngredients = entry.ingredients;
         if (rawIngredients == null || rawIngredients.isEmpty()) return null;
 
         List<Ingredient> ingredients = new ArrayList<>();
         for (String itemId : rawIngredients) {
             if (itemId == null || itemId.isBlank()) continue;
-            Identifier id = Identifier.tryParse(itemId.trim());
+            String baseId = ingredientBaseId(itemId.trim(), customItems);
+            Identifier id = Identifier.tryParse(baseId);
             if (id == null || !Registries.ITEM.containsId(id)) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shapeless ingredient not found: {}", itemId);
                 return null;
@@ -190,13 +248,14 @@ public abstract class ServerRecipeManagerMixin {
                 result,
                 ingredients
         );
-        return new RecipeEntry<>(key, recipe);
+        return new RecipeEntry<>(key, exactWrapper(recipe, entry, customItems));
     }
 
     // ── shaped ────────────────────────────────────────────────────────────
 
-    private RecipeEntry<ShapedRecipe> buildShaped(CustomRecipeEntry entry, ItemStack result,
-                                                    RegistryKey<Recipe<?>> key, String recipeGroup) {
+    private RecipeEntry<?> buildShaped(CustomRecipeEntry entry, ItemStack result,
+                                        RegistryKey<Recipe<?>> key, String recipeGroup,
+                                        List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
         List<String> pattern = entry.pattern;
         Map<String, String> keysMap = entry.keys;
         if (pattern == null || pattern.isEmpty()) return null;
@@ -207,7 +266,7 @@ public abstract class ServerRecipeManagerMixin {
         for (Map.Entry<String, String> kv : keysMap.entrySet()) {
             if (kv.getKey() == null || kv.getKey().isEmpty()) continue;
             char sym = kv.getKey().charAt(0);
-            Identifier itemId = Identifier.tryParse(kv.getValue());
+            Identifier itemId = Identifier.tryParse(ingredientBaseId(kv.getValue(), customItems));
             if (itemId == null || !Registries.ITEM.containsId(itemId)) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shaped key item not found: {}", kv.getValue());
                 return null;
@@ -230,6 +289,6 @@ public abstract class ServerRecipeManagerMixin {
                 rawRecipe,
                 result
         );
-        return new RecipeEntry<>(key, recipe);
+        return new RecipeEntry<>(key, exactWrapper(recipe, entry, customItems));
     }
 }

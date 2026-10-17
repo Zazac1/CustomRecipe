@@ -14,7 +14,7 @@ import net.minecraft.text.Text;
 /** Advanced raw server JSON editor. */
 @Environment(EnvType.CLIENT)
 public class ServerJsonScreen extends Screen {
-    private static final int MAX_JSON_CHARS = 30_000;
+    private static final int MAX_JSON_CHARS = 1_000_000;
 
     private final ConfigScreen parent;
     private final String initialJson;
