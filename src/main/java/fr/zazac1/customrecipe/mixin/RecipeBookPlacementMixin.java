@@ -3,6 +3,7 @@ package fr.zazac1.customrecipe.mixin;
 import fr.zazac1.customrecipe.CountedCraftingRecipe;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.AbstractCraftingMenu;
 import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.inventory.RecipeBookMenu;
@@ -67,24 +68,20 @@ public abstract class RecipeBookPlacementMixin {
             if (missing > 0) return;
         }
 
-        int lastChangedGridSlot = -1;
         for (Target target : targets) {
             int missing = target.missing();
+            ItemStack completed = target.stack().copy();
             for (int slot = 0; slot < inventorySize && missing > 0; slot++) {
                 ItemStack candidate = inventory.getItem(slot);
                 if (candidate.isEmpty() || !ItemStack.isSameItemSameComponents(candidate, target.stack())) continue;
                 ItemStack moved = inventory.removeItem(slot, Math.min(missing, candidate.getCount()));
-                target.stack().grow(moved.getCount());
+                completed.grow(moved.getCount());
                 missing -= moved.getCount();
             }
-            lastChangedGridSlot = target.gridIndex();
+            craftSlots.setItem(target.gridIndex(), completed);
         }
         inventory.setChanged();
-        if (lastChangedGridSlot >= 0) {
-            // The stacks were mutated without intermediate menu updates. Notify once
-            // after every slot is complete so the counted recipe can match immediately.
-            craftSlots.setItem(lastChangedGridSlot, craftSlots.getItem(lastChangedGridSlot));
-        }
+        ((AbstractContainerMenu) (Object) this).broadcastChanges();
     }
 
     private record Target(int gridIndex, ItemStack stack, int missing) {}
