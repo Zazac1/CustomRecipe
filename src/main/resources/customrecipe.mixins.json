@@ -4,7 +4,9 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ServerRecipeManagerMixin",
-    "CraftingScreenHandlerMixin"
+    "CraftingScreenHandlerMixin",
+    "RecipeBookPlacementMixin",
+    "ResultSlotMixin"
   ],
   "client": [
     "client.GameMenuScreenMixin"

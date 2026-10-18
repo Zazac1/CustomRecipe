@@ -1,7 +1,8 @@
 package fr.zazac1.customrecipe;
 
 import com.google.gson.Gson;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,11 +16,9 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.EndDataPackReload;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.Join;
 import net.minecraft.item.ItemStack;
 import net.minecraft.recipe.CraftingRecipe;
 import net.minecraft.recipe.Ingredient;
@@ -28,15 +27,18 @@ import net.minecraft.recipe.ShapedRecipe;
 import net.minecraft.recipe.input.CraftingRecipeInput;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.network.ServerRecipeBook;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
+import static net.minecraft.server.command.CommandManager.argument;
+import static net.minecraft.server.command.CommandManager.literal;
+
+/** Server-side command and permission-checked config synchronization. */
 public final class ServerConfigNetworking {
-   private static final int MAX_JSON_CHARS = 30000;
+   private static final int MAX_JSON_CHARS = 1_000_000;
    private static final int VANILLA_PAGE_SIZE = 40;
    private static final Gson GSON = new Gson();
 
@@ -49,87 +51,101 @@ public final class ServerConfigNetworking {
       PayloadTypeRegistry.playC2S().register(VanillaRecipeQueryPayload.ID, VanillaRecipeQueryPayload.CODEC);
       PayloadTypeRegistry.playS2C().register(VanillaRecipeDetailsPayload.ID, VanillaRecipeDetailsPayload.CODEC);
       PayloadTypeRegistry.playC2S().register(VanillaRecipeDetailsQueryPayload.ID, VanillaRecipeDetailsQueryPayload.CODEC);
-      ServerPlayConnectionEvents.JOIN.register((Join)(handler, sender, server) -> awardDefaultRecipes(handler.player, server, false));
+
+      ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
+            awardDefaultRecipes(handler.player, server, false));
       ServerLifecycleEvents.SERVER_STARTED.register(ServerConfigNetworking::refreshRecipeConflicts);
-      ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((EndDataPackReload)(server, resourceManager, success) -> {
-         if (success) {
-            refreshRecipeConflicts(server);
+      ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
+         if (!success) return;
+         refreshRecipeConflicts(server);
+         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+            awardDefaultRecipes(player, server, true);
+         }
+         ReiCompat.refreshAfterRecipeReload(server);
+      });
 
-            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-               awardDefaultRecipes(player, server, true);
-            }
+      CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+         dispatcher.register(literal("customrecipe_item")
+               .requires(source -> !environment.dedicated || source.hasPermissionLevel(2))
+               .then(literal("save")
+                     .executes(context -> saveHeldItem(context.getSource(), null, null, false))
+                     .then(argument("name", StringArgumentType.greedyString())
+                           .executes(context -> saveHeldItem(context.getSource(), null,
+                                 StringArgumentType.getString(context, "name"), false))))
+               .then(literal("save_as")
+                     .then(argument("id", StringArgumentType.word())
+                           .executes(context -> saveHeldItem(context.getSource(),
+                                 StringArgumentType.getString(context, "id"), null, true))
+                           .then(argument("name", StringArgumentType.greedyString())
+                                 .executes(context -> saveHeldItem(context.getSource(),
+                                       StringArgumentType.getString(context, "id"),
+                                       StringArgumentType.getString(context, "name"), true)))))
+               .then(literal("give").then(argument("id", StringArgumentType.word())
+                     .executes(context -> giveCustomItem(context.getSource(),
+                           StringArgumentType.getString(context, "id")))))
+               .then(literal("remove").then(argument("id", StringArgumentType.word())
+                     .executes(context -> removeCustomItem(context.getSource(),
+                           StringArgumentType.getString(context, "id")))))
+               .then(literal("list").executes(context -> listCustomItems(context.getSource()))));
 
-            ReiCompat.refreshAfterRecipeReload(server);
+         if (environment.dedicated) {
+            dispatcher.register(literal("customrecipe_server")
+                  .requires(source -> source.hasPermissionLevel(2))
+                  .executes(context -> openEditor(context.getSource())));
          }
       });
-      CommandRegistrationCallback.EVENT
-         .register(
-            (CommandRegistrationCallback)(dispatcher, registryAccess, environment) -> {
-               if (environment.dedicated) {
-                  dispatcher.register(
-                     (LiteralArgumentBuilder)((LiteralArgumentBuilder)CommandManager.literal("customrecipe_server").requires(source -> source.hasPermissionLevel(2)))
-                        .executes(context -> openEditor((ServerCommandSource)context.getSource()))
-                  );
-               }
-            }
-         );
+
       ServerPlayNetworking.registerGlobalReceiver(SaveServerConfigPayload.ID, (payload, context) -> {
          ServerPlayerEntity player = context.player();
          if (!player.hasPermissionLevel(2)) {
             player.sendMessage(Text.translatable("customrecipe.chat.permission_denied"), false);
-         } else if (payload.json().length() > 30000) {
-            player.sendMessage(Text.translatable("customrecipe.chat.server_too_large"), false);
-         } else {
-            ModConfig config = ConfigLoader.fromJson(payload.json());
-            if (config == null) {
-               player.sendMessage(Text.translatable("customrecipe.chat.invalid_json"), false);
-            } else {
-               config.editor_world_id = "";
-               config.editor_world_name = "";
-               WorldRecipeAssignments.migrateLegacyRecipes(config);
-               ConfigLoader.saveAndInvalidate(config);
-               player.sendMessage(Text.translatable("customrecipe.chat.server_applying"), false);
-               context.server().getCommandManager().executeWithPrefix(player.getCommandSource().withSilent(), "reload");
-            }
+            return;
          }
+         if (payload.json().length() > MAX_JSON_CHARS) {
+            player.sendMessage(Text.translatable("customrecipe.chat.server_too_large"), false);
+            return;
+         }
+         ModConfig config = ConfigLoader.fromJson(payload.json());
+         if (config == null) {
+            player.sendMessage(Text.translatable("customrecipe.chat.invalid_json"), false);
+            return;
+         }
+         config.editor_world_id = "";
+         config.editor_world_name = "";
+         WorldRecipeAssignments.migrateLegacyRecipes(config);
+         validateProposedConfig(context.server(), config);
+         ConfigLoader.saveAndInvalidate(config);
+         player.sendMessage(Text.translatable("customrecipe.chat.server_applying"), false);
+         context.server().getCommandManager().executeWithPrefix(player.getCommandSource().withSilent(), "reload");
       });
+
       ServerPlayNetworking.registerGlobalReceiver(ValidateServerConfigPayload.ID, (payload, context) -> {
          ServerPlayerEntity player = context.player();
-         if (player.hasPermissionLevel(2) && payload.json().length() <= 30000) {
-            ModConfig config = ConfigLoader.fromJson(payload.json());
-            if (config != null) {
-               validateProposedConfig(context.server(), config);
-               String json = ConfigLoader.toJson(config);
-               if (json.length() <= 30000) {
-                  ServerPlayNetworking.send(player, new ValidatedServerConfigPayload(json));
-               }
-            }
+         if (!player.hasPermissionLevel(2) || payload.json().length() > MAX_JSON_CHARS) return;
+         ModConfig config = ConfigLoader.fromJson(payload.json());
+         if (config == null) return;
+         validateProposedConfig(context.server(), config);
+         String json = ConfigLoader.toJson(config);
+         if (json.length() <= MAX_JSON_CHARS) {
+            ServerPlayNetworking.send(player, new ValidatedServerConfigPayload(json));
          }
       });
-      ServerPlayNetworking.registerGlobalReceiver(
-         VanillaRecipeQueryPayload.ID,
-         (payload, context) -> {
-            if (context.player().hasPermissionLevel(2)) {
-               ServerConfigNetworking.RecipeQuery query = (ServerConfigNetworking.RecipeQuery)GSON.fromJson(
-                  payload.json(), ServerConfigNetworking.RecipeQuery.class
-               );
-               if (query != null) {
-                  VanillaRecipePage page = findVanillaRecipes(context.server(), query);
-                  String json = GSON.toJson(page);
-                  if (json.length() <= 30000) {
-                     ServerPlayNetworking.send(context.player(), new VanillaRecipePagePayload(json));
-                  }
-               }
-            }
+
+      ServerPlayNetworking.registerGlobalReceiver(VanillaRecipeQueryPayload.ID, (payload, context) -> {
+         if (!context.player().hasPermissionLevel(2)) return;
+         RecipeQuery query = GSON.fromJson(payload.json(), RecipeQuery.class);
+         if (query == null) return;
+         String json = GSON.toJson(findVanillaRecipes(context.server(), query));
+         if (json.length() <= MAX_JSON_CHARS) {
+            ServerPlayNetworking.send(context.player(), new VanillaRecipePagePayload(json));
          }
-      );
+      });
+
       ServerPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsQueryPayload.ID, (payload, context) -> {
-         if (context.player().hasPermissionLevel(2)) {
-            VanillaRecipeDetails details = findVanillaRecipeDetails(context.server(), payload.recipeId());
-            String json = GSON.toJson(details);
-            if (json.length() <= 30000) {
-               ServerPlayNetworking.send(context.player(), new VanillaRecipeDetailsPayload(json));
-            }
+         if (!context.player().hasPermissionLevel(2)) return;
+         String json = GSON.toJson(findVanillaRecipeDetails(context.server(), payload.recipeId()));
+         if (json.length() <= MAX_JSON_CHARS) {
+            ServerPlayNetworking.send(context.player(), new VanillaRecipeDetailsPayload(json));
          }
       });
    }
@@ -177,7 +193,7 @@ public final class ServerConfigNetworking {
       WorldRecipeConfig targetConfig = ConfigLoader.activeWorldConfig(config);
 
       for (CustomRecipeEntry entry : targetConfig.custom_recipes) {
-         RecipeIntegrity.refresh(entry);
+         RecipeIntegrity.refresh(entry, config.custom_items);
          List<String> conflicts = new ArrayList<>();
          List<String> sameShape = new ArrayList<>();
          ServerConfigNetworking.RecipeSignature signature = Boolean.TRUE.equals(entry.corrupted) ? null : signatureOf(entry);
@@ -376,7 +392,6 @@ public final class ServerConfigNetworking {
          return false;
       }
    }
-
    private static String ingredientSignature(Ingredient ingredient) {
       return Arrays.stream(ingredient.getMatchingStacks())
          .map(stack -> Registries.ITEM.getId(stack.getItem()).toString())
@@ -423,27 +438,108 @@ public final class ServerConfigNetworking {
       if (!ServerPlayNetworking.canSend(player, ServerConfigPayload.ID)) {
          source.sendError(Text.translatable("customrecipe.chat.client_mod_required"));
          return 0;
-      } else {
-         sendEditor(player);
-         source.sendFeedback(() -> Text.translatable("customrecipe.chat.opening_editor"), false);
-         return 1;
       }
+      source.getServer().execute(() -> sendEditor(player));
+      source.sendFeedback(() -> Text.translatable("customrecipe.chat.opening_editor"), false);
+      return Command.SINGLE_SUCCESS;
+   }
+
+   private static int saveHeldItem(ServerCommandSource source, String requestedId, String requestedName,
+                                   boolean replaceExisting) throws CommandSyntaxException {
+      ServerPlayerEntity player = source.getPlayerOrThrow();
+      ItemStack held = player.getMainHandStack();
+      if (held.isEmpty()) {
+         source.sendError(Text.translatable("customrecipe.chat.custom_item.empty_hand"));
+         return 0;
+      }
+
+      ConfigLoader.invalidate();
+      ModConfig config = ConfigLoader.get();
+      String name = requestedName == null || requestedName.isBlank()
+            ? held.getName().getString() : requestedName.strip();
+      String id = requestedId == null || requestedId.isBlank()
+            ? CustomItemLibrary.uniqueId(config.custom_items, name)
+            : CustomItemLibrary.sanitizeId(requestedId);
+      if (id.isBlank()) {
+         source.sendError(Text.translatable("customrecipe.chat.custom_item.invalid_id"));
+         return 0;
+      }
+
+      CustomItemEntry entry = CustomItemLibrary.find(config.custom_items, id);
+      if (entry != null && !replaceExisting) id = CustomItemLibrary.uniqueId(config.custom_items, id);
+      if (entry == null || !entry.id.equals(id)) {
+         entry = new CustomItemEntry();
+         config.custom_items.add(entry);
+      }
+      entry.id = id;
+      entry.name = name;
+      entry.item_id = Registries.ITEM.getId(held.getItem()).toString();
+      try {
+         entry.stack_data = CustomItemLibrary.encode(held, source.getServer().getRegistryManager());
+      } catch (RuntimeException error) {
+         source.sendError(Text.translatable("customrecipe.chat.custom_item.save_failed"));
+         CustomRecipeMod.LOGGER.error("[CustomRecipe] Failed to encode custom item {}", id, error);
+         return 0;
+      }
+      ConfigLoader.saveAndInvalidate(config);
+      String savedId = id;
+      source.sendFeedback(() -> Text.translatable("customrecipe.chat.custom_item.saved", name, savedId), false);
+      return Command.SINGLE_SUCCESS;
+   }
+
+   private static int giveCustomItem(ServerCommandSource source, String requestedId) throws CommandSyntaxException {
+      CustomItemEntry entry = CustomItemLibrary.find(ConfigLoader.get().custom_items, requestedId);
+      ItemStack stack = CustomItemLibrary.decode(entry, source.getServer().getRegistryManager());
+      if (entry == null || stack.isEmpty()) {
+         source.sendError(Text.translatable("customrecipe.chat.custom_item.not_found", requestedId));
+         return 0;
+      }
+      ServerPlayerEntity player = source.getPlayerOrThrow();
+      if (!player.giveItemStack(stack.copy())) player.dropItem(stack.copy(), false);
+      source.sendFeedback(() -> Text.translatable("customrecipe.chat.custom_item.given", entry.name), false);
+      return Command.SINGLE_SUCCESS;
+   }
+
+   private static int removeCustomItem(ServerCommandSource source, String requestedId) {
+      ModConfig config = ConfigLoader.get();
+      CustomItemEntry entry = CustomItemLibrary.find(config.custom_items, requestedId);
+      if (entry == null) {
+         source.sendError(Text.translatable("customrecipe.chat.custom_item.not_found", requestedId));
+         return 0;
+      }
+      config.custom_items.remove(entry);
+      ConfigLoader.saveAndInvalidate(config);
+      source.sendFeedback(() -> Text.translatable("customrecipe.chat.custom_item.removed", entry.name), false);
+      source.getServer().getCommandManager().executeWithPrefix(source.withSilent(), "reload");
+      return Command.SINGLE_SUCCESS;
+   }
+
+   private static int listCustomItems(ServerCommandSource source) {
+      List<CustomItemEntry> items = ConfigLoader.get().custom_items;
+      if (items.isEmpty()) {
+         source.sendFeedback(() -> Text.translatable("customrecipe.chat.custom_item.list_empty"), false);
+         return Command.SINGLE_SUCCESS;
+      }
+      source.sendFeedback(() -> Text.translatable("customrecipe.chat.custom_item.list", items.size()), false);
+      for (CustomItemEntry entry : items) {
+         source.sendFeedback(() -> Text.literal("- " + entry.id + " — " + entry.name), false);
+      }
+      return items.size();
    }
 
    private static void sendEditor(ServerPlayerEntity player) {
-      if (ServerPlayNetworking.canSend(player, ServerConfigPayload.ID)) {
-         ConfigLoader.invalidate();
-         ModConfig config = ConfigLoader.get();
-         config.editor_world_id = WorldRecipeAssignments.activeWorldId();
-         config.editor_world_name = WorldRecipeAssignments.activeWorldName();
-         String json = ConfigLoader.toJson(config);
-         config.editor_world_id = "";
-         config.editor_world_name = "";
-         if (json.length() > 30000) {
+      if (!player.hasPermissionLevel(2) || !ServerPlayNetworking.canSend(player, ServerConfigPayload.ID)) return;
+      ConfigLoader.invalidate();
+      ModConfig config = ConfigLoader.get();
+      config.editor_world_id = WorldRecipeAssignments.activeWorldId();
+      config.editor_world_name = WorldRecipeAssignments.activeWorldName();
+      String json = ConfigLoader.toJson(config);
+      config.editor_world_id = "";
+      config.editor_world_name = "";
+      if (json.length() > MAX_JSON_CHARS) {
             player.sendMessage(Text.translatable("customrecipe.chat.server_send_too_large"), false);
-         } else {
-            ServerPlayNetworking.send(player, new ServerConfigPayload(json));
-         }
+      } else {
+         ServerPlayNetworking.send(player, new ServerConfigPayload(json));
       }
    }
 
@@ -631,4 +727,3 @@ public final class ServerConfigNetworking {
    private record RecipeSignature(boolean shaped, int width, int height, List<String> ingredients) {
    }
 }
-

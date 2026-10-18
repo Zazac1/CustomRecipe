@@ -57,4 +57,3 @@ public final class DisabledCraftingRecipe implements CraftingRecipe {
       return this.delegate.showNotification();
    }
 }
-

@@ -25,6 +25,11 @@ public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
       return this.delegate;
    }
 
+   /** Returns whether this filtered recipe rejects a concrete custom-recipe input. */
+   public boolean blocksAny(java.util.Collection<String> materialIds) {
+      return materialIds.stream().anyMatch(this.blockedMaterials::contains);
+   }
+
    public boolean matches(CraftingRecipeInput input, World world) {
       return !this.delegate.matches(input, world)
          ? false
@@ -67,4 +72,3 @@ public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
       return this.delegate.showNotification();
    }
 }
-

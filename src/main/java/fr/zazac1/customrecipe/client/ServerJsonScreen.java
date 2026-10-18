@@ -13,7 +13,7 @@ import net.minecraft.text.Text;
 
 @Environment(EnvType.CLIENT)
 public class ServerJsonScreen extends Screen {
-   private static final int MAX_JSON_CHARS = 30000;
+   private static final int MAX_JSON_CHARS = 1_000_000;
    private final ConfigScreen parent;
    private final String initialJson;
    private EditBoxWidget jsonField;
@@ -53,7 +53,7 @@ public class ServerJsonScreen extends Screen {
             Text.literal("{\n  \"custom_recipes\": []\n}")
          )
       );
-      this.jsonField.setMaxLength(30000);
+      this.jsonField.setMaxLength(MAX_JSON_CHARS);
       this.jsonField.setText(this.initialJson);
       this.setFocused(this.jsonField);
       this.addDrawableChild(
@@ -100,4 +100,3 @@ public class ServerJsonScreen extends Screen {
       return true;
    }
 }
-

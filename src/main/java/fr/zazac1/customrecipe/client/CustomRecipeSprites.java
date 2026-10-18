@@ -14,6 +14,7 @@ final class CustomRecipeSprites {
     static final Identifier ACCEPT = sprite("accept");
     static final Identifier REJECT = sprite("reject");
     static final Identifier ADD = sprite("add");
+    static final Identifier EYE = sprite("eye");
     static final Identifier SAVE = sprite("save");
     static final Identifier RESET = sprite("reset");
     static final Identifier LOCKED_INFO = sprite("locked_info");

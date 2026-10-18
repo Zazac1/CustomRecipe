@@ -38,4 +38,3 @@ public abstract class GameMenuScreenMixin extends Screen {
                 buttonX + 2, buttonY + 2, 0, 0, 16, 16, 16, 16));
     }
 }
-

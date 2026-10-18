@@ -87,4 +87,3 @@ final class RecipeTargetBadge {
 
     private RecipeTargetBadge() {}
 }
-

@@ -1,32 +1,34 @@
-# Modrinth release — Custom Recipe 1.3.8
+# 1.3.8-1.21.1-(Fabric)
 
-## Version type
+## Custom Recipe — Minecraft 1.21.1 (Fabric)
 
-Release
+This beta update lets you save special items with all their custom data and use them in recipes like regular items.
 
-## Version number
+## Added
 
-1.3.8-1.21.1-(Fabric)
+- **Custom Items library (beta)** — save the item held in your main hand, give it a name or identifier, and reuse it as a recipe ingredient or output without losing its custom data.
+- **Server Custom Items transfer** — server administrators can stage their locally saved Custom Items alongside local recipes in the server editor.
+- **Custom Item commands** — administrators can save, list, give, replace, or remove saved Custom Items with `/customrecipe_item`.
 
-## Version subtitle
+## Improved
 
-1.3.8-1.21.1-(Fabric)
+- Recipes using a special version of an ordinary item now match its complete custom data, while normal versions of that item continue to work in their usual recipes.
+- Custom Item names and icons are displayed in the recipe builder, recipe list, previews, and quick-add menus.
+- Server recipe and Custom Item management is restricted to administrators, including every configuration action sent to the server.
 
-## Loader
+## Fixed
 
-Fabric
+- The **Give** and **Delete** buttons in the Custom Items library now become available when their actions are permitted.
+- The **Give** button is unavailable outside a world and for players without server administration permission.
+- Recipe outputs using a saved Custom Item now display the correct item icon.
+- Recipe conflicts are refreshed again when a server configuration is saved.
 
-## Game version
+## Compatibility / servers
 
-1.21.1
+- Requires Minecraft 1.21.1 with Fabric, Fabric API, and Mod Menu.
+- Custom Items and local recipes are never sent to a dedicated server by players without administration permission.
+- Existing recipes and configurations remain compatible.
 
-## File
+## Before updating
 
-`build/libs/customrecipe-1.3.8+1.21.1.jar`
-
-## Version changelog
-
-### Interface
-
-- Updated the Recipe Builder search-clear icon (`reject.png`) to the 1.3.7 asset.
-- The clear-search control now has the same refreshed red X icon as the other 1.3.7 targets.
+- The Custom Items library is a beta feature. Back up the Custom Recipe configuration before testing it on an important world or server.

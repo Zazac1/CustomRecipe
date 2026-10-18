@@ -56,7 +56,7 @@ Click **Save** in the main menu to store local settings in `config/customrecipe.
 Install the mod on the dedicated server and on the operator's client. An operator can run:
 
 ```mcfunction
-/customrecipe
+/customrecipe_server
 ```
 
 The server sends its authoritative configuration to that operator only. Local ModMenu recipes are shown as drafts and are validated against the server catalog; they are not sent until the OP clicks **Save**. The editor supports custom recipes, built-ins, default recipes, material variants, and manual JSON editing. Click **Save** to send the full configuration back to the server; it is written to the server `config/customrecipe.json` and recipes are reloaded.
