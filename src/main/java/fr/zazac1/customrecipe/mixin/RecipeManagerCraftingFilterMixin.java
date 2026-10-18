@@ -62,10 +62,10 @@ abstract class RecipeManagerCraftingFilterMixin {
     }
 
     private static boolean blocked(RecipeHolder<?> entry, net.minecraft.world.item.crafting.RecipeInput input, WorldRecipeConfig config) {
-        if (config.disabled_recipes.contains(entry.id().toString())) return true;
+        if (config.disabled_recipes.contains(entry.id().identifier().toString())) return true;
         if (!(entry.value() instanceof CraftingRecipe) || !(input instanceof CraftingInput crafting)) return false;
         for (RecipeVariantRule rule : config.disabled_recipe_variants) {
-            if (!entry.id().toString().equals(rule.recipe_id)) continue;
+            if (!entry.id().identifier().toString().equals(rule.recipe_id)) continue;
             for (int slot = 0; slot < crafting.size(); slot++) {
                 ItemStack stack = crafting.getItem(slot);
                 if (!stack.isEmpty() && BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(rule.material_id)) return true;

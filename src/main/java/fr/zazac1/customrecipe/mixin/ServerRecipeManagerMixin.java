@@ -27,10 +27,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import java.util.Collection;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -43,17 +40,17 @@ import java.util.HashSet;
 @Mixin(value = RecipeManager.class, remap = false)
 public abstract class ServerRecipeManagerMixin {
     @Shadow(remap = false) @Final private net.minecraft.core.HolderLookup.Provider registries;
-    @Shadow(remap = false) public abstract Collection<RecipeHolder<?>> getRecipes();
-    @Shadow(remap = false) private RecipeMap recipes;
 
-    @Inject(method = "apply(Lnet/minecraft/world/item/crafting/RecipeMap;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)V", at = @At("TAIL"), remap = false)
-    private void customrecipe$applyConfig(RecipeMap ignored, ResourceManager resourceManager,
-                                          ProfilerFiller profiler, CallbackInfo ci) {
+    @ModifyVariable(
+            method = "apply(Lnet/minecraft/world/item/crafting/RecipeMap;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)V",
+            at = @At("HEAD"), argsOnly = true, ordinal = 0, remap = false
+    )
+    private RecipeMap customrecipe$applyConfig(RecipeMap original) {
         ConfigLoader.invalidate();
         ModConfig rootConfig = ConfigLoader.get();
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
 
-        List<RecipeHolder<?>> recipes = new ArrayList<>(getRecipes());
+        List<RecipeHolder<?>> recipes = new ArrayList<>(original.values());
         List<RecipeHolder<?>> priorityCustomRecipes = new ArrayList<>();
         List<RecipeHolder<?>> ordinaryCustomRecipes = new ArrayList<>();
 
@@ -120,7 +117,7 @@ public abstract class ServerRecipeManagerMixin {
 
         recipes.addAll(0, priorityCustomRecipes);
         recipes.addAll(ordinaryCustomRecipes);
-        this.recipes = RecipeMap.create(recipes);
+        return RecipeMap.create(recipes);
     }
 
     // ── dispatch ─────────────────────────────────────────────────────────
@@ -218,7 +215,7 @@ public abstract class ServerRecipeManagerMixin {
     private RecipeHolder<CraftingRecipe> buildShaped(CustomRecipeEntry entry, ItemStack result,
                                                       Identifier key, String recipeGroup,
                                                       List<CustomItemEntry> customItems) {
-        List<String> pattern = entry.pattern;
+        List<String> pattern = CustomItemCraftingRecipe.shrinkPattern(entry.pattern);
         Map<String, String> keysMap = entry.keys;
         if (pattern == null || pattern.isEmpty()) return null;
         if (keysMap == null || keysMap.isEmpty()) return null;

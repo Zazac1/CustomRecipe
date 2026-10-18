@@ -713,10 +713,11 @@ public class RecipeBuilderScreen extends Screen {
                     String itemId = slotItems[slot];
                     if (itemId != null && !itemId.isEmpty()) {
                         ItemStack stack = stackFor(itemId);
-                        if (!stack.isEmpty()) ctx.renderItem(stack, sx + 1, sy + 1);
-                        String amount = String.valueOf(slotCounts[slot]);
-                        ctx.drawString(font, amount, sx + SLOT - font.width(amount) - 1, sy + SLOT - 8,
-                                0xFFFFFFFF, true);
+                        if (!stack.isEmpty()) {
+                            ctx.renderItem(stack, sx + 1, sy + 1);
+                            ctx.renderItemDecorations(font, stack, sx + 1, sy + 1,
+                                    String.valueOf(slotCounts[slot]));
+                        }
                     }
                 }
             }
