@@ -12,6 +12,9 @@
     "CraftingMenuMixin",
     "ResultSlotMixin"
   ],
+  "client": [
+    "client.GhostRecipeMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }
