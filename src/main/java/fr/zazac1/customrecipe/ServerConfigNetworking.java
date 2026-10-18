@@ -46,7 +46,10 @@ public final class ServerConfigNetworking {
     }
 
     private static void registerCommands(RegisterCommandsEvent event) {
-        event.getDispatcher().register(literal("customrecipe").requires(source -> source.hasPermission(2))
+        // Keep the server editor out of integrated-server suggestions entirely.
+        // The local editor is registered by ClientInit as /customrecipe_solo.
+        if (event.getCommandSelection() != net.minecraft.commands.Commands.CommandSelection.DEDICATED) return;
+        event.getDispatcher().register(literal("customrecipe_server").requires(source -> source.hasPermission(2))
                 .executes(context -> openEditor(context.getSource())));
     }
 

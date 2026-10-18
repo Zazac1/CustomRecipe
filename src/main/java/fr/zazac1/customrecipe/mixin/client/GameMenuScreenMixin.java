@@ -25,7 +25,7 @@ public abstract class GameMenuScreenMixin extends Screen {
 
     @Inject(method = "init", at = @At("TAIL"))
     private void customrecipe$addRecipeCreator(CallbackInfo ci) {
-        // Remote servers remain server-managed through /customrecipe.
+        // Remote servers remain server-managed through /customrecipe_server.
         if (minecraft == null || minecraft.getSingleplayerServer() == null) return;
         int buttonX = width - 28;
         int buttonY = height - 28;

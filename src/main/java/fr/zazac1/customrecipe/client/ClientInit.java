@@ -31,6 +31,8 @@ import java.nio.file.attribute.BasicFileAttributes;
 /** Forge client lifecycle setup. Network endpoints live in {@link ClientPacketHandler}. */
 public final class ClientInit {
     private static String activeClientWorldId = "";
+    /** Defers command-originated GUI opening until the following client tick. */
+    private static int pendingSoloEditorTicks;
     /** Original GUI scale saved for the complete lifetime of a Custom Recipe screen flow. */
     private static Integer guiScaleBeforeCustomRecipe;
     private static final ResourceLocation PAUSE_BUTTON_ICON = new ResourceLocation(CustomRecipeMod.MOD_ID,
@@ -47,11 +49,15 @@ public final class ClientInit {
 
     /** Registers the local-only command used by the clickable new-world hint. */
     private static void registerClientCommands(RegisterClientCommandsEvent event) {
-        event.getDispatcher().register(Commands.literal("customrecipe_open_local").executes(context -> {
+        event.getDispatcher().register(Commands.literal("customrecipe_solo")
+                .requires(source -> Minecraft.getInstance().getSingleplayerServer() != null)
+                .executes(context -> {
             Minecraft client = Minecraft.getInstance();
             // This editor writes the local config, never a remote server config.
             if (client.getSingleplayerServer() == null) return 0;
-            client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true))));
+            // Chat command processing can restore its old screen after this
+            // callback. Opening on the next tick keeps the editor visible.
+            pendingSoloEditorTicks = 1;
             return 1;
         }));
     }
@@ -124,6 +130,10 @@ public final class ClientInit {
     private static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft client = Minecraft.getInstance();
+        if (pendingSoloEditorTicks > 0 && --pendingSoloEditorTicks == 0
+                && client.getSingleplayerServer() != null) {
+            client.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true)));
+        }
         updateGuiScaleForScreen(client, client.screen);
         if (ConfigLoader.get().preload_recipes_on_startup) VanillaRecipesScreen.preloadAtStartup(client);
         var server = client.getSingleplayerServer();
@@ -145,7 +155,7 @@ public final class ClientInit {
         if (day != 0L || alreadyShown || !WorldRecipeAssignments.markEditorTipShown(worldId, levelName, worldInstanceId)) return;
         Component link = Component.translatable("customrecipe.chat.world_tip.link").setStyle(
                 Style.EMPTY.withColor(ChatFormatting.AQUA).withUnderlined(true)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_open_local"))
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_solo"))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                 Component.translatable("customrecipe.chat.world_tip.hover"))));
         client.player.sendSystemMessage(Component.translatable("customrecipe.chat.world_tip", link));

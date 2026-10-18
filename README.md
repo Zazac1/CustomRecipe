@@ -56,10 +56,10 @@ Click **Save** in the main menu to store local settings in `config/customrecipe.
 Install the mod on the dedicated server and on the operator's client. An operator can run:
 
 ```mcfunction
-/customrecipe
+/customrecipe_server
 ```
 
-The server sends its authoritative configuration to that operator only. The editor supports custom recipes, built-ins, default crafting recipes, material variants, and manual JSON editing. Local recipes are staged and checked against the server catalog; only **Save** publishes them. The configuration is written to the server `config/customrecipe.json` and recipes are reloaded.
+The server sends its authoritative configuration to that operator only. The editor supports custom recipes, built-ins, default crafting recipes, material variants, and manual JSON editing. Local recipes are staged and checked against the server catalog; only **Save** publishes them. The configuration is written to the server `config/customrecipe.json` and recipes are reloaded. `/customrecipe_server` is available only on dedicated servers; use the pause-menu button or `/customrecipe_solo` in a singleplayer world.
 
 The server validates operator permission and configuration size before accepting a save.
 

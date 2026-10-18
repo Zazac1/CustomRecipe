@@ -34,7 +34,10 @@ public final class ClientPacketHandler {
     public static void vanillaDetails(String json) {
         Minecraft client = Minecraft.getInstance();
         VanillaRecipeDetails details = GSON.fromJson(json, VanillaRecipeDetails.class);
-        if (details != null && client.screen instanceof VanillaRecipeDetailsScreen screen) screen.applyDetails(details);
+        if (details == null) return;
+        if (client.screen instanceof VanillaRecipesScreen screen) screen.applyDetails(details);
+        // Retain the legacy route for an already-open details screen.
+        else if (client.screen instanceof VanillaRecipeDetailsScreen screen) screen.applyDetails(details);
     }
     private ClientPacketHandler() {}
 }
