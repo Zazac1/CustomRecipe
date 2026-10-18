@@ -81,10 +81,12 @@ public abstract class ServerRecipeManagerMixin {
         if (!"shaped".equalsIgnoreCase(entry.type)) {
             List<Ingredient> list = new ArrayList<>();
             if (entry.ingredients == null) return null;
-            for (String raw : entry.ingredients) {
-                Identifier item = Identifier.tryParse(ingredientBaseId(raw, customItems));
-                if (item == null || !Registries.ITEM.containsId(item)) return null;
-                list.add(Ingredient.ofItems(Registries.ITEM.get(item)));
+            for (int i = 0; i < entry.ingredients.size(); i++) {
+                String raw = entry.ingredients.get(i);
+                ItemStack stack = resolveStack(raw, customItems);
+                if (stack.isEmpty()) return null;
+                stack.setCount(Math.max(1, Math.min(entry.ingredientCount(i), stack.getMaxCount())));
+                list.add(Ingredient.ofStacks(stack));
             }
             if (list.isEmpty()) return null;
             CraftingRecipe recipe = new ShapelessRecipe(id, recipeGroup, CraftingRecipeCategory.MISC, result,
@@ -100,9 +102,10 @@ public abstract class ServerRecipeManagerMixin {
             char symbol = x < entry.pattern.get(y).length() ? entry.pattern.get(y).charAt(x) : ' ';
             if (symbol == ' ') continue;
             String raw = entry.keys.get(String.valueOf(symbol));
-            Identifier item = raw == null ? null : Identifier.tryParse(ingredientBaseId(raw, customItems));
-            if (item == null || !Registries.ITEM.containsId(item)) return null;
-            input.set(y * width + x, Ingredient.ofItems(Registries.ITEM.get(item)));
+            ItemStack stack = raw == null ? ItemStack.EMPTY : resolveStack(raw, customItems);
+            if (stack.isEmpty()) return null;
+            stack.setCount(Math.max(1, Math.min(entry.keyCount(String.valueOf(symbol)), stack.getMaxCount())));
+            input.set(y * width + x, Ingredient.ofStacks(stack));
         }
         CraftingRecipe recipe = new ShapedRecipe(id, recipeGroup, CraftingRecipeCategory.MISC,
                 width, height, input, result);
