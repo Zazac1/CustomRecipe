@@ -9,7 +9,8 @@
     "RecipeManagerCraftingFilterMixin",
     "RecipeBookMenuMixin",
     "InputSlotFillerMixin",
-    "CraftingMenuMixin"
+    "CraftingMenuMixin",
+    "ResultSlotMixin"
   ],
   "injectors": {
     "defaultRequire": 1

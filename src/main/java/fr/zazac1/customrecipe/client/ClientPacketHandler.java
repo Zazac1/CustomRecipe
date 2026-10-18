@@ -13,14 +13,19 @@ public final class ClientPacketHandler {
     private static final Gson GSON = new Gson();
     public static void serverConfig(String json) {
         Minecraft client = Minecraft.getInstance();
+        if (!ClientServerConfigNetworking.canManageServer()) return;
         ModConfig config = ConfigLoader.fromJson(json);
         if (config == null) { if (client.player != null) client.player.sendSystemMessage(Component.translatable("customrecipe.chat.invalid_server_config")); return; }
-        int imported = ClientInit.mergeLocalRecipes(config);
-        if (imported > 0 && client.player != null) client.player.sendSystemMessage(Component.translatable("customrecipe.chat.local_recipes_ready", imported));
+        ClientInit.LocalMergeResult imported = ClientInit.mergeLocalContent(config);
+        if ((imported.recipes() > 0 || imported.customItems() > 0) && client.player != null) {
+            client.player.sendSystemMessage(Component.translatable("customrecipe.chat.local_content_ready",
+                    imported.recipes(), imported.customItems()));
+        }
         ClientServerConfigNetworking.validate(config);
     }
     public static void validatedConfig(String json) {
         Minecraft client = Minecraft.getInstance();
+        if (!ClientServerConfigNetworking.canManageServer()) return;
         ModConfig config = ConfigLoader.fromJson(json);
         if (config == null) { if (client.player != null) client.player.sendSystemMessage(Component.translatable("customrecipe.chat.invalid_server_validation")); return; }
         client.setScreen(new ConfigScreen(client.screen, config, "Server Recipes (OP)", true, ClientServerConfigNetworking::save));

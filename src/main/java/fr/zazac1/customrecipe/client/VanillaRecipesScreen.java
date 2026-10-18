@@ -1412,6 +1412,18 @@ public class VanillaRecipesScreen extends Screen {
             int y = previewVariantGridY() + (selectedIndex / columns) * 24;
             drawPreviewSelection(ctx, x, y);
         }
+        // Draw the selection after every card so neighboring green/red borders
+        // cannot cover one of its corners.
+        if (selectedVariant != null) {
+            for (int index = 0; index < Math.min(48, selectedDetails.variants().size()); index++) {
+                VanillaRecipeDetails.VariantPreview variant = selectedDetails.variants().get(index);
+                if (!selectedVariant.materialId().equals(variant.materialId())) continue;
+                int x = variantsX + (index % columns) * 24;
+                int y = previewVariantGridY() + (index / columns) * 24;
+                drawPreviewSelection(ctx, x, y);
+                break;
+            }
+        }
     }
 
     private void drawPreviewItem(GuiGraphics ctx, String id, int x, int y) {

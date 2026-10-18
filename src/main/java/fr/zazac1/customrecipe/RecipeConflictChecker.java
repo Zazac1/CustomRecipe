@@ -27,7 +27,7 @@ public final class RecipeConflictChecker {
     public static void validate(MinecraftServer server, ModConfig config) {
         WorldRecipeConfig active = ConfigLoader.activeWorldConfig(config);
         for (CustomRecipeEntry entry : active.custom_recipes) {
-            RecipeIntegrity.refresh(entry);
+            RecipeIntegrity.refresh(entry, config.custom_items);
             List<String> conflicts = new ArrayList<>();
             List<String> sameShape = new ArrayList<>();
             RecipeSignature signature = Boolean.TRUE.equals(entry.corrupted) ? null : signatureOf(entry);

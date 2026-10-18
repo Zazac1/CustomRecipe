@@ -163,6 +163,8 @@ public class BuiltinRecipesScreen extends Screen {
                                 ? CustomRecipeSprites.KNOWN_BY_DEFAULT_INFO
                                 : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT_INFO,
                         knownIconX(), y + 1, 20, 18);
+                // Clicking a recipe title opens its ingredient preview.
+                CustomRecipeSprites.draw(ctx, CustomRecipeSprites.EYE, recipeX(), y + 2, 16, 16);
             }
 
             // Panneau de détail

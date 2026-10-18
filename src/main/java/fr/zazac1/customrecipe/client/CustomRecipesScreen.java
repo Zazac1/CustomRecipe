@@ -2,6 +2,8 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
+import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.RecipeIntegrity;
 import net.minecraft.client.gui.GuiGraphics;
@@ -15,6 +17,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -140,10 +143,7 @@ public class CustomRecipesScreen extends Screen {
     }
     private boolean needsTallDetail(CustomRecipeEntry recipe) {
         // Warnings need their own line below the ingredient preview.
-        if (isCorrupted(recipe) || firstEnabledConflict(recipe) != null) return true;
-        if (Boolean.TRUE.equals(recipe.known_by_default)) return false;
-        return LocalRecipeConflictDetector.hasVanillaCraftingOutput(recipe.result)
-                || firstEnabledSameShapeRecipe(recipe) != null;
+        return isCorrupted(recipe) || firstEnabledConflict(recipe) != null;
     }
     private int detailItemRows(CustomRecipeEntry recipe) {
         return 3;
@@ -179,7 +179,7 @@ public class CustomRecipesScreen extends Screen {
     protected void init() {
         // A recipe can recover when a previously missing mod is installed again.
         // Refresh first so stale persisted corruption flags never survive that recovery.
-        for (CustomRecipeEntry recipe : recipes) RecipeIntegrity.refresh(recipe);
+        for (CustomRecipeEntry recipe : recipes) RecipeIntegrity.refresh(recipe, parent.customItems);
         if (!parent.isServerManaged()) {
             LocalRecipeConflictDetector.refresh(recipes, minecraft);
         } else {
@@ -633,6 +633,7 @@ public class CustomRecipesScreen extends Screen {
 
         renderShapedIngredientColumns(ctx, shapedIngredientRows(e));
         String[][] grid = buildDisplayGrid(e);
+        int[][] countGrid = buildDisplayCountGrid(e);
         int gx = detailGridX(), gy = detailGridY();
 
         for (int r = 0; r < 3; r++) {
@@ -674,26 +675,32 @@ public class CustomRecipesScreen extends Screen {
     }
 
     private List<ShapelessIngredient> shapelessIngredientRows(CustomRecipeEntry e) {
-        return groupedIngredientRows(e.ingredients);
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        if (e.ingredients != null) {
+            for (int i = 0; i < e.ingredients.size(); i++) {
+                String itemId = e.ingredients.get(i);
+                if (itemId != null && !itemId.isEmpty()) counts.merge(itemId, e.ingredientCount(i), Integer::sum);
+            }
+        }
+        return ingredientRows(counts);
     }
 
     private List<ShapelessIngredient> shapedIngredientRows(CustomRecipeEntry e) {
-        List<String> ingredients = new ArrayList<>();
-        for (String[] row : buildDisplayGrid(e)) {
-            for (String itemId : row) {
-                if (itemId != null && !itemId.isEmpty()) ingredients.add(itemId);
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        if (e.pattern != null && e.keys != null) {
+            for (String row : e.pattern) {
+                if (row == null) continue;
+                for (int i = 0; i < row.length(); i++) {
+                    String symbol = String.valueOf(row.charAt(i));
+                    String itemId = e.keys.get(symbol);
+                    if (itemId != null && !itemId.isEmpty()) counts.merge(itemId, e.keyCount(symbol), Integer::sum);
+                }
             }
         }
-        return groupedIngredientRows(ingredients);
+        return ingredientRows(counts);
     }
 
-    private List<ShapelessIngredient> groupedIngredientRows(List<String> ingredients) {
-        Map<String, Integer> counts = new LinkedHashMap<>();
-        if (ingredients != null) {
-            for (String itemId : ingredients) {
-                if (itemId != null && !itemId.isEmpty()) counts.merge(itemId, 1, Integer::sum);
-            }
-        }
+    private List<ShapelessIngredient> ingredientRows(Map<String, Integer> counts) {
         List<ShapelessIngredient> rows = new ArrayList<>();
         counts.forEach((itemId, count) -> rows.add(new ShapelessIngredient(itemId, count)));
         return rows;
@@ -776,19 +783,43 @@ public class CustomRecipesScreen extends Screen {
         return grid;
     }
 
+    private int[][] buildDisplayCountGrid(CustomRecipeEntry e) {
+        int[][] counts = new int[3][3];
+        for (int[] row : counts) Arrays.fill(row, 1);
+        if ("shaped".equalsIgnoreCase(e.type)) {
+            if (e.pattern == null) return counts;
+            for (int r = 0; r < 3 && r < e.pattern.size(); r++) {
+                String row = e.pattern.get(r);
+                if (row == null) continue;
+                for (int c = 0; c < 3 && c < row.length(); c++) {
+                    char symbol = row.charAt(c);
+                    if (symbol != ' ') counts[r][c] = e.keyCount(String.valueOf(symbol));
+                }
+            }
+        } else if (e.ingredients != null) {
+            for (int i = 0; i < e.ingredients.size() && i < 9; i++) counts[i / 3][i % 3] = e.ingredientCount(i);
+        }
+        return counts;
+    }
+
     /** Switches between fixed shaped slots and free shapeless ingredients. */
     private void toggleRecipeType(CustomRecipeEntry e) {
         String[][] grid = buildDisplayGrid(e);
+        int[][] countGrid = buildDisplayCountGrid(e);
         if ("shaped".equalsIgnoreCase(e.type)) {
-            shapedLayouts.put(e, new ShapedLayout(e.pattern, e.keys));
+            shapedLayouts.put(e, new ShapedLayout(e.pattern, e.keys, e.key_counts));
             e.type = "shapeless";
             e.ingredients = new ArrayList<>();
+            e.ingredient_counts = new ArrayList<>();
             for (int row = 0; row < 3; row++)
                 for (int column = 0; column < 3; column++)
-                    if (grid[row][column] != null && !grid[row][column].isEmpty())
+                    if (grid[row][column] != null && !grid[row][column].isEmpty()) {
                         e.ingredients.add(grid[row][column]);
+                        e.ingredient_counts.add(countGrid[row][column]);
+                    }
             e.pattern = new ArrayList<>();
             e.keys = new LinkedHashMap<>();
+            e.key_counts = new LinkedHashMap<>();
             return;
         }
 
@@ -797,12 +828,15 @@ public class CustomRecipesScreen extends Screen {
         if (original != null) {
             e.pattern = new ArrayList<>(original.pattern());
             e.keys = new LinkedHashMap<>(original.keys());
+            e.key_counts = new LinkedHashMap<>(original.keyCounts());
             e.ingredients = new ArrayList<>();
+            e.ingredient_counts = new ArrayList<>();
             return;
         }
         e.pattern = new ArrayList<>();
         e.keys = new LinkedHashMap<>();
-        Map<String, Character> letters = new LinkedHashMap<>();
+        e.key_counts = new LinkedHashMap<>();
+        Map<CountedIngredient, Character> letters = new LinkedHashMap<>();
         char nextLetter = 'A';
         for (int row = 0; row < 3; row++) {
             StringBuilder patternRow = new StringBuilder(3);
@@ -812,23 +846,29 @@ public class CustomRecipesScreen extends Screen {
                     patternRow.append(' ');
                     continue;
                 }
-                Character letter = letters.get(itemId);
+                CountedIngredient ingredient = new CountedIngredient(itemId, countGrid[row][column]);
+                Character letter = letters.get(ingredient);
                 if (letter == null) {
                     letter = nextLetter++;
-                    letters.put(itemId, letter);
+                    letters.put(ingredient, letter);
                     e.keys.put(String.valueOf(letter), itemId);
+                    e.key_counts.put(String.valueOf(letter), ingredient.count());
                 }
                 patternRow.append(letter);
             }
             e.pattern.add(patternRow.toString());
         }
         e.ingredients = new ArrayList<>();
+        e.ingredient_counts = new ArrayList<>();
     }
 
-    private record ShapedLayout(List<String> pattern, Map<String, String> keys) {
-        private ShapedLayout(List<String> pattern, Map<String, String> keys) {
+    private record CountedIngredient(String itemId, int count) {}
+
+    private record ShapedLayout(List<String> pattern, Map<String, String> keys, Map<String, Integer> keyCounts) {
+        private ShapedLayout(List<String> pattern, Map<String, String> keys, Map<String, Integer> keyCounts) {
             this.pattern = pattern == null ? List.of() : new ArrayList<>(pattern);
             this.keys = keys == null ? Map.of() : new LinkedHashMap<>(keys);
+            this.keyCounts = keyCounts == null ? Map.of() : new LinkedHashMap<>(keyCounts);
         }
     }
 
@@ -983,19 +1023,22 @@ public class CustomRecipesScreen extends Screen {
 
     private boolean isCorrupted(CustomRecipeEntry entry) {
         return Boolean.TRUE.equals(entry.corrupted)
-                || (!parent.isServerManaged() && !RecipeIntegrity.missingItems(entry).isEmpty());
+                || (!parent.isServerManaged() && !RecipeIntegrity.missingItems(entry, parent.customItems).isEmpty());
     }
 
     private List<String> missingItems(CustomRecipeEntry entry) {
         java.util.LinkedHashSet<String> missing = new java.util.LinkedHashSet<>();
         if (entry.missing_items != null) missing.addAll(entry.missing_items);
-        missing.addAll(RecipeIntegrity.missingItems(entry));
+        missing.addAll(RecipeIntegrity.missingItems(entry, parent.customItems));
         return new java.util.ArrayList<>(missing);
     }
 
     private String firstEnabledConflict(CustomRecipeEntry entry) {
-        if (entry.conflicting_recipes == null) return null;
-        return entry.conflicting_recipes.stream()
+        java.util.stream.Stream<String> duplicates = entry.conflicting_recipes == null
+                ? java.util.stream.Stream.empty() : entry.conflicting_recipes.stream();
+        java.util.stream.Stream<String> overlaps = entry.same_shape_recipes == null
+                ? java.util.stream.Stream.empty() : entry.same_shape_recipes.stream();
+        return java.util.stream.Stream.concat(duplicates, overlaps)
                 .filter(id -> id != null && !parent.disabledRecipes.contains(id))
                 .findFirst()
                 .orElse(null);
@@ -1025,12 +1068,19 @@ public class CustomRecipesScreen extends Screen {
 
     private String toName(String id) {
         if (id == null || id.isEmpty()) return "?";
+        CustomItemEntry custom = CustomItemLibrary.isReference(id)
+                ? CustomItemLibrary.find(parent.customItems, id) : null;
+        if (custom != null) return custom.name;
         String path = id.contains(":") ? id.split(":")[1] : id;
         String[] parts = path.split("_");
         StringBuilder sb = new StringBuilder();
         for (String w : parts)
             if (!w.isEmpty()) sb.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1)).append(' ');
         return sb.toString().trim();
+    }
+
+    private ItemStack stackFor(String value) {
+        return ClientItemStacks.fromReference(value, parent.rootConfig());
     }
 
     /** Small scroll/list marker shown beside range indicators. */

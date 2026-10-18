@@ -1,0 +1,163 @@
+package fr.zazac1.customrecipe;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import net.minecraft.core.NonNullList;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.inventory.CraftingContainer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CraftingBookCategory;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.level.Level;
+
+/** Adds exact NBT and per-slot quantity matching to a vanilla-compatible recipe. */
+public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCraftingRecipe {
+    private final CraftingRecipe delegate;
+    private final CustomRecipeEntry definition;
+    private final Map<String, ItemStack> customStacks;
+
+    public CustomItemCraftingRecipe(CraftingRecipe delegate, CustomRecipeEntry definition,
+                                    Map<String, ItemStack> customStacks) {
+        this.delegate = delegate;
+        this.definition = definition;
+        this.customStacks = Map.copyOf(customStacks);
+    }
+
+    @Override public boolean matches(CraftingContainer input, Level world) {
+        return delegate.matches(input, world) && requiredCounts(input).length == input.getContainerSize();
+    }
+
+    @Override public int[] requiredCounts(CraftingContainer input) {
+        return "shaped".equalsIgnoreCase(definition.type)
+                ? requiredShapedCounts(input, true) : requiredShapelessCounts(input, true);
+    }
+
+    @Override public int[] placementCounts(CraftingContainer input) {
+        return "shaped".equalsIgnoreCase(definition.type)
+                ? requiredShapedCounts(input, false) : requiredShapelessCounts(input, false);
+    }
+
+    private int[] requiredShapelessCounts(CraftingContainer input, boolean enforceAmounts) {
+        List<Expected> expected = new ArrayList<>();
+        if (definition.ingredients != null) for (int i = 0; i < definition.ingredients.size(); i++) {
+            String token = definition.ingredients.get(i);
+            if (token != null && !token.isBlank()) expected.add(new Expected(token, definition.ingredientCount(i)));
+        }
+        List<Actual> actual = new ArrayList<>();
+        for (int i = 0; i < input.getContainerSize(); i++) if (!input.getItem(i).isEmpty()) actual.add(new Actual(i, input.getItem(i)));
+        if (expected.size() != actual.size()) return new int[0];
+        int[] required = new int[input.getContainerSize()];
+        return assign(expected, actual, 0, new boolean[actual.size()], required, enforceAmounts) ? required : new int[0];
+    }
+
+    private boolean assign(List<Expected> expected, List<Actual> actual, int index, boolean[] used,
+                           int[] required, boolean enforceAmounts) {
+        if (index == expected.size()) return true;
+        Expected ingredient = expected.get(index);
+        for (int i = 0; i < actual.size(); i++) {
+            Actual candidate = actual.get(i);
+            if (used[i] || !matchesToken(ingredient.token(), candidate.stack(), ingredient.count(), enforceAmounts)) continue;
+            used[i] = true;
+            required[candidate.inputIndex()] = ingredient.count();
+            if (assign(expected, actual, index + 1, used, required, enforceAmounts)) return true;
+            required[candidate.inputIndex()] = 0;
+            used[i] = false;
+        }
+        return false;
+    }
+
+    private int[] requiredShapedCounts(CraftingContainer input, boolean enforceAmounts) {
+        List<String> rows = shrink(definition.pattern);
+        if (rows.isEmpty()) return new int[0];
+        int patternWidth = rows.get(0).length();
+        int patternHeight = rows.size();
+        if (patternWidth > input.getWidth() || patternHeight > input.getHeight()) return new int[0];
+        for (int offsetY = 0; offsetY <= input.getHeight() - patternHeight; offsetY++) {
+            for (int offsetX = 0; offsetX <= input.getWidth() - patternWidth; offsetX++) {
+                int[] normal = requiredRowCounts(input, rows, offsetX, offsetY, false, enforceAmounts);
+                if (normal.length > 0) return normal;
+                int[] mirrored = requiredRowCounts(input, rows, offsetX, offsetY, true, enforceAmounts);
+                if (mirrored.length > 0) return mirrored;
+            }
+        }
+        return new int[0];
+    }
+
+    private int[] requiredRowCounts(CraftingContainer input, List<String> rows, int offsetX, int offsetY,
+                                    boolean mirrored, boolean enforceAmounts) {
+        int patternWidth = rows.get(0).length();
+        int[] required = new int[input.getContainerSize()];
+        for (int y = 0; y < input.getHeight(); y++) for (int x = 0; x < input.getWidth(); x++) {
+            boolean inside = x >= offsetX && x < offsetX + patternWidth
+                    && y >= offsetY && y < offsetY + rows.size();
+            char symbol = ' ';
+            if (inside) {
+                int patternX = x - offsetX;
+                symbol = rows.get(y - offsetY).charAt(mirrored ? patternWidth - patternX - 1 : patternX);
+            }
+            String token = symbol == ' ' || definition.keys == null ? "" : definition.keys.get(symbol + "");
+            int inputIndex = y * input.getWidth() + x;
+            ItemStack actual = input.getItem(inputIndex);
+            if (token == null || token.isBlank()) {
+                if (!actual.isEmpty()) return new int[0];
+            } else {
+                int count = definition.keyCount(symbol + "");
+                if (!matchesToken(token, actual, count, enforceAmounts)) return new int[0];
+                required[inputIndex] = count;
+            }
+        }
+        return required;
+    }
+
+    private boolean matchesToken(String token, ItemStack actual, int count, boolean enforceAmount) {
+        if (actual == null || actual.isEmpty() || (enforceAmount && actual.getCount() < count)) return false;
+        ItemStack custom = customStacks.get(token);
+        if (custom != null) return CustomItemLibrary.exactMatch(actual, custom);
+        ResourceLocation id = ResourceLocation.tryParse(token);
+        return id != null && BuiltInRegistries.ITEM.getKey(actual.getItem()).equals(id);
+    }
+
+    private static List<String> shrink(List<String> pattern) {
+        if (pattern == null || pattern.isEmpty()) return List.of();
+        int top = 0, bottom = pattern.size() - 1;
+        while (top <= bottom && pattern.get(top).isBlank()) top++;
+        while (bottom >= top && pattern.get(bottom).isBlank()) bottom--;
+        if (top > bottom) return List.of();
+        int left = Integer.MAX_VALUE, right = -1;
+        for (int y = top; y <= bottom; y++) {
+            String row = pattern.get(y) == null ? "" : pattern.get(y);
+            for (int x = 0; x < row.length(); x++) if (row.charAt(x) != ' ') {
+                left = Math.min(left, x);
+                right = Math.max(right, x);
+            }
+        }
+        if (right < left) return List.of();
+        List<String> result = new ArrayList<>();
+        for (int y = top; y <= bottom; y++) {
+            StringBuilder row = new StringBuilder(pattern.get(y) == null ? "" : pattern.get(y));
+            while (row.length() <= right) row.append(' ');
+            result.add(row.substring(left, right + 1));
+        }
+        return result;
+    }
+
+    @Override public ItemStack assemble(CraftingContainer input, RegistryAccess registries) { return delegate.assemble(input, registries); }
+    @Override public boolean canCraftInDimensions(int width, int height) { return delegate.canCraftInDimensions(width, height); }
+    @Override public ItemStack getResultItem(RegistryAccess registries) { return delegate.getResultItem(registries); }
+    @Override public NonNullList<ItemStack> getRemainingItems(CraftingContainer input) { return delegate.getRemainingItems(input); }
+    @Override public NonNullList<Ingredient> getIngredients() { return delegate.getIngredients(); }
+    @Override public ResourceLocation getId() { return delegate.getId(); }
+    @Override public RecipeSerializer<?> getSerializer() { return delegate.getSerializer(); }
+    @Override public CraftingBookCategory category() { return delegate.category(); }
+    @Override public boolean isSpecial() { return delegate.isSpecial(); }
+    @Override public String getGroup() { return delegate.getGroup(); }
+    @Override public boolean showNotification() { return delegate.showNotification(); }
+
+    private record Expected(String token, int count) {}
+    private record Actual(int inputIndex, ItemStack stack) {}
+}

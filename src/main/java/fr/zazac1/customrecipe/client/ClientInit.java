@@ -1,6 +1,8 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
+import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.ModConfig;
@@ -167,25 +169,74 @@ public final class ClientInit {
         catch (Exception ignored) { return "seed-" + seed; }
     }
 
-    /** Stages local recipes in the server editor without automatically publishing them. */
-    public static int mergeLocalRecipes(ModConfig serverConfig) {
-        int added = 0;
-        for (CustomRecipeEntry localRecipe : ConfigLoader.get().custom_recipes) {
-            if (serverConfig.custom_recipes.stream().anyMatch(serverRecipe -> ConfigLoader.sameRecipe(localRecipe, serverRecipe))) continue;
-            serverConfig.custom_recipes.add(copyLocalRecipeAsDraft(localRecipe));
-            added++;
+    record LocalMergeResult(int recipes, int customItems) {}
+
+    /** Stages only an administrator's local recipes and full-stack items in the server editor. */
+    static LocalMergeResult mergeLocalContent(ModConfig serverConfig) {
+        ModConfig localConfig = ConfigLoader.get();
+        java.util.Map<String, String> referenceRemap = new java.util.LinkedHashMap<>();
+        int addedItems = 0;
+        for (CustomItemEntry localItem : localConfig.custom_items) {
+            if (localItem == null) continue;
+            String oldReference = CustomItemLibrary.reference(localItem.id);
+            CustomItemEntry serverItem = CustomItemLibrary.find(serverConfig.custom_items, localItem.id);
+            if (serverItem != null && java.util.Objects.equals(serverItem.stack_data, localItem.stack_data)) {
+                referenceRemap.put(oldReference, CustomItemLibrary.reference(serverItem.id));
+                continue;
+            }
+            String importedId = serverItem == null ? localItem.id
+                    : CustomItemLibrary.uniqueId(serverConfig.custom_items, localItem.id + "_local");
+            serverConfig.custom_items.add(copyLocalCustomItem(localItem, importedId));
+            referenceRemap.put(oldReference, CustomItemLibrary.reference(importedId));
+            addedItems++;
         }
-        return added;
+
+        int addedRecipes = 0;
+        for (CustomRecipeEntry localRecipe : localConfig.custom_recipes) {
+            CustomRecipeEntry draft = copyLocalRecipeAsDraft(localRecipe, referenceRemap);
+            if (serverConfig.custom_recipes.stream().anyMatch(serverRecipe -> ConfigLoader.sameRecipe(draft, serverRecipe))) continue;
+            serverConfig.custom_recipes.add(draft);
+            addedRecipes++;
+        }
+        return new LocalMergeResult(addedRecipes, addedItems);
     }
 
-    private static CustomRecipeEntry copyLocalRecipeAsDraft(CustomRecipeEntry source) {
+    private static CustomItemEntry copyLocalCustomItem(CustomItemEntry source, String id) {
+        CustomItemEntry copy = new CustomItemEntry();
+        copy.id = id;
+        copy.name = source.name;
+        copy.item_id = source.item_id;
+        copy.stack_data = source.stack_data;
+        return copy;
+    }
+
+    private static CustomRecipeEntry copyLocalRecipeAsDraft(
+            CustomRecipeEntry source, java.util.Map<String, String> referenceRemap) {
         CustomRecipeEntry copy = new CustomRecipeEntry();
-        copy.id = source.id; copy.type = source.type; copy.ingredients = new java.util.ArrayList<>(source.ingredients);
-        copy.pattern = new java.util.ArrayList<>(source.pattern); copy.keys = new java.util.LinkedHashMap<>(source.keys);
-        copy.result = source.result; copy.count = source.count; copy.enabled = null; copy.server_enabled = null;
-        copy.world_ids = new java.util.ArrayList<>(); copy.world_names = new java.util.LinkedHashMap<>();
+        copy.id = source.id;
+        copy.type = source.type;
+        copy.ingredients = source.ingredients == null ? new java.util.ArrayList<>()
+                : source.ingredients.stream().map(value -> remap(value, referenceRemap))
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+        copy.ingredient_counts = source.ingredient_counts == null ? new java.util.ArrayList<>()
+                : new java.util.ArrayList<>(source.ingredient_counts);
+        copy.pattern = source.pattern == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(source.pattern);
+        copy.keys = new java.util.LinkedHashMap<>();
+        if (source.keys != null) source.keys.forEach((key, value) -> copy.keys.put(key, remap(value, referenceRemap)));
+        copy.key_counts = source.key_counts == null ? new java.util.LinkedHashMap<>()
+                : new java.util.LinkedHashMap<>(source.key_counts);
+        copy.result = remap(source.result, referenceRemap);
+        copy.count = source.count;
+        copy.enabled = null;
+        copy.server_enabled = null;
+        copy.world_ids = new java.util.ArrayList<>();
+        copy.world_names = new java.util.LinkedHashMap<>();
         copy.known_by_default = source.known_by_default;
         return copy;
+    }
+
+    private static String remap(String value, java.util.Map<String, String> referenceRemap) {
+        return value == null ? null : referenceRemap.getOrDefault(value, value);
     }
     private ClientInit() {}
 }

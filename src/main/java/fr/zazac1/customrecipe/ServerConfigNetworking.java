@@ -2,6 +2,7 @@ package fr.zazac1.customrecipe;
 
 import com.google.gson.Gson;
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
@@ -27,13 +28,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;
 
 /** Server-side command and permission-checked config synchronization. */
 public final class ServerConfigNetworking {
     // Older versions wrote every recipe in one shared list.  A migration can
     // legitimately make the editor payload much larger than 30 KiB.
-    private static final int MAX_JSON_CHARS = 500_000;
+    private static final int MAX_JSON_CHARS = 1_000_000;
     // Chunks are loaded transparently by the client while the list is scrolled.
     private static final int VANILLA_PAGE_SIZE = 40;
     private static final Gson GSON = new Gson();
@@ -46,6 +48,29 @@ public final class ServerConfigNetworking {
     }
 
     private static void registerCommands(RegisterCommandsEvent event) {
+        event.getDispatcher().register(literal("customrecipe_item")
+                .requires(source -> source.hasPermission(2))
+                .then(literal("save")
+                        .executes(context -> saveHeldItem(context.getSource(), null, null, false))
+                        .then(argument("name", StringArgumentType.greedyString())
+                                .executes(context -> saveHeldItem(context.getSource(), null,
+                                        StringArgumentType.getString(context, "name"), false))))
+                .then(literal("save_as")
+                        .then(argument("id", StringArgumentType.word())
+                                .executes(context -> saveHeldItem(context.getSource(),
+                                        StringArgumentType.getString(context, "id"), null, true))
+                                .then(argument("name", StringArgumentType.greedyString())
+                                        .executes(context -> saveHeldItem(context.getSource(),
+                                                StringArgumentType.getString(context, "id"),
+                                                StringArgumentType.getString(context, "name"), true)))))
+                .then(literal("give").then(argument("id", StringArgumentType.word())
+                        .executes(context -> giveCustomItem(context.getSource(),
+                                StringArgumentType.getString(context, "id")))))
+                .then(literal("remove").then(argument("id", StringArgumentType.word())
+                        .executes(context -> removeCustomItem(context.getSource(),
+                                StringArgumentType.getString(context, "id")))))
+                .then(literal("list").executes(context -> listCustomItems(context.getSource()))));
+
         // Keep the server editor out of integrated-server suggestions entirely.
         // The local editor is registered by ClientInit as /customrecipe_solo.
         if (event.getCommandSelection() != net.minecraft.commands.Commands.CommandSelection.DEDICATED) return;
@@ -86,6 +111,12 @@ public final class ServerConfigNetworking {
             sendSaveResult(player, false, "The saved configuration is invalid.");
             return;
         }
+        config.editor_world_id = "";
+        config.editor_world_name = "";
+        WorldRecipeAssignments.migrateLegacyRecipes(config);
+        for (CustomRecipeEntry entry : ConfigLoader.activeWorldConfig(config).custom_recipes) {
+            RecipeIntegrity.refresh(entry, config.custom_items);
+        }
         RecipeConflictChecker.validate(server, config);
         if (!ConfigLoader.saveAndInvalidate(config)) {
             player.sendSystemMessage(Component.literal("[Custom Recipe] Could not write the server config; nothing was applied."));
@@ -101,6 +132,9 @@ public final class ServerConfigNetworking {
         if (player == null || !player.hasPermissions(2)) return;
         ModConfig config = ConfigLoader.fromJson(json);
         if (config == null) return;
+        for (CustomRecipeEntry entry : ConfigLoader.activeWorldConfig(config).custom_recipes) {
+            RecipeIntegrity.refresh(entry, config.custom_items);
+        }
         RecipeConflictChecker.validate(player.server, config);
         String checked = ConfigLoader.toJson(config);
         if (checked.length() <= MAX_JSON_CHARS) ModNetworking.sendValidatedConfig(player, checked);
@@ -155,8 +189,89 @@ public final class ServerConfigNetworking {
         return Command.SINGLE_SUCCESS;
     }
 
+    private static int saveHeldItem(CommandSourceStack source, String requestedId, String requestedName,
+                                    boolean replaceExisting) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        ItemStack held = player.getMainHandItem();
+        if (held.isEmpty()) {
+            source.sendFailure(Component.translatable("customrecipe.chat.custom_item.empty_hand"));
+            return 0;
+        }
+        ConfigLoader.invalidate();
+        ModConfig config = ConfigLoader.get();
+        String name = requestedName == null || requestedName.isBlank()
+                ? held.getHoverName().getString() : requestedName.strip();
+        String id = requestedId == null || requestedId.isBlank()
+                ? CustomItemLibrary.uniqueId(config.custom_items, name)
+                : CustomItemLibrary.sanitizeId(requestedId);
+        if (id.isBlank()) {
+            source.sendFailure(Component.translatable("customrecipe.chat.custom_item.invalid_id"));
+            return 0;
+        }
+        CustomItemEntry entry = CustomItemLibrary.find(config.custom_items, id);
+        if (entry != null && !replaceExisting) id = CustomItemLibrary.uniqueId(config.custom_items, id);
+        if (entry == null || !id.equals(entry.id)) {
+            entry = new CustomItemEntry();
+            config.custom_items.add(entry);
+        }
+        entry.id = id;
+        entry.name = name;
+        entry.item_id = BuiltInRegistries.ITEM.getKey(held.getItem()).toString();
+        try {
+            entry.stack_data = CustomItemLibrary.encode(held, source.getServer().registryAccess());
+        } catch (RuntimeException error) {
+            source.sendFailure(Component.translatable("customrecipe.chat.custom_item.save_failed"));
+            CustomRecipeMod.LOGGER.error("[CustomRecipe] Failed to encode custom item {}", id, error);
+            return 0;
+        }
+        ConfigLoader.saveAndInvalidate(config);
+        String savedId = id;
+        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.saved", name, savedId), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int giveCustomItem(CommandSourceStack source, String requestedId) throws CommandSyntaxException {
+        CustomItemEntry entry = CustomItemLibrary.find(ConfigLoader.get().custom_items, requestedId);
+        ItemStack stack = CustomItemLibrary.decode(entry, source.getServer().registryAccess());
+        if (entry == null || stack.isEmpty()) {
+            source.sendFailure(Component.translatable("customrecipe.chat.custom_item.not_found", requestedId));
+            return 0;
+        }
+        ServerPlayer player = source.getPlayerOrException();
+        if (!player.addItem(stack.copy())) player.drop(stack.copy(), false);
+        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.given", entry.name), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int removeCustomItem(CommandSourceStack source, String requestedId) {
+        ModConfig config = ConfigLoader.get();
+        CustomItemEntry entry = CustomItemLibrary.find(config.custom_items, requestedId);
+        if (entry == null) {
+            source.sendFailure(Component.translatable("customrecipe.chat.custom_item.not_found", requestedId));
+            return 0;
+        }
+        config.custom_items.remove(entry);
+        ConfigLoader.saveAndInvalidate(config);
+        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.removed", entry.name), false);
+        source.getServer().getCommands().performPrefixedCommand(source.withSuppressedOutput(), "reload");
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int listCustomItems(CommandSourceStack source) {
+        List<CustomItemEntry> items = ConfigLoader.get().custom_items;
+        if (items.isEmpty()) {
+            source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.list_empty"), false);
+            return Command.SINGLE_SUCCESS;
+        }
+        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.list", items.size()), false);
+        for (CustomItemEntry entry : items) {
+            source.sendSuccess(() -> Component.literal("- " + entry.id + " — " + entry.name), false);
+        }
+        return items.size();
+    }
+
     private static void sendEditor(ServerPlayer player) {
-        if (!ModNetworking.canSend(player)) return;
+        if (!player.hasPermissions(2) || !ModNetworking.canSend(player)) return;
         // The config can have changed through the local editor since the last reload.
         ConfigLoader.invalidate();
         ModConfig config = ConfigLoader.get();

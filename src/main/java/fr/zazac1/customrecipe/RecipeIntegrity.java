@@ -17,8 +17,12 @@ public final class RecipeIntegrity {
     private RecipeIntegrity() {}
 
     public static boolean refresh(CustomRecipeEntry recipe) {
+        return refresh(recipe, ConfigLoader.get().custom_items);
+    }
+
+    public static boolean refresh(CustomRecipeEntry recipe, List<CustomItemEntry> customItems) {
         rememberRequiredMods(recipe);
-        List<String> missing = missingItems(recipe);
+        List<String> missing = missingItems(recipe, customItems);
         boolean corrupted = !missing.isEmpty();
         boolean changed = corrupted != Boolean.TRUE.equals(recipe.corrupted)
                 || !missing.equals(recipe.missing_items);
@@ -28,8 +32,17 @@ public final class RecipeIntegrity {
     }
 
     public static List<String> missingItems(CustomRecipeEntry recipe) {
+        return missingItems(recipe, ConfigLoader.get().custom_items);
+    }
+
+    public static List<String> missingItems(CustomRecipeEntry recipe, List<CustomItemEntry> customItems) {
         List<String> missing = new ArrayList<>();
         for (String rawId : referencedItemIds(recipe)) {
+            if (CustomItemLibrary.isReference(rawId)) {
+                CustomItemEntry custom = CustomItemLibrary.find(customItems, rawId);
+                if (custom == null || CustomItemLibrary.baseItemId(custom).isBlank()) missing.add(rawId);
+                continue;
+            }
             ResourceLocation id = ResourceLocation.tryParse(rawId);
             if (id == null || !BuiltInRegistries.ITEM.containsKey(id) || BuiltInRegistries.ITEM.get(id) == Items.AIR) {
                 missing.add(rawId);
@@ -42,6 +55,7 @@ public final class RecipeIntegrity {
     public static void rememberRequiredMods(CustomRecipeEntry recipe) {
         if (recipe.required_mods == null) recipe.required_mods = new LinkedHashMap<>();
         for (String rawId : referencedItemIds(recipe)) {
+            if (CustomItemLibrary.isReference(rawId)) continue;
             ResourceLocation itemId = ResourceLocation.tryParse(rawId);
             if (itemId == null || "minecraft".equals(itemId.getNamespace())) continue;
             recipe.required_mods.computeIfAbsent(itemId.getNamespace(), RecipeIntegrity::installedVersion);
@@ -52,6 +66,7 @@ public final class RecipeIntegrity {
         LinkedHashSet<String> ids = new LinkedHashSet<>();
         if (recipe.required_mods != null) ids.addAll(recipe.required_mods.keySet());
         for (String rawId : referencedItemIds(recipe)) {
+            if (CustomItemLibrary.isReference(rawId)) continue;
             ResourceLocation itemId = ResourceLocation.tryParse(rawId);
             if (itemId != null && !"minecraft".equals(itemId.getNamespace())) ids.add(itemId.getNamespace());
         }

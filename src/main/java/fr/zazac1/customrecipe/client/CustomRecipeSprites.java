@@ -16,6 +16,7 @@ final class CustomRecipeSprites {
     static final ResourceLocation ADD = sprite("add");
     static final ResourceLocation SAVE = sprite("save");
     static final ResourceLocation RESET = sprite("reset");
+    static final ResourceLocation EYE = sprite("eye");
     static final ResourceLocation LOCKED_INFO = sprite("locked_info");
     static final ResourceLocation LOCKED_BUTTON = sprite("locked_button");
     static final ResourceLocation UNLOCKED_INFO = sprite("unlocked_info");

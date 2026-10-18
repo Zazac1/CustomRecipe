@@ -236,6 +236,8 @@ public final class ConfigLoader {
         if (config.disabled_recipes == null) config.disabled_recipes = new java.util.ArrayList<>();
         if (config.disabled_recipe_variants == null) config.disabled_recipe_variants = new java.util.ArrayList<>();
         if (config.custom_recipes == null) config.custom_recipes = new java.util.ArrayList<>();
+        if (config.custom_items == null) config.custom_items = new ArrayList<>();
+        normalizeCustomItems(config.custom_items);
 
         // Version 0 stored one shared list plus optional world_ids on recipes.
         // Split those recipes once: a library recipe remains in the library and
@@ -264,6 +266,23 @@ public final class ConfigLoader {
         config.known_by_default_builtin = legacyFields.known_by_default_builtin;
         config.disabled_recipes = legacyFields.disabled_recipes;
         config.disabled_recipe_variants = legacyFields.disabled_recipe_variants;
+    }
+
+    private static void normalizeCustomItems(List<CustomItemEntry> items) {
+        Set<String> usedIds = new HashSet<>();
+        items.removeIf(entry -> entry == null || entry.stack_data == null || entry.stack_data.isBlank());
+        for (CustomItemEntry entry : items) {
+            if (entry.name == null) entry.name = "";
+            if (entry.item_id == null) entry.item_id = "minecraft:air";
+            String requested = entry.id == null || entry.id.isBlank() ? entry.name : entry.id;
+            String base = CustomItemLibrary.sanitizeId(requested);
+            if (base.isBlank()) base = "custom_item";
+            String candidate = base;
+            int suffix = 2;
+            while (!usedIds.add(candidate)) candidate = base + "_" + suffix++;
+            entry.id = candidate;
+            if (entry.name.isBlank()) entry.name = candidate;
+        }
     }
 
     /**
@@ -422,6 +441,7 @@ public final class ConfigLoader {
         if (recipeConfig.hidden_quick_add_builtin == null) recipeConfig.hidden_quick_add_builtin = new ArrayList<>();
         if (recipeConfig.quick_add_recipes == null) recipeConfig.quick_add_recipes = new ArrayList<>();
         if (recipeConfig.custom_recipes == null) recipeConfig.custom_recipes = new ArrayList<>();
+        for (CustomRecipeEntry recipe : recipeConfig.quick_add_recipes) normalizeIngredientCounts(recipe);
 
         // v1.3.0 stores Quick Add as independent snapshots rather than a flag
         // linking back to a mutable library/world recipe.
@@ -432,6 +452,7 @@ public final class ConfigLoader {
             recipeConfig.quick_add_recipes.add(snapshot);
             recipe.quick_add = null;
         }
+        for (CustomRecipeEntry recipe : recipeConfig.quick_add_recipes) normalizeIngredientCounts(recipe);
 
         Set<String> variantKeys = new HashSet<>();
         recipeConfig.disabled_recipe_variants.removeIf(rule -> rule == null || rule.recipe_id == null || rule.recipe_id.isBlank()
@@ -441,8 +462,10 @@ public final class ConfigLoader {
         Map<String, CustomRecipeEntry> legacyRecipes = new LinkedHashMap<>();
         List<CustomRecipeEntry> normalizedRecipes = new ArrayList<>();
         Set<String> usedIds = new HashSet<>();
+        Set<String> usedServerRecipeIds = new HashSet<>();
         for (CustomRecipeEntry recipe : recipeConfig.custom_recipes) {
             if (recipe == null) continue;
+            normalizeIngredientCounts(recipe);
             if (recipe.required_mods == null) recipe.required_mods = new LinkedHashMap<>();
             if (recipe.missing_items == null) recipe.missing_items = new ArrayList<>();
             if (recipe.conflicting_recipes == null) recipe.conflicting_recipes = new ArrayList<>();
@@ -480,17 +503,53 @@ public final class ConfigLoader {
                         (recipeFingerprint(recipe) + "#" + normalizedRecipes.size()).getBytes(StandardCharsets.UTF_8));
                 usedIds.add(recipe.id);
             }
+            // serverRecipeId lower-cases and replaces unsupported characters. Two
+            // distinct editor IDs can therefore otherwise overwrite one another
+            // inside Minecraft's recipe manager.
+            int serverIdSuffix = 0;
+            while (!usedServerRecipeIds.add(recipe.serverRecipeId().toString())) {
+                recipe.id = "duplicate-" + UUID.nameUUIDFromBytes(
+                        (recipeFingerprint(recipe) + "#server#" + normalizedRecipes.size() + "#" + serverIdSuffix++)
+                                .getBytes(StandardCharsets.UTF_8));
+                usedIds.add(recipe.id);
+            }
             normalizedRecipes.add(recipe);
         }
         recipeConfig.custom_recipes = normalizedRecipes;
+    }
+
+    /** Missing quantity metadata belongs to recipes made before 1.3.9 and therefore means one item. */
+    private static void normalizeIngredientCounts(CustomRecipeEntry recipe) {
+        if (recipe == null) return;
+        if (recipe.ingredients == null) recipe.ingredients = new ArrayList<>();
+        if (recipe.pattern == null) recipe.pattern = new ArrayList<>();
+        if (recipe.keys == null) recipe.keys = new LinkedHashMap<>();
+        if (recipe.ingredient_counts == null) recipe.ingredient_counts = new ArrayList<>();
+        while (recipe.ingredient_counts.size() < recipe.ingredients.size()) recipe.ingredient_counts.add(1);
+        while (recipe.ingredient_counts.size() > recipe.ingredients.size()) {
+            recipe.ingredient_counts.remove(recipe.ingredient_counts.size() - 1);
+        }
+        for (int i = 0; i < recipe.ingredient_counts.size(); i++) {
+            Integer value = recipe.ingredient_counts.get(i);
+            recipe.ingredient_counts.set(i, CustomRecipeEntry.clampIngredientCount(value == null ? 1 : value));
+        }
+        if (recipe.key_counts == null) recipe.key_counts = new LinkedHashMap<>();
+        recipe.key_counts.keySet().removeIf(key -> !recipe.keys.containsKey(key));
+        for (String key : recipe.keys.keySet()) {
+            Integer value = recipe.key_counts.get(key);
+            recipe.key_counts.put(key, CustomRecipeEntry.clampIngredientCount(value == null ? 1 : value));
+        }
+        recipe.count = CustomRecipeEntry.clampIngredientCount(recipe.count);
     }
 
     private static String recipeFingerprint(CustomRecipeEntry recipe) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("type", recipe.type);
         data.put("ingredients", recipe.ingredients);
+        data.put("ingredient_counts", recipe.ingredient_counts);
         data.put("pattern", recipe.pattern);
         data.put("keys", recipe.keys);
+        data.put("key_counts", recipe.key_counts);
         data.put("result", recipe.result);
         data.put("count", recipe.count);
         return GSON.toJson(data);
