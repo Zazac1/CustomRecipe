@@ -123,6 +123,7 @@ public abstract class ServerRecipeManagerMixin {
         }
         if (recipeStateChanged) ConfigLoader.saveIntegrityState(ConfigLoader.get());
 
+        // Exact full-stack and counted ingredients must be checked before generic recipes.
         recipes.addAll(0, exactCustomRecipes);
         recipes.addAll(customRecipes);
 

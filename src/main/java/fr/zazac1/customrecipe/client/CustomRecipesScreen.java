@@ -2,6 +2,8 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
+import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.RecipeIntegrity;
 import net.fabricmc.api.EnvType;
@@ -177,10 +179,7 @@ public class CustomRecipesScreen extends Screen {
     }
     private boolean needsTallDetail(CustomRecipeEntry recipe) {
         // Warnings need their own line below the ingredient preview.
-        if (isCorrupted(recipe) || firstEnabledConflict(recipe) != null) return true;
-        if (Boolean.TRUE.equals(recipe.known_by_default)) return false;
-        return LocalRecipeConflictDetector.hasVanillaCraftingOutput(recipe.result)
-                || firstEnabledSameShapeRecipe(recipe) != null;
+        return isCorrupted(recipe) || firstEnabledConflict(recipe) != null;
     }
     private int detailItemRows(CustomRecipeEntry recipe) {
         return 3;
@@ -218,11 +217,9 @@ public class CustomRecipesScreen extends Screen {
         textRenderer = font;
         // A recipe can recover when a previously missing mod is installed again.
         // Refresh first so stale persisted corruption flags never survive that recovery.
-        for (CustomRecipeEntry recipe : recipes) RecipeIntegrity.refresh(recipe);
+        for (CustomRecipeEntry recipe : recipes) RecipeIntegrity.refresh(recipe, parent.customItems);
         if (!parent.isServerManaged()) {
-            LocalRecipeConflictDetector.refresh(recipes, minecraft);
-        } else {
-            LocalRecipeConflictDetector.refreshVanillaCraftingOutputs(minecraft);
+            LocalRecipeConflictDetector.refresh(recipes, minecraft, parent.disabledRecipes);
         }
         // ── Fills ────────────────────────────────────────────────────────
         addRenderableOnly((ctx, mx, my, d) -> {
@@ -238,7 +235,11 @@ public class CustomRecipesScreen extends Screen {
             ctx.text(font, Component.translatable("customrecipe.table.output"), PAD + 4, listTop() + 4, headerColor, false);
             ctx.text(font, Component.translatable("customrecipe.table.status"), PAD + 48, listTop() + 4, headerColor, false);
             ctx.text(font, Component.translatable("customrecipe.table.type"), PAD + 101, listTop() + 4, headerColor, false);
-            ctx.text(font, Component.translatable("customrecipe.table.recipe"), recipeX(), listTop() + 4, headerColor, false);
+            Component recipeHeader = Component.translatable("customrecipe.table.recipe");
+            ctx.text(font, recipeHeader, recipeX(), listTop() + 4, headerColor, false);
+            // One affordance in the column header keeps rows readable while showing that titles expand.
+            CustomRecipeSprites.draw(ctx, CustomRecipeSprites.EYE,
+                    recipeX() + font.width(recipeHeader) + 4, listTop() + 2, 12, 12);
             ctx.text(font, Component.translatable(libraryPicker ? "customrecipe.table.add" : "customrecipe.table.state"), statusX() + 28, listTop() + 4, headerColor, false);
             if (hasRecipeScrollbar()) {
                 int trackX = recipeScrollTrackX();
@@ -268,10 +269,8 @@ public class CustomRecipesScreen extends Screen {
                         rowColor, (rowColor & 0x00FFFFFF) | 0x18000000);
                 // Icône de l'item résultat
                 String resId = recipes.get(i).result;
-                Identifier resultId = resId == null ? null : Identifier.tryParse(resId);
-                if (resultId != null && BuiltInRegistries.ITEM.containsKey(resultId)) {
-                    ctx.item(ClientItemStacks.fromItem(BuiltInRegistries.ITEM.getValue(resultId)), itemIconX(), y + 3);
-                }
+                ItemStack resultStack = stackFor(resId);
+                if (!resultStack.isEmpty()) ctx.item(resultStack, itemIconX(), y + 3);
                 drawRecipeStatusIcon(ctx, warningIconX(), y + 3, corrupted, conflict);
                 boolean shapedType = "shaped".equalsIgnoreCase(recipes.get(i).type);
                 drawRecipeTypeIcon(ctx, typeIconX() + (shapedType ? 1 : 0), y + (shapedType ? 4 : 3),
@@ -549,32 +548,18 @@ public class CustomRecipesScreen extends Screen {
                     warning.setMaxRows(1);
                     addDrawableChild(warning);
                     addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.disable_conflict").withColor(0xFFCC55), b -> {
-                        if (!parent.disabledRecipes.contains(conflict)) parent.disabledRecipes.add(conflict);
+                        CustomRecipeEntry customConflict = recipes.stream()
+                                .filter(candidate -> candidate != e && conflict.equals(candidate.serverRecipeId().toString()))
+                                .findFirst().orElse(null);
+                        if (customConflict != null) {
+                            // Custom recipes are added after vanilla recipes during reload;
+                            // disabledRecipes cannot disable one that has not been injected yet.
+                            customConflict.enabled = Boolean.FALSE;
+                        } else if (!parent.disabledRecipes.contains(conflict)) {
+                            parent.disabledRecipes.add(conflict);
+                        }
                         clearAndInit();
                     }).dimensions(detailRight() - 204, detailY() + 26, 198, 18).build());
-                } else if (!known) {
-                    if (LocalRecipeConflictDetector.hasVanillaCraftingOutput(e.result)) {
-                        MultilineTextWidget advice = new MultilineTextWidget(PAD + 4, detailMessageY(),
-                                Text.translatable("customrecipe.recipe.vanilla_conflict")
-                                        .withColor(0x77BBFF), textRenderer);
-                        advice.setMaxWidth(detailWidth() - 8);
-                        advice.setMaxRows(1);
-                        addDrawableChild(advice);
-                    } else {
-                        String alternative = firstEnabledSameShapeRecipe(e);
-                        if (alternative != null) {
-                        MultilineTextWidget advice = new MultilineTextWidget(PAD + 4, detailMessageY(),
-                                Text.translatable("customrecipe.recipe.same_inputs", alternative)
-                                        .withColor(0x77BBFF), textRenderer);
-                        advice.setMaxWidth(detailWidth() - 8);
-                        advice.setMaxRows(2);
-                        addDrawableChild(advice);
-                        addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.set_known").withColor(0x77BBFF), b -> {
-                            recipes.get(selected).known_by_default = Boolean.TRUE;
-                            clearAndInit();
-                        }).dimensions(detailRight() - 142, detailY() + 52, 138, 18).build());
-                        }
-                    }
                 }
             }
         }
@@ -642,9 +627,8 @@ public class CustomRecipesScreen extends Screen {
         String result = quickAddIsBuiltin(quickIndex)
                 ? BuiltinRecipesScreen.quickAddResult(quickAddBuiltinIndex(quickIndex))
                 : quickAddCustomRecipeIndex(quickIndex) < 0 ? "" : parent.quickAddRecipes.get(quickAddCustomRecipeIndex(quickIndex)).result;
-        Identifier id = Identifier.tryParse(result);
-        if (id != null && BuiltInRegistries.ITEM.containsKey(id))
-            ctx.item(ClientItemStacks.fromItem(BuiltInRegistries.ITEM.getValue(id)), x, y);
+        ItemStack resultStack = stackFor(result);
+        if (!resultStack.isEmpty()) ctx.item(resultStack, x, y);
     }
 
     private void renderDetailFills(GuiGraphicsExtractor ctx, CustomRecipeEntry e, boolean quickAddPreview) {
@@ -698,9 +682,8 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
         drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
         if (e.result != null && !e.result.isEmpty()) {
-            var ri = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(e.result));
-            if (ri != null && ri != Items.AIR)
-                ctx.item(ClientItemStacks.fromItem(ri), resultX + 1, resultY + 1);
+            ItemStack stack = stackFor(e.result);
+            if (!stack.isEmpty()) ctx.item(stack, resultX + 1, resultY + 1);
         }
     }
 
@@ -759,8 +742,8 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
         drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
         if (e.result != null && !e.result.isEmpty()) {
-            var result = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(e.result));
-            if (result != null && result != Items.AIR) ctx.item(ClientItemStacks.fromItem(result), resultX + 1, resultY + 1);
+            ItemStack stack = stackFor(e.result);
+            if (!stack.isEmpty()) ctx.item(stack, resultX + 1, resultY + 1);
         }
     }
 
@@ -768,8 +751,8 @@ public class CustomRecipesScreen extends Screen {
         for (int i = 0; i < rows.size(); i++) {
             ShapelessIngredient row = rows.get(i);
             int rowY = y + i * MINI;
-            var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(row.itemId()));
-            if (item != null && item != Items.AIR) ctx.item(ClientItemStacks.fromItem(item), x, rowY + 1);
+            ItemStack stack = stackFor(row.itemId());
+            if (!stack.isEmpty()) ctx.item(stack, x, rowY + 1);
             String name = textRenderer.plainSubstrByWidth(toName(row.itemId()), 104);
             ctx.text(textRenderer, name, x + 20, rowY + 5, 0xFFDDDDDD, false);
             ctx.text(textRenderer, "x" + row.count(), x + 126, rowY + 5, 0xFFEECC77, false);
@@ -794,8 +777,8 @@ public class CustomRecipesScreen extends Screen {
     }
 
     private void renderIngredientRow(GuiGraphicsExtractor ctx, ShapelessIngredient row, int x, int y) {
-        var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(row.itemId()));
-        if (item != null && item != Items.AIR) ctx.item(ClientItemStacks.fromItem(item), x, y + 1);
+        ItemStack stack = stackFor(row.itemId());
+        if (!stack.isEmpty()) ctx.item(stack, x, y + 1);
         String name = textRenderer.plainSubstrByWidth(toName(row.itemId()), 104);
         ctx.text(textRenderer, name, x + 20, y + 5, 0xFFDDDDDD, false);
         ctx.text(textRenderer, "x" + row.count(), x + 126, y + 5, 0xFFEECC77, false);
@@ -1067,19 +1050,22 @@ public class CustomRecipesScreen extends Screen {
 
     private boolean isCorrupted(CustomRecipeEntry entry) {
         return Boolean.TRUE.equals(entry.corrupted)
-                || (!parent.isServerManaged() && !RecipeIntegrity.missingItems(entry).isEmpty());
+                || (!parent.isServerManaged() && !RecipeIntegrity.missingItems(entry, parent.customItems).isEmpty());
     }
 
     private List<String> missingItems(CustomRecipeEntry entry) {
         java.util.LinkedHashSet<String> missing = new java.util.LinkedHashSet<>();
         if (entry.missing_items != null) missing.addAll(entry.missing_items);
-        missing.addAll(RecipeIntegrity.missingItems(entry));
+        missing.addAll(RecipeIntegrity.missingItems(entry, parent.customItems));
         return new java.util.ArrayList<>(missing);
     }
 
     private String firstEnabledConflict(CustomRecipeEntry entry) {
-        if (entry.conflicting_recipes == null) return null;
-        return entry.conflicting_recipes.stream()
+        java.util.stream.Stream<String> duplicates = entry.conflicting_recipes == null
+                ? java.util.stream.Stream.empty() : entry.conflicting_recipes.stream();
+        java.util.stream.Stream<String> overlaps = entry.same_shape_recipes == null
+                ? java.util.stream.Stream.empty() : entry.same_shape_recipes.stream();
+        return java.util.stream.Stream.concat(duplicates, overlaps)
                 .filter(id -> id != null && !parent.disabledRecipes.contains(id))
                 .findFirst()
                 .orElse(null);
@@ -1109,12 +1095,19 @@ public class CustomRecipesScreen extends Screen {
 
     private String toName(String id) {
         if (id == null || id.isEmpty()) return "?";
+        CustomItemEntry custom = CustomItemLibrary.isReference(id)
+                ? CustomItemLibrary.find(parent.customItems, id) : null;
+        if (custom != null) return custom.name;
         String path = id.contains(":") ? id.split(":")[1] : id;
         String[] parts = path.split("_");
         StringBuilder sb = new StringBuilder();
         for (String w : parts)
             if (!w.isEmpty()) sb.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1)).append(' ');
         return sb.toString().trim();
+    }
+
+    private ItemStack stackFor(String value) {
+        return ClientItemStacks.fromReference(value, parent.rootConfig());
     }
 
     /** Small scroll/list marker shown beside range indicators. */

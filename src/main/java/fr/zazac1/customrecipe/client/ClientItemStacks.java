@@ -1,5 +1,8 @@
 package fr.zazac1.customrecipe.client;
 
+import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
+import fr.zazac1.customrecipe.ModConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponents;
@@ -42,5 +45,17 @@ final class ClientItemStacks {
             }
             return new ItemStack(holder);
         }).orElse(ItemStack.EMPTY);
+    }
+
+    static ItemStack fromReference(String value, ModConfig config) {
+        if (!CustomItemLibrary.isReference(value)) return fromId(Identifier.tryParse(value));
+        CustomItemEntry entry = CustomItemLibrary.find(config == null ? null : config.custom_items, value);
+        if (entry == null) return ItemStack.EMPTY;
+        var connection = Minecraft.getInstance().getConnection();
+        if (connection != null) {
+            ItemStack decoded = CustomItemLibrary.decode(entry, connection.registryAccess());
+            if (!decoded.isEmpty()) return decoded;
+        }
+        return fromId(Identifier.tryParse(entry.item_id));
     }
 }
