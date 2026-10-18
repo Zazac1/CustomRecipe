@@ -1,6 +1,7 @@
 package fr.zazac1.customrecipe.mixin;
 
 import fr.zazac1.customrecipe.CountedCraftingRecipe;
+import fr.zazac1.customrecipe.CountedCraftingGuard;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.inventory.CraftingResultInventory;
 import net.minecraft.inventory.RecipeInputInventory;
@@ -19,16 +20,26 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Makes one craft consume each custom ingredient's configured stack amount. */
 @Mixin(CraftingResultSlot.class)
 public abstract class ResultSlotMixin {
     @Shadow @Final private RecipeInputInventory input;
+    @Shadow @Final private PlayerEntity player;
 
     @Unique private int[] customrecipe$requiredCounts = new int[0];
     @Unique private int customrecipe$inputLeft;
     @Unique private int customrecipe$inputTop;
     @Unique private int customrecipe$inputWidth;
+
+    @Inject(method = "takeStack", at = @At("HEAD"), cancellable = true)
+    private void customrecipe$rejectIncompleteCountedCraft(int amount,
+                                                            CallbackInfoReturnable<ItemStack> cir) {
+        if (!(player.getWorld() instanceof ServerWorld)) return;
+        if (!(((CraftingResultSlot) (Object) this).inventory instanceof CraftingResultInventory resultInventory)) return;
+        if (!CountedCraftingGuard.canTake(input, resultInventory)) cir.setReturnValue(ItemStack.EMPTY);
+    }
 
     @Inject(method = "onTakeItem", at = @At("HEAD"))
     private void customrecipe$captureRequiredCounts(PlayerEntity player, ItemStack result, CallbackInfo ci) {

@@ -631,10 +631,11 @@ public class CustomRecipesScreen extends Screen {
                 String id = grid[r][c];
                 if (id != null && !id.isEmpty()) {
                     ItemStack stack = stackFor(id);
-                    if (!stack.isEmpty()) ctx.drawItem(stack, sx + 1, sy + 1);
-                    String amount = String.valueOf(countGrid[r][c]);
-                    ctx.drawText(textRenderer, amount, sx + MINI - textRenderer.getWidth(amount) - 1,
-                            sy + MINI - 8, 0xFFFFFFFF, true);
+                    if (!stack.isEmpty()) {
+                        ctx.drawItem(stack, sx + 1, sy + 1);
+                        ctx.drawStackOverlay(textRenderer, stack, sx + 1, sy + 1,
+                                String.valueOf(countGrid[r][c]));
+                    }
                 }
             }
         }

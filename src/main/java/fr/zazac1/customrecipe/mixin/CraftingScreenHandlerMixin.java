@@ -1,9 +1,11 @@
 package fr.zazac1.customrecipe.mixin;
 
 import fr.zazac1.customrecipe.CustomRecipeMod;
+import fr.zazac1.customrecipe.CountedCraftingGuard;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.inventory.CraftingResultInventory;
 import net.minecraft.inventory.RecipeInputInventory;
+import net.minecraft.item.ItemStack;
 import net.minecraft.recipe.CraftingRecipe;
 import net.minecraft.recipe.RecipeEntry;
 import net.minecraft.recipe.RecipeType;
@@ -20,6 +22,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Optional;
 
@@ -28,6 +31,21 @@ import java.util.Optional;
 public abstract class CraftingScreenHandlerMixin {
     @Unique
     private RecipeEntry<CraftingRecipe> customrecipe$bookRecipe;
+
+    @Inject(method = "quickMove", at = @At("HEAD"), cancellable = true)
+    private void customrecipe$rejectIncompleteCountedCraft(PlayerEntity player, int slotIndex,
+                                                            CallbackInfoReturnable<ItemStack> cir) {
+        if (slotIndex != 0 || !(player.getWorld() instanceof ServerWorld)) return;
+
+        CraftingScreenHandler handler = (CraftingScreenHandler) (Object) this;
+        RecipeInputInventory input = (RecipeInputInventory) handler.getInputSlots().getFirst().inventory;
+        CraftingResultInventory result = (CraftingResultInventory) handler.getOutputSlot().inventory;
+        if (CountedCraftingGuard.canTake(input, result)) return;
+
+        result.setStack(0, ItemStack.EMPTY);
+        ((ScreenHandler) (Object) this).sendContentUpdates();
+        cir.setReturnValue(ItemStack.EMPTY);
+    }
 
     @Inject(method = "onInputSlotFillFinish", at = @At("HEAD"))
     private void customrecipe$rememberBookRecipe(ServerWorld world, RecipeEntry<CraftingRecipe> recipe, CallbackInfo ci) {

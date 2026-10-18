@@ -36,8 +36,8 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
 
     @Override
     public boolean matches(CraftingRecipeInput input, World level) {
-        if (!delegate.matches(input, level)) return false;
-        return requiredCounts(input).length == input.size();
+        int[] required = requiredCounts(input);
+        return required.length > 0 && required.length == input.size();
     }
 
     @Override
@@ -90,21 +90,36 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
     }
 
     private int[] requiredShapedCounts(CraftingRecipeInput input, boolean enforceAmounts) {
-        List<String> rows = shrink(definition.pattern);
-        if (rows.isEmpty() || input.getHeight() != rows.size() || input.getWidth() != rows.getFirst().length()) {
-            return new int[0];
+        List<String> rows = shrinkPattern(definition.pattern);
+        if (rows.isEmpty()) return new int[0];
+        int patternWidth = rows.getFirst().length();
+        int patternHeight = rows.size();
+        if (patternWidth > input.getWidth() || patternHeight > input.getHeight()) return new int[0];
+        for (int offsetY = 0; offsetY <= input.getHeight() - patternHeight; offsetY++) {
+            for (int offsetX = 0; offsetX <= input.getWidth() - patternWidth; offsetX++) {
+                int[] normal = requiredRowCounts(input, rows, offsetX, offsetY, false, enforceAmounts);
+                if (normal.length > 0) return normal;
+                int[] mirrored = requiredRowCounts(input, rows, offsetX, offsetY, true, enforceAmounts);
+                if (mirrored.length > 0) return mirrored;
+            }
         }
-        int[] normal = requiredRowCounts(input, rows, false, enforceAmounts);
-        return normal.length > 0 ? normal : requiredRowCounts(input, rows, true, enforceAmounts);
+        return new int[0];
     }
 
-    private int[] requiredRowCounts(CraftingRecipeInput input, List<String> rows, boolean mirrored,
+    private int[] requiredRowCounts(CraftingRecipeInput input, List<String> rows, int offsetX, int offsetY,
+                                    boolean mirrored,
                                     boolean enforceAmounts) {
-        int width = rows.getFirst().length();
+        int patternWidth = rows.getFirst().length();
         int[] required = new int[input.size()];
-        for (int y = 0; y < rows.size(); y++) {
-            for (int x = 0; x < width; x++) {
-                char symbol = rows.get(y).charAt(mirrored ? width - x - 1 : x);
+        for (int y = 0; y < input.getHeight(); y++) {
+            for (int x = 0; x < input.getWidth(); x++) {
+                boolean inside = x >= offsetX && x < offsetX + patternWidth
+                        && y >= offsetY && y < offsetY + rows.size();
+                char symbol = ' ';
+                if (inside) {
+                    int patternX = x - offsetX;
+                    symbol = rows.get(y - offsetY).charAt(mirrored ? patternWidth - patternX - 1 : patternX);
+                }
                 String token = symbol == ' ' || definition.keys == null ? "" : definition.keys.get(symbol + "");
                 ItemStack actual = input.getStackInSlot(x, y);
                 if (token == null || token.isBlank()) {
@@ -112,7 +127,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
                 } else {
                     int count = definition.keyCount(symbol + "");
                     if (!matchesToken(token, actual, count, enforceAmounts)) return new int[0];
-                    required[y * width + x] = count;
+                    required[y * input.getWidth() + x] = count;
                 }
             }
         }
@@ -127,7 +142,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         return id != null && !actual.isEmpty() && Registries.ITEM.getId(actual.getItem()).equals(id);
     }
 
-    private static List<String> shrink(List<String> pattern) {
+    public static List<String> shrinkPattern(List<String> pattern) {
         if (pattern == null || pattern.isEmpty()) return List.of();
         int top = 0, bottom = pattern.size() - 1;
         while (top <= bottom && pattern.get(top).isBlank()) top++;
@@ -171,7 +186,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
 
     private RecipeDisplay withIngredientCounts(RecipeDisplay display) {
         if (display instanceof ShapedCraftingRecipeDisplay shaped) {
-            List<String> rows = shrink(definition.pattern);
+            List<String> rows = shrinkPattern(definition.pattern);
             if (rows.size() != shaped.height() || rows.isEmpty() || rows.getFirst().length() != shaped.width()) {
                 return display;
             }
