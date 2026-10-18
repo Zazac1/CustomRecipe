@@ -1,7 +1,9 @@
 package fr.zazac1.customrecipe.mixin;
 
+import fr.zazac1.customrecipe.CustomItemLibrary;
+import fr.zazac1.customrecipe.access.ExactStackedItemContentsAccess;
 import net.minecraft.world.entity.player.StackedItemContents;
-import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.display.RecipeDisplay;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.ShapedCraftingRecipeDisplay;
@@ -31,18 +33,34 @@ public abstract class RecipeDisplayEntryMixin {
         };
         if (slots == null) return;
 
-        boolean counted = false;
-        List<Ingredient> requirements = new ArrayList<>();
+        if (!(contents instanceof ExactStackedItemContentsAccess exactContents)) return;
+
+        List<ItemStack> requirements = new ArrayList<>();
         for (SlotDisplay slot : slots) {
             if (slot instanceof SlotDisplay.Empty) continue;
             if (!(slot instanceof SlotDisplay.ItemStackSlotDisplay itemStack)) return;
-
-            int count = itemStack.stack().count();
-            counted |= count > 1;
-            Ingredient ingredient = Ingredient.of(itemStack.stack().item().value());
-            for (int item = 0; item < count; item++) requirements.add(ingredient);
+            requirements.add(itemStack.stack().create());
         }
 
-        if (counted) cir.setReturnValue(contents.canCraft(requirements, null));
+        if (!requirements.isEmpty()) {
+            cir.setReturnValue(customrecipe$canCraftExact(requirements, exactContents.customrecipe$exactStacks()));
+        }
+    }
+
+    private static boolean customrecipe$canCraftExact(List<ItemStack> requirements, List<ItemStack> availableStacks) {
+        int[] available = new int[availableStacks.size()];
+        for (int i = 0; i < available.length; i++) available[i] = availableStacks.get(i).getCount();
+
+        for (ItemStack expected : requirements) {
+            int missing = expected.getCount();
+            for (int i = 0; i < availableStacks.size() && missing > 0; i++) {
+                if (available[i] <= 0 || !CustomItemLibrary.exactMatch(availableStacks.get(i), expected)) continue;
+                int used = Math.min(missing, available[i]);
+                available[i] -= used;
+                missing -= used;
+            }
+            if (missing > 0) return false;
+        }
+        return true;
     }
 }

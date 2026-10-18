@@ -201,6 +201,51 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         return new SlotDisplay.ItemStackSlotDisplay(ItemStackTemplate.fromNonEmptyStack(stack));
     }
 
+    /** Exact stacks and grid positions used by the server-side recipe-book placer. */
+    public List<BookIngredient> bookIngredients(int gridWidth, int gridHeight) {
+        List<BookIngredient> result = new ArrayList<>();
+        if ("shaped".equalsIgnoreCase(definition.type)) {
+            List<String> rows = shrink(definition.pattern);
+            if (rows.isEmpty() || rows.size() > gridHeight || rows.getFirst().length() > gridWidth) return List.of();
+            int width = rows.getFirst().length();
+            int left = width < gridWidth / 2.0F ? (int) Math.floor(gridWidth / 2.0F - width / 2.0F) : 0;
+            int top = rows.size() < gridHeight / 2.0F
+                    ? (int) Math.floor(gridHeight / 2.0F - rows.size() / 2.0F) : 0;
+            for (int y = 0; y < rows.size(); y++) {
+                for (int x = 0; x < width; x++) {
+                    String symbol = rows.get(y).charAt(x) + "";
+                    String token = rows.get(y).charAt(x) == ' ' || definition.keys == null
+                            ? "" : definition.keys.get(symbol);
+                    if (token == null || token.isBlank()) continue;
+                    ItemStack stack = ingredientStack(token, definition.keyCount(symbol));
+                    if (stack.isEmpty()) return List.of();
+                    result.add(new BookIngredient((top + y) * gridWidth + left + x, stack));
+                }
+            }
+        } else if (definition.ingredients != null) {
+            int slot = 0;
+            for (int i = 0; i < definition.ingredients.size(); i++) {
+                String token = definition.ingredients.get(i);
+                if (token == null || token.isBlank()) continue;
+                if (slot >= gridWidth * gridHeight) return List.of();
+                ItemStack stack = ingredientStack(token, definition.ingredientCount(i));
+                if (stack.isEmpty()) return List.of();
+                result.add(new BookIngredient(slot++, stack));
+            }
+        }
+        return result;
+    }
+
+    private ItemStack ingredientStack(String token, int count) {
+        ItemStack stack = customStacks.containsKey(token)
+                ? customStacks.get(token).copy()
+                : new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.tryParse(token)));
+        if (stack.isEmpty()) return ItemStack.EMPTY;
+        stack.setCount(Math.max(1, Math.min(count, stack.getMaxStackSize())));
+        return stack;
+    }
+
     private record Expected(String token, int count) {}
     private record Actual(int inputIndex, ItemStack stack) {}
+    public record BookIngredient(int gridSlot, ItemStack stack) {}
 }

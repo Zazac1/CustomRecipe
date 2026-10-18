@@ -2,17 +2,17 @@
 
 ## Custom Recipe — Minecraft 26.2 (Fabric)
 
-This beta fixes material checks for recipes that require several items in one crafting slot.
+This update fixes recipe-book detection and automatic placement for recipes that use counted or saved custom-item ingredients.
 
 ## Fixed
 
-- The recipe book now marks counted recipes as craftable only when the inventory contains every required item.
-- A crafting result no longer appears when one or more slots contain less than the configured amount.
-- Normal clicks and shift-clicks can no longer collect a counted recipe result from an incomplete crafting grid.
+- The recipe book now recognizes counted recipes as craftable when all required materials are present, including materials split across several inventory stacks.
+- Selecting a recipe now places the correct item variants and configured quantities in the crafting grid.
+- Incomplete counted recipes no longer show or provide a crafting result, whether clicked normally or with shift-click.
 
 ## Compatibility / servers
 
-- Counted ingredient amounts are validated by the server in multiplayer.
+- Recipe availability and ingredient amounts are validated on the server in multiplayer.
 
 ## Before updating
 
