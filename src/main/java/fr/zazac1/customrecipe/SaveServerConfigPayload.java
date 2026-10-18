@@ -10,7 +10,7 @@ import net.minecraft.resources.Identifier;
 public record SaveServerConfigPayload(String json) implements CustomPacketPayload {
     public static final Type<SaveServerConfigPayload> ID = new Type<>(Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "save_server_config"));
     public static final StreamCodec<RegistryFriendlyByteBuf, SaveServerConfigPayload> CODEC =
-            StreamCodec.composite(ByteBufCodecs.STRING_UTF8, SaveServerConfigPayload::json, SaveServerConfigPayload::new);
+            StreamCodec.composite(ByteBufCodecs.stringUtf8(1_000_000), SaveServerConfigPayload::json, SaveServerConfigPayload::new);
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

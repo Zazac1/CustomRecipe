@@ -11,7 +11,7 @@ public record ValidatedServerConfigPayload(String json) implements CustomPacketP
     public static final Type<ValidatedServerConfigPayload> ID = new Type<>(
             Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "validated_server_config"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ValidatedServerConfigPayload> CODEC =
-            StreamCodec.composite(ByteBufCodecs.STRING_UTF8, ValidatedServerConfigPayload::json, ValidatedServerConfigPayload::new);
+            StreamCodec.composite(ByteBufCodecs.stringUtf8(1_000_000), ValidatedServerConfigPayload::json, ValidatedServerConfigPayload::new);
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

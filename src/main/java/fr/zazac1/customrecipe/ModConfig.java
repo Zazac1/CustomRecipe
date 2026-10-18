@@ -16,6 +16,9 @@ public class ModConfig {
     /** Reusable recipes. This target is intentionally not applied at runtime. */
     public WorldRecipeConfig global_library = new WorldRecipeConfig();
 
+    /** Full ItemStacks reusable by every recipe target. */
+    public List<CustomItemEntry> custom_items = new ArrayList<>();
+
     /** Fully isolated state for each save, keyed by WorldRecipeAssignments.worldId. */
     public Map<String, WorldRecipeConfig> world_configs = new LinkedHashMap<>();
 
