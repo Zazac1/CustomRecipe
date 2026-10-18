@@ -82,6 +82,7 @@ public abstract class RecipeBookPlacementMixin {
             customrecipe$menu().getSlot(target.menuSlot()).set(completed);
         }
         inventory.setChanged();
+        customrecipe$menu().broadcastChanges();
     }
 
     @Unique
