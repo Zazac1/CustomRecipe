@@ -18,6 +18,7 @@ This beta update lets recipes require complete ingredient stacks instead of limi
 
 - Selecting a custom recipe from the recipe book now fills each crafting slot with its complete required stack when enough items are available.
 - Entering or editing an ingredient quantity no longer causes an error when the field is temporarily empty.
+- The built-in recipes for the elytra, enchanted golden apple, experience bottle, heavy core, and totem of undying now load correctly on Minecraft 1.21.1.
 
 ## Compatibility / servers
 
