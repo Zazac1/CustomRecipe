@@ -168,14 +168,16 @@ public abstract class ServerRecipeManagerMixin {
                                           String recipeGroup, List<CustomItemEntry> customItems) {
       if (entry.ingredients == null || entry.ingredients.isEmpty()) return null;
       List<Ingredient> ingredients = new ArrayList<>();
-      for (String value : entry.ingredients) {
+      for (int i = 0; i < entry.ingredients.size(); i++) {
+         String value = entry.ingredients.get(i);
          if (value == null || value.isBlank()) continue;
-         Identifier id = Identifier.tryParse(ingredientBaseId(value.trim(), customItems));
-         if (id == null || !Registries.ITEM.containsId(id)) {
+         ItemStack stack = resolveStack(value.trim(), customItems);
+         if (stack.isEmpty()) {
             CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shapeless ingredient not found: {}", value);
             return null;
          }
-         ingredients.add(Ingredient.ofItems((ItemConvertible) Registries.ITEM.get(id)));
+         stack.setCount(Math.max(1, Math.min(entry.ingredientCount(i), stack.getMaxCount())));
+         ingredients.add(Ingredient.ofStacks(stack));
       }
       if (ingredients.isEmpty()) return null;
       ShapelessRecipe recipe = new ShapelessRecipe(recipeGroup, CraftingRecipeCategory.MISC, result,
@@ -189,12 +191,13 @@ public abstract class ServerRecipeManagerMixin {
       Map<Character, Ingredient> symbols = new LinkedHashMap<>();
       for (Map.Entry<String, String> pair : entry.keys.entrySet()) {
          if (pair.getKey() == null || pair.getKey().isEmpty()) continue;
-         Identifier id = Identifier.tryParse(ingredientBaseId(pair.getValue(), customItems));
-         if (id == null || !Registries.ITEM.containsId(id)) {
+         ItemStack stack = resolveStack(pair.getValue(), customItems);
+         if (stack.isEmpty()) {
             CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shaped key item not found: {}", pair.getValue());
             return null;
          }
-         symbols.put(pair.getKey().charAt(0), Ingredient.ofItems((ItemConvertible) Registries.ITEM.get(id)));
+         stack.setCount(Math.max(1, Math.min(entry.keyCount(pair.getKey()), stack.getMaxCount())));
+         symbols.put(pair.getKey().charAt(0), Ingredient.ofStacks(stack));
       }
       RawShapedRecipe raw;
       try {
