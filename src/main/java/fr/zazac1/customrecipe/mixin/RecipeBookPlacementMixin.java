@@ -81,7 +81,12 @@ public abstract class RecipeBookPlacementMixin {
             craftingInventory.setStack(target.gridIndex(), completed);
         }
         inventory.markDirty();
-        ((ScreenHandler) (Object) this).sendContentUpdates();
+        ScreenHandler handler = (ScreenHandler) (Object) this;
+        handler.sendContentUpdates();
+        // Minecraft 1.21.10 may keep the uniform amount chosen by the vanilla
+        // craft-all pass in the client's tracked slots. A full state sync makes
+        // the per-slot custom amounts authoritative immediately.
+        handler.syncState();
     }
 
     private record Target(int gridIndex, ItemStack stack, int missing) {}

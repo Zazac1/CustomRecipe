@@ -1,6 +1,7 @@
 package fr.zazac1.customrecipe.mixin;
 
 import fr.zazac1.customrecipe.ConfigLoader;
+import fr.zazac1.customrecipe.CustomItemCraftingRecipe;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.DisabledCraftingRecipe;
@@ -256,7 +257,7 @@ public abstract class ServerRecipeManagerMixin {
     private RecipeEntry<?> buildShaped(CustomRecipeEntry entry, ItemStack result,
                                         RegistryKey<Recipe<?>> key, String recipeGroup,
                                         List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
-        List<String> pattern = entry.pattern;
+        List<String> pattern = CustomItemCraftingRecipe.shrinkPattern(entry.pattern);
         Map<String, String> keysMap = entry.keys;
         if (pattern == null || pattern.isEmpty()) return null;
         if (keysMap == null || keysMap.isEmpty()) return null;
