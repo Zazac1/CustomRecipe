@@ -94,12 +94,13 @@ public abstract class ServerRecipeManagerMixin {
             return exactWrapper(recipe, entry, customItems);
         }
         if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
-        int width = entry.pattern.stream().mapToInt(String::length).max().orElse(0);
-        int height = entry.pattern.size();
+        List<String> pattern = CustomItemCraftingRecipe.shrinkPattern(entry.pattern);
+        int width = pattern.stream().mapToInt(String::length).max().orElse(0);
+        int height = pattern.size();
         if (width < 1 || width > 3 || height > 3) return null;
         DefaultedList<Ingredient> input = DefaultedList.ofSize(width * height, Ingredient.EMPTY);
         for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
-            char symbol = x < entry.pattern.get(y).length() ? entry.pattern.get(y).charAt(x) : ' ';
+            char symbol = x < pattern.get(y).length() ? pattern.get(y).charAt(x) : ' ';
             if (symbol == ' ') continue;
             String raw = entry.keys.get(String.valueOf(symbol));
             ItemStack stack = raw == null ? ItemStack.EMPTY : resolveStack(raw, customItems);
