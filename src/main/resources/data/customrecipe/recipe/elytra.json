@@ -7,9 +7,9 @@
     "M M"
   ],
   "key": {
-    "S": "minecraft:string",
-    "M": "minecraft:phantom_membrane",
-    "F": "minecraft:feather"
+    "S": { "item": "minecraft:string" },
+    "M": { "item": "minecraft:phantom_membrane" },
+    "F": { "item": "minecraft:feather" }
   },
   "result": {
     "id": "minecraft:elytra",
