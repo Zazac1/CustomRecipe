@@ -21,12 +21,16 @@ public class CustomRecipeEntry {
     // ── shapeless ─────────────────────────────────────────────────────────
     /** List of ingredient item IDs (e.g. "minecraft:diamond"). Up to 9. */
     public List<String> ingredients = new ArrayList<>();
+    /** Required stack size for each shapeless ingredient slot (1–64). */
+    public List<Integer> ingredient_counts = new ArrayList<>();
 
     // ── shaped ────────────────────────────────────────────────────────────
     /** 3 pattern rows, each up to 3 characters (' ' = empty slot). */
     public List<String> pattern = new ArrayList<>();
     /** Maps pattern character → item ID. */
     public Map<String, String> keys = new LinkedHashMap<>();
+    /** Required stack size for each shaped pattern character (1–64). */
+    public Map<String, Integer> key_counts = new LinkedHashMap<>();
 
     // ── common ────────────────────────────────────────────────────────────
     /** Result item ID. */
@@ -73,6 +77,29 @@ public class CustomRecipeEntry {
 
     /** Default crafting recipe IDs with the same inputs but a different output item. */
     public List<String> same_shape_recipes = new ArrayList<>();
+
+    public int ingredientCount(int index) {
+        if (ingredient_counts == null || index < 0 || index >= ingredient_counts.size()) return 1;
+        Integer value = ingredient_counts.get(index);
+        return clampIngredientCount(value == null ? 1 : value);
+    }
+
+    public int keyCount(String key) {
+        if (key_counts == null || key == null) return 1;
+        Integer value = key_counts.get(key);
+        return clampIngredientCount(value == null ? 1 : value);
+    }
+
+    public boolean hasCountedIngredients() {
+        if (ingredient_counts != null && ingredient_counts.stream().anyMatch(value -> value != null && value > 1)) {
+            return true;
+        }
+        return key_counts != null && key_counts.values().stream().anyMatch(value -> value != null && value > 1);
+    }
+
+    public static int clampIngredientCount(int value) {
+        return Math.max(1, Math.min(64, value));
+    }
 
     /** Stable server key used for recipe loading and automatic recipe-book unlocks. */
     public Identifier serverRecipeId() {

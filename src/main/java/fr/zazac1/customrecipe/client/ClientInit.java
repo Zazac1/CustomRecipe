@@ -45,10 +45,15 @@ public class ClientInit implements ClientModInitializer {
     public void onInitializeClient() {
         // Used only by the clickable local-world tip; it never reaches a server.
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
-                literal("customrecipe_open_local").executes(context -> {
+                literal("customrecipe_solo")
+                        // Do not merely reject the command after parsing: keep it out of
+                        // the client dispatcher entirely while connected to multiplayer.
+                        .requires(source -> Minecraft.getInstance().getSingleplayerServer() != null)
+                        .executes(context -> {
                     Minecraft client = Minecraft.getInstance();
                     // This client-only helper is for the clickable new-world tip.
-                    // Never expose the local editor while connected to a remote server.
+                    // The requirement above hides it remotely; retain this guard for a
+                    // disconnect occurring between parsing and execution.
                     if (client.getSingleplayerServer() == null) return 0;
                     client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true))));
                     return 1;
@@ -85,7 +90,7 @@ public class ClientInit implements ClientModInitializer {
             }
             Component editorLink = Component.translatable("customrecipe.chat.world_tip.link")
                     .withStyle(Style.EMPTY.withColor(ChatFormatting.AQUA).withUnderlined(true)
-                            .withClickEvent(new ClickEvent.RunCommand("/customrecipe_open_local"))
+                            .withClickEvent(new ClickEvent.RunCommand("/customrecipe_solo"))
                             .withHoverEvent(new HoverEvent.ShowText(Component.translatable("customrecipe.chat.world_tip.hover"))));
             client.player.sendSystemMessage(Component.translatable("customrecipe.chat.world_tip", editorLink));
             CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
@@ -120,7 +125,10 @@ public class ClientInit implements ClientModInitializer {
         });
         ClientPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsPayload.ID, (payload, context) -> {
             VanillaRecipeDetails details = GSON.fromJson(payload.json(), VanillaRecipeDetails.class);
-            if (details != null && context.client().screen instanceof VanillaRecipeDetailsScreen screen) {
+            if (details == null) return;
+            if (context.client().screen instanceof VanillaRecipesScreen screen) {
+                screen.applyDetails(details);
+            } else if (context.client().screen instanceof VanillaRecipeDetailsScreen screen) {
                 screen.applyDetails(details);
             }
         });
@@ -200,8 +208,12 @@ public class ClientInit implements ClientModInitializer {
         copy.id = source.id;
         copy.type = source.type;
         copy.ingredients = new java.util.ArrayList<>(source.ingredients);
+        copy.ingredient_counts = source.ingredient_counts == null ? new java.util.ArrayList<>()
+                : new java.util.ArrayList<>(source.ingredient_counts);
         copy.pattern = new java.util.ArrayList<>(source.pattern);
         copy.keys = new java.util.LinkedHashMap<>(source.keys);
+        copy.key_counts = source.key_counts == null ? new java.util.LinkedHashMap<>()
+                : new java.util.LinkedHashMap<>(source.key_counts);
         copy.result = source.result;
         copy.count = source.count;
         copy.enabled = null;
