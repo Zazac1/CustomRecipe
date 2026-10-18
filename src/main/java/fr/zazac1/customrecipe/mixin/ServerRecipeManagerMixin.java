@@ -164,9 +164,10 @@ public abstract class ServerRecipeManagerMixin {
 
         List<Ingredient> ingredients = new ArrayList<>();
         Map<String, ItemStack> customStacks = new LinkedHashMap<>();
-        for (String itemId : rawIngredients) {
+        for (int i = 0; i < rawIngredients.size(); i++) {
+            String itemId = rawIngredients.get(i);
             if (itemId == null || itemId.isBlank()) continue;
-            Ingredient ingredient = ingredientFor(itemId.trim(), customItems, customStacks);
+            Ingredient ingredient = ingredientFor(itemId.trim(), entry.ingredientCount(i), customItems, customStacks);
             if (ingredient == null) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shapeless ingredient not found: {}", itemId);
                 return null;
@@ -200,7 +201,7 @@ public abstract class ServerRecipeManagerMixin {
         for (Map.Entry<String, String> kv : keysMap.entrySet()) {
             if (kv.getKey() == null || kv.getKey().isEmpty()) continue;
             char sym = kv.getKey().charAt(0);
-            Ingredient ingredient = ingredientFor(kv.getValue(), customItems, customStacks);
+            Ingredient ingredient = ingredientFor(kv.getValue(), entry.keyCount(kv.getKey()), customItems, customStacks);
             if (ingredient == null) {
                 CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shaped key item not found: {}", kv.getValue());
                 return null;
@@ -226,18 +227,19 @@ public abstract class ServerRecipeManagerMixin {
         return new RecipeHolder<>(key, exactWrapper(recipe, entry, customStacks));
     }
 
-    private Ingredient ingredientFor(String token, List<CustomItemEntry> customItems,
+    private Ingredient ingredientFor(String token, int count, List<CustomItemEntry> customItems,
                                      Map<String, ItemStack> customStacks) {
         CustomItemEntry custom = CustomItemLibrary.find(customItems, token);
         if (custom != null) {
             ItemStack stack = CustomItemLibrary.decode(custom, registries);
             if (stack.isEmpty()) return null;
             customStacks.put(CustomItemLibrary.reference(custom.id), stack.copyWithCount(1));
-            return Ingredient.of(stack.getItem());
+            return Ingredient.of(stack.copyWithCount(Math.max(1, Math.min(count, stack.getMaxStackSize()))));
         }
         ResourceLocation id = ResourceLocation.tryParse(token);
         return id != null && BuiltInRegistries.ITEM.containsKey(id)
-                ? Ingredient.of(BuiltInRegistries.ITEM.get(id)) : null;
+                ? Ingredient.of(new ItemStack(BuiltInRegistries.ITEM.get(id), Math.max(1, Math.min(count,
+                        BuiltInRegistries.ITEM.get(id).getDefaultMaxStackSize())))) : null;
     }
 
     private CraftingRecipe exactWrapper(CraftingRecipe recipe, CustomRecipeEntry entry,

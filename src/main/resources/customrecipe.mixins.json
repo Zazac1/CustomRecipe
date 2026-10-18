@@ -10,7 +10,8 @@
     "ResultSlotMixin"
   ],
   "client": [
-    "client.GameMenuScreenMixin"
+    "client.GameMenuScreenMixin",
+    "client.GhostRecipeMixin"
   ],
   "injectors": {
     "defaultRequire": 1
