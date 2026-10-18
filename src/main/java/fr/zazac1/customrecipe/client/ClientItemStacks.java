@@ -40,7 +40,7 @@ final class ClientItemStacks {
                 holder.bindComponents(DataComponentMap.builder()
                         .set(DataComponents.ITEM_MODEL, id)
                         .set(DataComponents.ITEM_NAME, Component.translatable(holder.value().getDescriptionId()))
-                        .set(DataComponents.MAX_STACK_SIZE, 64)
+                        .set(DataComponents.MAX_STACK_SIZE, holder.value().getDefaultMaxStackSize())
                         .build());
             }
             return new ItemStack(holder);
