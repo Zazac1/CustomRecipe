@@ -86,6 +86,7 @@ abstract class RecipeBookMenuMixin implements CustomRecipeBookSelection {
             menu.getSlot(target.screenSlot()).set(completed);
         }
         inventory.setChanged();
+        menu.broadcastChanges();
     }
 
     @Override public Recipe<?> customrecipe$getBookRecipe() { return customrecipe$bookRecipe; }
