@@ -6,6 +6,8 @@
     "ServerRecipeManagerMixin",
     "RecipeManagerCraftingFilterMixin",
     "CraftingScreenHandlerMixin",
+    "RecipeDisplayEntryMixin",
+    "StackedItemContentsMixin",
     "RecipeBookPlacementMixin",
     "ResultSlotMixin"
   ],
