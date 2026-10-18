@@ -10,6 +10,9 @@ import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.PlacementInfo;
 import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraft.world.item.crafting.display.RecipeDisplay;
+import net.minecraft.world.item.crafting.display.ShapedCraftingRecipeDisplay;
+import net.minecraft.world.item.crafting.display.ShapelessCraftingRecipeDisplay;
+import net.minecraft.world.item.crafting.display.SlotDisplay;
 import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
@@ -156,7 +159,46 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
     @Override public RecipeSerializer<? extends CraftingRecipe> getSerializer() { return delegate.getSerializer(); }
     @Override public CraftingBookCategory category() { return delegate.category(); }
     @Override public PlacementInfo placementInfo() { return delegate.placementInfo(); }
-    @Override public List<RecipeDisplay> display() { return delegate.display(); }
+    @Override
+    public List<RecipeDisplay> display() {
+        return delegate.display().stream().map(this::withIngredientCounts).toList();
+    }
+
+    private RecipeDisplay withIngredientCounts(RecipeDisplay display) {
+        if (display instanceof ShapedCraftingRecipeDisplay shaped) {
+            List<String> rows = shrink(definition.pattern);
+            if (rows.size() != shaped.height() || rows.isEmpty() || rows.getFirst().length() != shaped.width()) {
+                return display;
+            }
+            List<SlotDisplay> ingredients = new ArrayList<>(shaped.width() * shaped.height());
+            for (String row : rows) {
+                for (int x = 0; x < shaped.width(); x++) {
+                    String symbol = row.charAt(x) + "";
+                    String token = row.charAt(x) == ' ' || definition.keys == null ? "" : definition.keys.get(symbol);
+                    ingredients.add(countedDisplay(token, definition.keyCount(symbol)));
+                }
+            }
+            return new ShapedCraftingRecipeDisplay(shaped.width(), shaped.height(), ingredients,
+                    shaped.result(), shaped.craftingStation());
+        }
+        if (display instanceof ShapelessCraftingRecipeDisplay shapeless && definition.ingredients != null) {
+            List<SlotDisplay> ingredients = new ArrayList<>(definition.ingredients.size());
+            for (int i = 0; i < definition.ingredients.size(); i++) {
+                ingredients.add(countedDisplay(definition.ingredients.get(i), definition.ingredientCount(i)));
+            }
+            return new ShapelessCraftingRecipeDisplay(ingredients, shapeless.result(), shapeless.craftingStation());
+        }
+        return display;
+    }
+
+    private SlotDisplay countedDisplay(String token, int count) {
+        if (token == null || token.isBlank()) return SlotDisplay.Empty.INSTANCE;
+        ItemStack stack = customStacks.containsKey(token)
+                ? customStacks.get(token).copy()
+                : new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.tryParse(token)));
+        stack.setCount(Math.max(1, Math.min(count, stack.getMaxStackSize())));
+        return new SlotDisplay.ItemStackSlotDisplay(stack);
+    }
     @Override public String group() { return delegate.group(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }
 
