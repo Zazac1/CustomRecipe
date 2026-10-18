@@ -7,6 +7,8 @@
     "ItemPropertiesMixin",
     "ItemMixin",
     "CraftingScreenHandlerMixin",
+    "RecipeDisplayEntryMixin",
+    "StackedItemContentsMixin",
     "RecipeBookPlacementMixin",
     "ResultSlotMixin"
   ],
