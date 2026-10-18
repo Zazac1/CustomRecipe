@@ -24,6 +24,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mutable;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -40,7 +41,7 @@ import java.util.HashSet;
 
 @Mixin(RecipeManager.class)
 public abstract class ServerRecipeManagerMixin {
-    @Shadow @Final private HolderLookup.Provider registries;
+    @Unique private HolderLookup.Provider customrecipe$registries;
 
     @Shadow @Final @Mutable private RecipeMap recipes;
 
@@ -51,6 +52,7 @@ public abstract class ServerRecipeManagerMixin {
      */
     @Inject(method = "<init>", at = @At("TAIL"))
     private void customrecipe$applyConfig(net.minecraft.core.HolderLookup.Provider registries, CallbackInfo ci) {
+        this.customrecipe$registries = registries;
         this.recipes = customrecipe$configureRecipes(this.recipes);
     }
 
@@ -208,7 +210,7 @@ public abstract class ServerRecipeManagerMixin {
                                                             List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
         if (fr.zazac1.customrecipe.CustomItemLibrary.isReference(value)) {
             return fr.zazac1.customrecipe.CustomItemLibrary.decode(
-                    fr.zazac1.customrecipe.CustomItemLibrary.find(customItems, value), registries);
+                    fr.zazac1.customrecipe.CustomItemLibrary.find(customItems, value), customrecipe$registries);
         }
         Identifier id = Identifier.tryParse(value);
         return id != null && BuiltInRegistries.ITEM.containsKey(id)
