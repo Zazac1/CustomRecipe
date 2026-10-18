@@ -5,6 +5,8 @@
   "mixins": [
     "ServerRecipeManagerMixin",
     "HolderReferenceInvoker",
+    "ItemPropertiesMixin",
+    "ItemMixin",
     "CraftingScreenHandlerMixin",
     "RecipeBookPlacementMixin",
     "ResultSlotMixin"
