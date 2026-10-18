@@ -91,6 +91,7 @@ public abstract class AbstractRecipeScreenHandlerMixin implements CustomRecipeBo
             handler.getSlot(target.screenSlot()).setStack(completed);
         }
         inventory.markDirty();
+        handler.sendContentUpdates();
     }
 
     @Override
