@@ -188,6 +188,8 @@ public abstract class ServerRecipeManagerMixin {
    private RecipeEntry<?> buildShaped(CustomRecipeEntry entry, ItemStack result, Identifier key,
                                        String recipeGroup, List<CustomItemEntry> customItems) {
       if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null || entry.keys.isEmpty()) return null;
+      List<String> pattern = CustomItemCraftingRecipe.shrinkPattern(entry.pattern);
+      if (pattern.isEmpty()) return null;
       Map<Character, Ingredient> symbols = new LinkedHashMap<>();
       for (Map.Entry<String, String> pair : entry.keys.entrySet()) {
          if (pair.getKey() == null || pair.getKey().isEmpty()) continue;
@@ -201,7 +203,7 @@ public abstract class ServerRecipeManagerMixin {
       }
       RawShapedRecipe raw;
       try {
-         raw = RawShapedRecipe.create(symbols, entry.pattern);
+         raw = RawShapedRecipe.create(symbols, pattern);
       } catch (RuntimeException error) {
          CustomRecipeMod.LOGGER.warn("[CustomRecipe] Invalid shaped pattern for result: {} — {}",
                entry.result, error.getMessage());

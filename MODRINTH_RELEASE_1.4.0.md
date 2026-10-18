@@ -17,15 +17,18 @@ This update adds reusable Custom Items and lets recipes require complete ingredi
 - Recipes can distinguish a saved special item from the ordinary version of the same item.
 - Recipe previews display every required quantity, and crafting consumes the configured amounts.
 - Selecting a recipe from the recipe book fills and displays the complete required stack in each crafting slot when enough items are available.
+- Shaped recipes smaller than the full 3×3 grid can be placed anywhere in the crafting table while keeping their required shape.
 
 ## Fixed
 
 - Ingredient quantities are visible in the recipe-book preview inside the crafting table.
+- Ingredient quantities remain readable above item icons in recipe previews and in the recipe builder.
 - The **Give** and **Delete** buttons in the Custom Items library are available whenever their actions are permitted.
 - The **Give** button remains unavailable outside a world and for players without server administration permission.
 - Recipe outputs using a saved Custom Item display the correct item icon.
 - Editing an ingredient quantity no longer causes an error while the field is temporarily empty.
 - Recipe conflicts refresh correctly after a server configuration is saved.
+- Recipes combining saved Custom Items with ingredient quantities synchronize correctly without disconnecting the player.
 - The built-in recipes for the elytra, enchanted golden apple, experience bottle, heavy core, and totem of undying now load correctly on Minecraft 1.21.1.
 
 ## Compatibility / servers

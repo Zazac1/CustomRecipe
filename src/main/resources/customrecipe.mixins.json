@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ServerRecipeManagerMixin",
+    "SynchronizeRecipesPacketMixin",
     "CraftingScreenHandlerMixin",
     "RecipeBookPlacementMixin",
     "ResultSlotMixin"
