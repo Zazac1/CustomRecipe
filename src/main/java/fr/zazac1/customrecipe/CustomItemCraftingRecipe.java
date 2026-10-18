@@ -7,6 +7,9 @@ import net.minecraft.recipe.RecipeSerializer;
 import net.minecraft.recipe.book.CraftingRecipeCategory;
 import net.minecraft.recipe.book.RecipeBookCategory;
 import net.minecraft.recipe.display.RecipeDisplay;
+import net.minecraft.recipe.display.ShapedCraftingRecipeDisplay;
+import net.minecraft.recipe.display.ShapelessCraftingRecipeDisplay;
+import net.minecraft.recipe.display.SlotDisplay;
 import net.minecraft.recipe.input.CraftingRecipeInput;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryWrapper;
@@ -161,7 +164,46 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
     @Override public boolean isIgnoredInRecipeBook() { return delegate.isIgnoredInRecipeBook(); }
     @Override public String getGroup() { return delegate.getGroup(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }
-    @Override public List<RecipeDisplay> getDisplays() { return delegate.getDisplays(); }
+    @Override
+    public List<RecipeDisplay> getDisplays() {
+        return delegate.getDisplays().stream().map(this::withIngredientCounts).toList();
+    }
+
+    private RecipeDisplay withIngredientCounts(RecipeDisplay display) {
+        if (display instanceof ShapedCraftingRecipeDisplay shaped) {
+            List<String> rows = shrink(definition.pattern);
+            if (rows.size() != shaped.height() || rows.isEmpty() || rows.getFirst().length() != shaped.width()) {
+                return display;
+            }
+            List<SlotDisplay> ingredients = new ArrayList<>(shaped.width() * shaped.height());
+            for (String row : rows) {
+                for (int x = 0; x < shaped.width(); x++) {
+                    String symbol = row.charAt(x) + "";
+                    String token = row.charAt(x) == ' ' || definition.keys == null ? "" : definition.keys.get(symbol);
+                    ingredients.add(countedDisplay(token, definition.keyCount(symbol)));
+                }
+            }
+            return new ShapedCraftingRecipeDisplay(shaped.width(), shaped.height(), ingredients,
+                    shaped.result(), shaped.craftingStation());
+        }
+        if (display instanceof ShapelessCraftingRecipeDisplay shapeless && definition.ingredients != null) {
+            List<SlotDisplay> ingredients = new ArrayList<>(definition.ingredients.size());
+            for (int i = 0; i < definition.ingredients.size(); i++) {
+                ingredients.add(countedDisplay(definition.ingredients.get(i), definition.ingredientCount(i)));
+            }
+            return new ShapelessCraftingRecipeDisplay(ingredients, shapeless.result(), shapeless.craftingStation());
+        }
+        return display;
+    }
+
+    private SlotDisplay countedDisplay(String token, int count) {
+        if (token == null || token.isBlank()) return SlotDisplay.EmptySlotDisplay.INSTANCE;
+        ItemStack stack = customStacks.containsKey(token)
+                ? customStacks.get(token).copy()
+                : new ItemStack(Registries.ITEM.get(Identifier.tryParse(token)));
+        stack.setCount(Math.max(1, Math.min(count, stack.getMaxCount())));
+        return new SlotDisplay.StackSlotDisplay(stack);
+    }
     @Override public RecipeBookCategory getRecipeBookCategory() { return delegate.getRecipeBookCategory(); }
 
     private record Expected(String token, int count) {}
