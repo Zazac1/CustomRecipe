@@ -1,0 +1,38 @@
+# 1.4.0-1.21.8-(Fabric)
+
+## Custom Recipe — Minecraft 1.21.8 (Fabric)
+
+This update adds reusable Custom Items and lets recipes require complete ingredient stacks in each crafting slot.
+
+## Added
+
+- **Custom Items library** — save the item held in your main hand, give it a name or identifier, and reuse it as a recipe ingredient or output without losing its custom data.
+- **Custom Item administration** — server administrators can save, list, give, replace, remove, and transfer Custom Items alongside recipes.
+- **Ingredient quantities** — shaped and shapeless recipes can require between 1 and 64 items in each slot or ingredient entry.
+- **Editable ingredient counts** — click an ingredient quantity in the recipe builder to enter the exact amount required.
+
+## Improved
+
+- Custom Item names and icons are displayed throughout the recipe builder, recipe list, previews, and quick-add menus.
+- Recipes can distinguish a saved special item from the ordinary version of the same item.
+- Recipe previews display every required quantity, and crafting consumes the configured amounts.
+- Selecting a recipe from the recipe book fills and displays the complete required stack in each crafting slot when enough items are available.
+
+## Fixed
+
+- The **Give** and **Delete** buttons in the Custom Items library are available whenever their actions are permitted.
+- The **Give** button remains unavailable outside a world and for players without server administration permission.
+- Recipe outputs using a saved Custom Item display the correct item icon.
+- Editing an ingredient quantity no longer causes an error while the field is temporarily empty.
+- Recipe conflicts refresh correctly after a server configuration is saved.
+
+## Compatibility / servers
+
+- Requires Minecraft 1.21.8 with Fabric, Fabric API, and Mod Menu.
+- Only server administrators can send local recipes or Custom Items to a dedicated server.
+- Existing recipes and configurations remain compatible; ingredients without a saved quantity continue to require one item.
+
+## Before updating
+
+- Back up the Custom Recipe configuration before updating an important world or server.
+
