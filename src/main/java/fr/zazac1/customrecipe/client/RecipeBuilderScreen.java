@@ -117,7 +117,7 @@ public class RecipeBuilderScreen extends Screen {
                     if (itemId != null && !itemId.isEmpty() && shapelessItems.size() < MAX_SHAPELESS_INGREDIENTS)
                     {
                         shapelessItems.add(itemId);
-                        shapelessCounts.add(source.ingredientCount(i));
+                        shapelessCounts.add(clampIngredientCount(itemId, source.ingredientCount(i)));
                     }
                 }
             }
@@ -131,8 +131,10 @@ public class RecipeBuilderScreen extends Screen {
             for (int column = 0; column < 3 && column < patternRow.length(); column++) {
                 char key = patternRow.charAt(column);
                 if (key != ' ') {
-                    slotItems[row * 3 + column] = source.keys.getOrDefault(String.valueOf(key), "");
-                    slotCounts[row * 3 + column] = source.keyCount(String.valueOf(key));
+                    int slot = row * 3 + column;
+                    String itemId = source.keys.getOrDefault(String.valueOf(key), "");
+                    slotItems[slot] = itemId;
+                    slotCounts[slot] = clampIngredientCount(itemId, source.keyCount(String.valueOf(key)));
                 }
             }
         }
@@ -291,7 +293,8 @@ public class RecipeBuilderScreen extends Screen {
                     Text.translatable("customrecipe.builder.ingredient_count").getString(), 0xCCCCCC));
             ingredientCountField = addDrawableChild(new TextFieldWidget(textRenderer, settingsX() + 88, ingredientY - 2,
                     34, 18, Text.translatable("customrecipe.builder.ingredient_count")));
-            configureCountField(ingredientCountField, selectedIngredientCount(), this::setSelectedIngredientCount);
+            configureCountField(ingredientCountField, selectedIngredientCount(), selectedIngredientMaxCount(),
+                    this::setSelectedIngredientCount);
         } else {
             ingredientCountField = null;
         }
@@ -304,7 +307,7 @@ public class RecipeBuilderScreen extends Screen {
                 34, 18, Text.translatable("customrecipe.builder.result_count")));
         // Permit a three-digit attempt so values above a stack are immediately
         // normalized to 64 instead of silently rejecting the latest key press.
-        configureCountField(resultCountField, resultCount, value -> resultCount = value);
+        configureCountField(resultCountField, resultCount, 64, value -> resultCount = value);
 
         // Shaped / Shapeless toggle
         int modeX = rightX() + 8;
@@ -364,8 +367,9 @@ public class RecipeBuilderScreen extends Screen {
         }
     }
 
-    private void configureCountField(TextFieldWidget field, int value, java.util.function.IntConsumer setter) {
-        int[] current = {CustomRecipeEntry.clampIngredientCount(value)};
+    private void configureCountField(TextFieldWidget field, int value, int maxValue,
+                                     java.util.function.IntConsumer setter) {
+        int[] current = {Math.max(1, Math.min(maxValue, value))};
         field.setMaxLength(3);
         field.setTextPredicate(text -> text.isEmpty() || text.matches("\\d{1,3}"));
         field.setText(String.valueOf(current[0]));
@@ -375,7 +379,7 @@ public class RecipeBuilderScreen extends Screen {
                 field.setText(String.valueOf(current[0]));
                 return;
             }
-            int normalized = CustomRecipeEntry.clampIngredientCount(Integer.parseInt(text));
+            int normalized = Math.max(1, Math.min(maxValue, Integer.parseInt(text)));
             current[0] = normalized;
             setter.accept(normalized);
             if (!text.equals(String.valueOf(normalized))) field.setText(String.valueOf(normalized));
@@ -508,12 +512,27 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     private void setSelectedIngredientCount(int value) {
-        int normalized = CustomRecipeEntry.clampIngredientCount(value);
+        int normalized = clampIngredientCount(selectedIngredientItemId(), value);
         if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessCounts.size()) {
             shapelessCounts.set(selectedShapelessSlot, normalized);
         } else if (selectedSlot >= 0 && selectedSlot < slotCounts.length) {
             slotCounts[selectedSlot] = normalized;
         }
+    }
+
+    private String selectedIngredientItemId() {
+        if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessItems.size()) {
+            return shapelessItems.get(selectedShapelessSlot);
+        }
+        return selectedSlot >= 0 && selectedSlot < slotItems.length ? slotItems[selectedSlot] : "";
+    }
+
+    private int selectedIngredientMaxCount() {
+        return maxIngredientCount(selectedIngredientItemId());
+    }
+
+    private boolean heldItemDiffersFrom(String itemId) {
+        return heldItemId != null && !Objects.equals(heldItemId, itemId);
     }
 
     private void editIngredientCount(int slot, boolean shapeless) {
@@ -861,7 +880,7 @@ public class RecipeBuilderScreen extends Screen {
                     int slot = r * 3 + c;
                     int sx = gx + c * SLOT, sy = gy + r * SLOT;
                     if (mx >= sx && mx < sx + SLOT && my >= sy && my < sy + SLOT) {
-                        if (!slotItems[slot].isEmpty()) {
+                        if (!slotItems[slot].isEmpty() && !heldItemDiffersFrom(slotItems[slot])) {
                             String amount = String.valueOf(slotCounts[slot]);
                             int amountX = sx + SLOT - textRenderer.getWidth(amount) - 2;
                             if (mx >= amountX && my >= sy + SLOT - 9) {
@@ -890,7 +909,8 @@ public class RecipeBuilderScreen extends Screen {
                 if (!row.itemId().isEmpty()
                         && mx >= listX + shapelessListW() - 62 && mx < listX + shapelessListW() - 22
                         && my >= slotY + 4 && my < slotY + 22) {
-                    editIngredientCount(row.slotIndex(), true);
+                    if (heldItemDiffersFrom(row.itemId())) selectShapelessSlot(row.slotIndex());
+                    else editIngredientCount(row.slotIndex(), true);
                     return true;
                 }
                 if (mx >= listX + 4 && mx < listX + 4 + SLOT
@@ -1101,7 +1121,8 @@ public class RecipeBuilderScreen extends Screen {
                     if (id == null || id.isEmpty()) {
                         row.append(' ');
                     } else {
-                        IngredientKey ingredient = new IngredientKey(id, slotCounts[r * 3 + c]);
+                        IngredientKey ingredient = new IngredientKey(id,
+                                clampIngredientCount(id, slotCounts[r * 3 + c]));
                         if (!itemToChar.containsKey(ingredient)) itemToChar.put(ingredient, next++);
                         row.append(itemToChar.get(ingredient));
                     }
@@ -1120,7 +1141,7 @@ public class RecipeBuilderScreen extends Screen {
                 String itemId = shapelessItems.get(i);
                 if (itemId != null && !itemId.isEmpty()) {
                     entry.ingredients.add(itemId);
-                    entry.ingredient_counts.add(CustomRecipeEntry.clampIngredientCount(shapelessCounts.get(i)));
+                    entry.ingredient_counts.add(clampIngredientCount(itemId, shapelessCounts.get(i)));
                 }
             }
         }
@@ -1158,6 +1179,16 @@ public class RecipeBuilderScreen extends Screen {
 
     private ItemStack stackFor(String value) {
         return ClientItemStacks.fromReference(value, parent.rootConfig());
+    }
+
+    private int maxIngredientCount(String itemId) {
+        if (itemId == null || itemId.isBlank()) return 1;
+        ItemStack stack = stackFor(itemId);
+        return stack.isEmpty() ? 1 : Math.max(1, Math.min(64, stack.getMaxCount()));
+    }
+
+    private int clampIngredientCount(String itemId, int value) {
+        return Math.max(1, Math.min(maxIngredientCount(itemId), value));
     }
 
     @Override
