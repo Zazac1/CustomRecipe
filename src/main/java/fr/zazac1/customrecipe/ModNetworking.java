@@ -12,7 +12,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /** Directed NeoForge play payloads for every server-editor exchange. */
 public final class ModNetworking {
-    public static final int MAX_JSON_CHARS = 500_000;
+    public static final int MAX_JSON_CHARS = 1_000_000;
 
     public static void initialize(IEventBus modBus) { modBus.addListener(ModNetworking::register); }
     private static void register(RegisterPayloadHandlersEvent event) {

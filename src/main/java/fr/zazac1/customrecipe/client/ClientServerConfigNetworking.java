@@ -29,6 +29,11 @@ public final class ClientServerConfigNetworking {
         ModNetworking.queryVanillaDetails(recipeId);
     }
 
+    public static boolean canManageServer() {
+        var player = net.minecraft.client.Minecraft.getInstance().player;
+        return player != null && player.hasPermissions(2);
+    }
+
     private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,
                                String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {}
 

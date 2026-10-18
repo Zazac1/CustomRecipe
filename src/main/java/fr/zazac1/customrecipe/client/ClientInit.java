@@ -1,6 +1,8 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
+import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
@@ -105,21 +107,23 @@ public final class ClientInit {
 
     public static void receiveServerConfig(String json) {
             Minecraft client = Minecraft.getInstance();
+            if (client.player == null || !client.player.hasPermissions(2)) return;
             var config = ConfigLoader.fromJson(json);
             if (config == null) {
                 if (client.player != null) client.player.displayClientMessage(Component.translatable("customrecipe.chat.invalid_server_config"), false);
                 return;
             }
-            int imported = mergeLocalRecipes(config);
-            if (imported > 0 && client.player != null) {
+            LocalMergeResult imported = mergeLocalContent(config);
+            if ((imported.recipes() > 0 || imported.customItems() > 0) && client.player != null) {
                 client.player.displayClientMessage(Component.translatable(
-                        "customrecipe.chat.local_recipes_ready", imported), false);
+                        "customrecipe.chat.local_content_ready", imported.recipes(), imported.customItems()), false);
             }
             ClientServerConfigNetworking.validate(config);
     }
 
     public static void receiveValidatedServerConfig(String json) {
             Minecraft client = Minecraft.getInstance();
+            if (client.player == null || !client.player.hasPermissions(2)) return;
             var config = ConfigLoader.fromJson(json);
             if (config == null) {
                 if (client.player != null) client.player.displayClientMessage(Component.translatable("customrecipe.chat.invalid_server_validation"), false);
@@ -219,14 +223,30 @@ public final class ClientInit {
      * until the OP explicitly presses Save.  Schema 2 stores reusable recipes
      * in global_library, not in the retained legacy custom_recipes field.
      */
-    private static int mergeLocalRecipes(fr.zazac1.customrecipe.ModConfig serverConfig) {
-        ModConfig localConfig = ConfigLoader.get();
+    private record LocalMergeResult(int recipes, int customItems) {}
 
-        // Keep the server's existing library and add the client's reusable
-        // templates to it.  The user can then use "Add from library" to copy
-        // only the wanted recipes into this server's active world.
+    private static LocalMergeResult mergeLocalContent(fr.zazac1.customrecipe.ModConfig serverConfig) {
+        ModConfig localConfig = ConfigLoader.get();
+        java.util.Map<String, String> referenceRemap = new java.util.LinkedHashMap<>();
+        int addedItems = 0;
+        for (CustomItemEntry localItem : localConfig.custom_items) {
+            if (localItem == null) continue;
+            String oldReference = CustomItemLibrary.reference(localItem.id);
+            CustomItemEntry serverItem = CustomItemLibrary.find(serverConfig.custom_items, localItem.id);
+            if (serverItem != null && java.util.Objects.equals(serverItem.stack_data, localItem.stack_data)) {
+                referenceRemap.put(oldReference, CustomItemLibrary.reference(serverItem.id));
+                continue;
+            }
+            String importedId = serverItem == null ? localItem.id
+                    : CustomItemLibrary.uniqueId(serverConfig.custom_items, localItem.id + "_local");
+            CustomItemEntry copy = copyLocalCustomItem(localItem, importedId);
+            serverConfig.custom_items.add(copy);
+            referenceRemap.put(oldReference, CustomItemLibrary.reference(importedId));
+            addedItems++;
+        }
+
         int added = mergeDraftRecipes(localConfig.global_library.custom_recipes,
-                serverConfig.global_library.custom_recipes);
+                serverConfig.global_library.custom_recipes, referenceRemap);
 
         // Retain migration support for pre-target configurations.  These old
         // root entries are drafts for the active server world, never entries
@@ -234,33 +254,51 @@ public final class ClientInit {
         if (localConfig.custom_recipes != null && !localConfig.custom_recipes.isEmpty()) {
             var activeTarget = serverConfig.getOrCreateWorldConfig(
                     serverConfig.editor_world_id, serverConfig.editor_world_name);
-            added += mergeDraftRecipes(localConfig.custom_recipes, activeTarget.custom_recipes);
+            added += mergeDraftRecipes(localConfig.custom_recipes, activeTarget.custom_recipes, referenceRemap);
         }
-        return added;
+        return new LocalMergeResult(added, addedItems);
     }
 
     private static int mergeDraftRecipes(java.util.List<fr.zazac1.customrecipe.CustomRecipeEntry> source,
-                                         java.util.List<fr.zazac1.customrecipe.CustomRecipeEntry> destination) {
+                                         java.util.List<fr.zazac1.customrecipe.CustomRecipeEntry> destination,
+                                         java.util.Map<String, String> referenceRemap) {
         if (source == null || destination == null) return 0;
         int added = 0;
         for (var localRecipe : source) {
             if (localRecipe == null || destination.stream()
                     .anyMatch(serverRecipe -> ConfigLoader.sameRecipe(localRecipe, serverRecipe))) continue;
-            destination.add(copyLocalRecipeAsDraft(localRecipe));
+            destination.add(copyLocalRecipeAsDraft(localRecipe, referenceRemap));
             added++;
         }
         return added;
     }
 
+    private static CustomItemEntry copyLocalCustomItem(CustomItemEntry source, String id) {
+        CustomItemEntry copy = new CustomItemEntry();
+        copy.id = id;
+        copy.name = source.name;
+        copy.item_id = source.item_id;
+        copy.stack_data = source.stack_data;
+        return copy;
+    }
+
     private static fr.zazac1.customrecipe.CustomRecipeEntry copyLocalRecipeAsDraft(
-            fr.zazac1.customrecipe.CustomRecipeEntry source) {
+            fr.zazac1.customrecipe.CustomRecipeEntry source,
+            java.util.Map<String, String> referenceRemap) {
         var copy = new fr.zazac1.customrecipe.CustomRecipeEntry();
         copy.id = source.id;
         copy.type = source.type;
-        copy.ingredients = new java.util.ArrayList<>(source.ingredients);
+        copy.ingredients = source.ingredients == null ? new java.util.ArrayList<>()
+                : source.ingredients.stream().map(value -> remap(value, referenceRemap))
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+        copy.ingredient_counts = source.ingredient_counts == null ? new java.util.ArrayList<>()
+                : new java.util.ArrayList<>(source.ingredient_counts);
         copy.pattern = new java.util.ArrayList<>(source.pattern);
-        copy.keys = new java.util.LinkedHashMap<>(source.keys);
-        copy.result = source.result;
+        copy.keys = new java.util.LinkedHashMap<>();
+        if (source.keys != null) source.keys.forEach((key, value) -> copy.keys.put(key, remap(value, referenceRemap)));
+        copy.key_counts = source.key_counts == null ? new java.util.LinkedHashMap<>()
+                : new java.util.LinkedHashMap<>(source.key_counts);
+        copy.result = remap(source.result, referenceRemap);
         copy.count = source.count;
         copy.enabled = null;
         copy.server_enabled = null;
@@ -268,6 +306,10 @@ public final class ClientInit {
         copy.world_names = null;
         copy.known_by_default = source.known_by_default;
         return copy;
+    }
+
+    private static String remap(String value, java.util.Map<String, String> referenceRemap) {
+        return value == null ? null : referenceRemap.getOrDefault(value, value);
     }
 
     /** Confirms a completed server save without assuming that a screen is still open. */
