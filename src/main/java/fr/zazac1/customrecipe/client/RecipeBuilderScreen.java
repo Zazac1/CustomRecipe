@@ -1,15 +1,16 @@
 package fr.zazac1.customrecipe.client;
 
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.input.KeyEvent;
-
 import fr.zazac1.customrecipe.CustomRecipeEntry;
+import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.RecipeIntegrity;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.MultiLineTextWidget;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -20,6 +21,7 @@ import com.mojang.math.Axis;
 import java.util.*;
 
 public class RecipeBuilderScreen extends Screen {
+    private static final int SCROLLBAR_TRACK_COLOR = 0xFF5A5A5A;
 
     private static final int PAD   = 20;
     private static final int SLOT  = 18;
@@ -32,6 +34,8 @@ public class RecipeBuilderScreen extends Screen {
     private static final int SHAPELESS_ROW_H = 26;
     private static final int MAX_SHAPELESS_INGREDIENTS = 9;
     private static final int VISIBLE_SHAPELESS_ROWS = 5;
+    private static final int LEFT_MOUSE_BUTTON = 0;
+    private static final int RIGHT_MOUSE_BUTTON = 1;
 
     private final ConfigScreen parent;
     /** Exact screen that opened this editor, retained for Cancel, Escape and Save. */
@@ -42,11 +46,14 @@ public class RecipeBuilderScreen extends Screen {
 
     // ── persistent state (survives clearAndInit) ──────────────────────────
     private final String[] slotItems = new String[9]; // grid slots (0-8)
+    private final int[] slotCounts = new int[9];
     /** Ordered ingredient slots used only while the recipe is shapeless. */
     private final List<String> shapelessItems = new ArrayList<>();
+    private final List<Integer> shapelessCounts = new ArrayList<>();
     private String resultItemId   = "";
     private int    resultCount    = 1;
     private EditBox resultCountField;
+    private EditBox ingredientCountField;
     private boolean shaped        = true;
     private boolean knownByDefault = false;
     /** Optional second destination when creating directly in a world. */
@@ -58,6 +65,7 @@ public class RecipeBuilderScreen extends Screen {
     /** Selected ingredient row in the shapeless list, or -1. */
     private int selectedShapelessSlot = -1;
     private int shapelessScroll;
+    private boolean draggingShapelessScrollbar;
     /** null = no item picked; empty string = the permanent empty/erase item. */
     private String heldItemId;
 
@@ -69,6 +77,7 @@ public class RecipeBuilderScreen extends Screen {
     private int            loadedSuggestionLimit = ITEM_BATCH_SIZE;
     private boolean        draggingSuggestionScrollbar;
     private int            restoreFocus  = 0; // 1 = itemField
+    private boolean focusIngredientCount;
     /** Avoid rebuilding the screen from the clear button's programmatic update. */
     private boolean        suppressItemFieldChange;
 
@@ -90,6 +99,7 @@ public class RecipeBuilderScreen extends Screen {
         this.editingIndex = editingIndex;
         this.editingEntry = editingIndex >= 0 ? source : null;
         Arrays.fill(slotItems, "");
+        Arrays.fill(slotCounts, 1);
         if (source == null) {
             initialDraft = draftFingerprint();
             return;
@@ -101,9 +111,13 @@ public class RecipeBuilderScreen extends Screen {
         resultCount = Math.max(1, Math.min(64, source.count));
         if (!shaped) {
             if (source.ingredients != null) {
-                for (String itemId : source.ingredients) {
+                for (int i = 0; i < source.ingredients.size(); i++) {
+                    String itemId = source.ingredients.get(i);
                     if (itemId != null && !itemId.isEmpty() && shapelessItems.size() < MAX_SHAPELESS_INGREDIENTS)
+                    {
                         shapelessItems.add(itemId);
+                        shapelessCounts.add(source.ingredientCount(i));
+                    }
                 }
             }
             initialDraft = draftFingerprint();
@@ -115,7 +129,10 @@ public class RecipeBuilderScreen extends Screen {
             if (patternRow == null) continue;
             for (int column = 0; column < 3 && column < patternRow.length(); column++) {
                 char key = patternRow.charAt(column);
-                if (key != ' ') slotItems[row * 3 + column] = source.keys.getOrDefault(String.valueOf(key), "");
+                if (key != ' ') {
+                    slotItems[row * 3 + column] = source.keys.getOrDefault(String.valueOf(key), "");
+                    slotCounts[row * 3 + column] = source.keyCount(String.valueOf(key));
+                }
             }
         }
         initialDraft = draftFingerprint();
@@ -143,16 +160,21 @@ public class RecipeBuilderScreen extends Screen {
     }
     private int settingsX() { return shaped ? craftingTableX() + 34 : shapelessListX() + 34; }
     private int shapelessListW() { return 176; }
-    private int shapelessListX() { return rightX() + 8; }
+    private int shapelessListX() { return rightX() + 16; }
     private int shapelessHeaderY() { return panelY() + 62; }
     private int shapelessListY() { return panelY() + 86; }
     private int shapelessRowCount() { return Math.max(1, shapelessRows().size()); }
     private int visibleShapelessRows() { return Math.min(VISIBLE_SHAPELESS_ROWS, shapelessRowCount()); }
     private int maxShapelessScroll() { return Math.max(0, shapelessRowCount() - VISIBLE_SHAPELESS_ROWS); }
-    private int shapelessArrowX() { return shapelessListX() + shapelessListW() / 2 - 8; }
-    private int shapelessUpArrowX() { return shapelessListX() + shapelessListW() / 2 - 24; }
-    private int shapelessDownArrowY() { return shapelessListY() + visibleShapelessRows() * SHAPELESS_ROW_H - 18; }
-    private int shapelessUpArrowY() { return shapelessListY() - 14; }
+    private boolean hasShapelessScrollbar() { return shapelessRowCount() > VISIBLE_SHAPELESS_ROWS; }
+    private int shapelessScrollbarX() { return shapelessListX() - 14; }
+    private int shapelessScrollbarY() { return shapelessListY(); }
+    private int shapelessScrollbarH() { return visibleShapelessRows() * SHAPELESS_ROW_H; }
+    private boolean isOverShapelessScrollbar(double mouseX, double mouseY) {
+        return hasShapelessScrollbar()
+                && mouseX >= shapelessScrollbarX() && mouseX < shapelessScrollbarX() + 12
+                && mouseY >= shapelessScrollbarY() && mouseY < shapelessScrollbarY() + shapelessScrollbarH();
+    }
     private int shapelessIngredientCount() {
         return (int) shapelessItems.stream().filter(item -> item != null && !item.isEmpty()).count();
     }
@@ -160,7 +182,8 @@ public class RecipeBuilderScreen extends Screen {
         return (int) Arrays.stream(slotItems).filter(item -> item != null && !item.isEmpty()).count();
     }
     private int recipeBottom() { return shaped ? craftingTableY() + 86 : shapelessListY() + visibleShapelessRows() * SHAPELESS_ROW_H; }
-    private int countY() { return recipeBottom() + 10; }
+    private int ingredientCountY() { return recipeBottom() + 10; }
+    private int countY() { return ingredientCountY() + 22; }
     private int modeY() { return countY() + 18; }
     private int knownY() { return modeY() + 24; }
 
@@ -176,7 +199,14 @@ public class RecipeBuilderScreen extends Screen {
     }
     private int loadedSuggestions() { return Math.min(loadedSuggestionLimit, itemMatches.size()); }
     private int visibleSuggestions() { return Math.min(VISIBLE_S, Math.max(0, loadedSuggestions() - suggestionScroll)); }
+    private int clearSearchX() { return leftX() + leftW() - 18; }
     private int suggestionScrollbarX() { return leftX() + leftW() - 12; }
+    /** The scrollbar owns its rail before rows, tooltips, or drag selection see the mouse. */
+    private boolean isOverSuggestionScrollbar(double mouseX, double mouseY) {
+        return itemMatches.size() > visibleSuggestions()
+                && mouseX >= suggestionScrollbarX() && mouseX < leftX() + leftW()
+                && mouseY >= suggY() && mouseY < suggY() + visibleSuggestions() * SUGG_H + 1;
+    }
     private int paletteColumns() { return Math.max(8, Math.min(16, (rightW() - 16) / 24)); }
     private int paletteRows() { return Math.max(1, (usedItems().size() + 1 + paletteColumns() - 1) / paletteColumns()); }
     private int paletteH()   { return paletteRows() * 24 + 8; }
@@ -226,16 +256,14 @@ public class RecipeBuilderScreen extends Screen {
                 onItemTyped(s);
             }
         });
-        int clearSearchX = leftX() + leftW() - 18;
-        addRenderableWidget(Button.builder(Component.empty(), b -> clearItemSearch())
-                .bounds(clearSearchX, fieldY(), 18, SEARCH_H).build());
+        int clearSearchX = clearSearchX();
         addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                 CustomRecipeSprites.REJECT, clearSearchX, fieldY(), 18, 18));
 
         // Autocomplete suggestions (label widgets)
         for (int i = suggestionScroll; i < suggestionScroll + visibleSuggestions(); i++) {
             String id = itemMatches.get(i);
-            int ry = suggY() + (i - suggestionScroll) * SUGG_H;
+            int ry = suggY() + 1 + (i - suggestionScroll) * SUGG_H;
             MultiLineTextWidget suggestionLabel = makeLabel(leftX() + 22, ry + 4, id, 0xCCCCCC);
             // Leave five characters of safety before the scrollbar instead of clipping the ellipsis.
             suggestionLabel.setMaxWidth(leftW() - 30);
@@ -250,6 +278,17 @@ public class RecipeBuilderScreen extends Screen {
                     resX() - 29, resY() + 5, 22, 15));
         }
 
+        if (hasSelectedIngredient()) {
+            int ingredientY = ingredientCountY();
+            addRenderableWidget(makeRightLabel(settingsX(), ingredientY + 3,
+                    Component.translatable("customrecipe.builder.ingredient_count").getString(), 0xCCCCCC));
+            ingredientCountField = addRenderableWidget(new EditBox(font, settingsX() + 88, ingredientY - 2,
+                    34, 18, Component.translatable("customrecipe.builder.ingredient_count")));
+            configureCountField(ingredientCountField, selectedIngredientCount(), this::setSelectedIngredientCount);
+        } else {
+            ingredientCountField = null;
+        }
+
         // Result count: type a stack size directly instead of clicking through 64 values.
         int countY = countY();
         addRenderableWidget(makeRightLabel(settingsX(), countY + 3,
@@ -258,17 +297,7 @@ public class RecipeBuilderScreen extends Screen {
                 34, 18, Component.translatable("customrecipe.builder.result_count")));
         // Permit a three-digit attempt so values above a stack are immediately
         // normalized to 64 instead of silently rejecting the latest key press.
-        resultCountField.setMaxLength(3);
-        resultCountField.setFilter(value -> value.isEmpty() || value.matches("\\d{1,3}"));
-        resultCountField.setValue(String.valueOf(resultCount));
-        resultCountField.setResponder(value -> {
-            if (value.isEmpty()) return;
-            int normalized = Math.max(1, Math.min(64, Integer.parseInt(value)));
-            resultCount = normalized;
-            if (!value.equals(String.valueOf(normalized))) {
-                resultCountField.setValue(String.valueOf(normalized));
-            }
-        });
+        configureCountField(resultCountField, resultCount, value -> resultCount = value);
 
         // Shaped / Shapeless toggle
         int modeX = rightX() + 8;
@@ -321,7 +350,29 @@ public class RecipeBuilderScreen extends Screen {
         if (restoreFocus == 1 && itemField != null) {
             setFocused(itemField);
             restoreFocus = 0;
+        } else if (focusIngredientCount && ingredientCountField != null) {
+            setFocused(ingredientCountField);
+            ingredientCountField.setFocused(true);
+            focusIngredientCount = false;
         }
+    }
+
+    private void configureCountField(EditBox field, int value, java.util.function.IntConsumer setter) {
+        int[] current = {CustomRecipeEntry.clampIngredientCount(value)};
+        field.setMaxLength(3);
+        field.setFilter(text -> text.isEmpty() || text.matches("\\d{1,3}"));
+        field.setValue(String.valueOf(current[0]));
+        field.setResponder(text -> {
+            if (text.isEmpty()) return;
+            if (!text.matches("\\d{1,3}")) {
+                field.setValue(String.valueOf(current[0]));
+                return;
+            }
+            int normalized = CustomRecipeEntry.clampIngredientCount(Integer.parseInt(text));
+            current[0] = normalized;
+            setter.accept(normalized);
+            if (!text.equals(String.valueOf(normalized))) field.setValue(String.valueOf(normalized));
+        });
     }
 
     // ── autocomplete ──────────────────────────────────────────────────────
@@ -350,6 +401,11 @@ public class RecipeBuilderScreen extends Screen {
     private List<String> findItemMatches(String q) {
         String ql = q.toLowerCase(Locale.ROOT);
         List<String> matches = new ArrayList<>();
+        for (CustomItemEntry custom : parent.customItems) {
+            String reference = CustomItemLibrary.reference(custom.id);
+            String searchable = custom.id + " " + custom.name + " " + custom.item_id;
+            if (searchable.toLowerCase(Locale.ROOT).contains(ql)) matches.add(reference);
+        }
         for (var item : BuiltInRegistries.ITEM) {
             if (item == Items.AIR) continue;
             String id = BuiltInRegistries.ITEM.getKey(item).toString();
@@ -418,6 +474,7 @@ public class RecipeBuilderScreen extends Screen {
         if (heldItemId == null) return;
         if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessItems.size()) {
             shapelessItems.set(selectedShapelessSlot, heldItemId);
+            shapelessCounts.set(selectedShapelessSlot, 1);
             // Shapeless rows are one-shot targets: after placing an item, the
             // row returns to its normal, non-selected state.
             selectedShapelessSlot = -1;
@@ -425,7 +482,40 @@ public class RecipeBuilderScreen extends Screen {
             resultItemId = heldItemId;
         } else if (selectedSlot >= 0 && selectedSlot < 9) {
             slotItems[selectedSlot] = heldItemId;
+            slotCounts[selectedSlot] = 1;
         }
+    }
+
+    private boolean hasSelectedIngredient() {
+        if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessItems.size()) {
+            return !shapelessItems.get(selectedShapelessSlot).isEmpty();
+        }
+        return selectedSlot >= 0 && selectedSlot < slotItems.length && !slotItems[selectedSlot].isEmpty();
+    }
+
+    private int selectedIngredientCount() {
+        if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessCounts.size()) {
+            return shapelessCounts.get(selectedShapelessSlot);
+        }
+        return selectedSlot >= 0 && selectedSlot < slotCounts.length ? slotCounts[selectedSlot] : 1;
+    }
+
+    private void setSelectedIngredientCount(int value) {
+        int normalized = CustomRecipeEntry.clampIngredientCount(value);
+        if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessCounts.size()) {
+            shapelessCounts.set(selectedShapelessSlot, normalized);
+        } else if (selectedSlot >= 0 && selectedSlot < slotCounts.length) {
+            slotCounts[selectedSlot] = normalized;
+        }
+    }
+
+    private void editIngredientCount(int slot, boolean shapeless) {
+        heldItemId = null;
+        selectedSlot = shapeless ? -2 : slot;
+        selectedShapelessSlot = shapeless ? slot : -1;
+        restoreFocus = 0;
+        focusIngredientCount = true;
+        clearWidgets(); init();
     }
 
     private void selectSlot(int slot) {
@@ -436,6 +526,7 @@ public class RecipeBuilderScreen extends Screen {
                 resultItemId = "";
             } else if (slot >= 0 && slot < 9) {
                 slotItems[slot] = "";
+                slotCounts[slot] = 1;
             }
             selectedSlot = -2;
             restoreFocus = 0;
@@ -469,6 +560,7 @@ public class RecipeBuilderScreen extends Screen {
     private void selectShapelessSlot(int slot) {
         if (heldItemId != null && heldItemId.isEmpty()) {
             shapelessItems.set(slot, "");
+            shapelessCounts.set(slot, 1);
             selectedShapelessSlot = -1;
             selectedSlot = -2;
             clearWidgets(); init();
@@ -482,73 +574,68 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     private void addShapelessSlot() {
-        if (shapelessItems.size() < MAX_SHAPELESS_INGREDIENTS) shapelessItems.add("");
+        if (shapelessItems.size() < MAX_SHAPELESS_INGREDIENTS) {
+            shapelessItems.add("");
+            shapelessCounts.add(1);
+        }
         selectedShapelessSlot = -1;
         clearWidgets(); init();
     }
 
     private void removeShapelessSlot(int slot) {
-        if (shapelessItems.size() > 1) shapelessItems.remove(slot);
-        else shapelessItems.set(0, "");
+        if (shapelessItems.size() > 1) {
+            shapelessItems.remove(slot);
+            shapelessCounts.remove(slot);
+        } else {
+            shapelessItems.set(0, "");
+            shapelessCounts.set(0, 1);
+        }
         selectedShapelessSlot = -1;
         clearWidgets(); init();
     }
 
     private void clearFirstShapelessSlot() {
         shapelessItems.set(0, "");
+        shapelessCounts.set(0, 1);
         selectedShapelessSlot = -1;
         clearWidgets(); init();
     }
 
     private List<ShapelessRow> shapelessRows() {
-        Map<String, ShapelessRow> grouped = new LinkedHashMap<>();
         List<ShapelessRow> rows = new ArrayList<>();
         for (int i = 0; i < shapelessItems.size(); i++) {
             String itemId = shapelessItems.get(i);
-            if (itemId == null || itemId.isEmpty()) {
-                rows.add(new ShapelessRow("", i, 0));
-                continue;
-            }
-            ShapelessRow previous = grouped.get(itemId);
-            if (previous == null) {
-                ShapelessRow row = new ShapelessRow(itemId, i, 1);
-                grouped.put(itemId, row);
-                rows.add(row);
-            } else {
-                ShapelessRow row = new ShapelessRow(itemId, previous.slotIndex(), previous.count() + 1);
-                grouped.put(itemId, row);
-                rows.set(rows.indexOf(previous), row);
-            }
+            rows.add(new ShapelessRow(itemId == null ? "" : itemId, i,
+                    i < shapelessCounts.size() ? shapelessCounts.get(i) : 1));
         }
         return rows;
     }
 
-    private void changeShapelessCount(String itemId, int change) {
-        if (change > 0 && shapelessItems.size() < MAX_SHAPELESS_INGREDIENTS) {
-            shapelessItems.add(itemId);
-        } else if (change < 0) {
-            shapelessItems.remove(itemId);
-            if (shapelessItems.isEmpty()) shapelessItems.add("");
-        }
-        selectedShapelessSlot = -1;
-        clearWidgets(); init();
-    }
-
-    private void removeShapelessItem(String itemId) {
-        shapelessItems.removeIf(itemId::equals);
-        if (shapelessItems.isEmpty()) shapelessItems.add("");
-        selectedShapelessSlot = -1;
-        clearWidgets(); init();
-    }
-
     private record ShapelessRow(String itemId, int slotIndex, int count) {}
+    private record IngredientKey(String itemId, int count) {}
 
     private void toggleShapeMode() {
         if (shaped) {
             shapelessItems.clear();
-            for (String itemId : slotItems)
-                if (itemId != null && !itemId.isBlank()) shapelessItems.add(itemId);
-            if (shapelessItems.isEmpty()) shapelessItems.add("");
+            shapelessCounts.clear();
+            for (int i = 0; i < slotItems.length; i++) {
+                String itemId = slotItems[i];
+                if (itemId != null && !itemId.isBlank()) {
+                    shapelessItems.add(itemId);
+                    shapelessCounts.add(slotCounts[i]);
+                }
+            }
+            if (shapelessItems.isEmpty()) {
+                shapelessItems.add("");
+                shapelessCounts.add(1);
+            }
+        } else {
+            Arrays.fill(slotItems, "");
+            Arrays.fill(slotCounts, 1);
+            for (int i = 0; i < shapelessItems.size() && i < slotItems.length; i++) {
+                slotItems[i] = shapelessItems.get(i);
+                slotCounts[i] = shapelessCounts.get(i);
+            }
         }
         shaped = !shaped;
         selectedSlot = -2;
@@ -560,25 +647,16 @@ public class RecipeBuilderScreen extends Screen {
     private void addShapelessListControls() {
         int x = shapelessListX();
         int removeX = x + shapelessListW() - 22;
-        int plusX = removeX - 16;
-        int minusX = plusX - 16;
         List<ShapelessRow> rows = shapelessRows();
         for (int i = shapelessScroll; i < Math.min(rows.size(), shapelessScroll + VISIBLE_SHAPELESS_ROWS); i++) {
             final int rowIndex = i;
             ShapelessRow row = rows.get(i);
             int y = shapelessListY() + (i - shapelessScroll) * SHAPELESS_ROW_H;
-            if (!row.itemId().isEmpty()) {
-                addRenderableWidget(Button.builder(Component.literal("−"), b -> changeShapelessCount(row.itemId(), -1))
-                        .bounds(minusX, y + 4, 14, 18).build());
-                addRenderableWidget(Button.builder(Component.literal("+"), b -> changeShapelessCount(row.itemId(), 1))
-                        .bounds(plusX, y + 4, 14, 18).build());
-            }
             boolean canRemove = i > 0 || (!row.itemId().isEmpty() && rows.size() == 1);
             if (canRemove) {
                 addRenderableWidget(Button.builder(Component.empty(), b -> {
                     if (rowIndex == 0 && rows.size() == 1) clearFirstShapelessSlot();
-                    else if (row.itemId().isEmpty()) removeShapelessSlot(row.slotIndex());
-                    else removeShapelessItem(row.itemId());
+                    else removeShapelessSlot(row.slotIndex());
                 }).bounds(removeX, y + 4, 18, 18).build());
                 addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                         CustomRecipeSprites.REJECT, removeX, y + 4, 18, 18));
@@ -615,9 +693,11 @@ public class RecipeBuilderScreen extends Screen {
                             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SLOT_SELECTED, sx, sy, SLOT, SLOT);
                     String itemId = slotItems[slot];
                     if (itemId != null && !itemId.isEmpty()) {
-                        var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemId));
-                        if (item != null && item != Items.AIR)
-                            ctx.renderItem(new ItemStack(item), sx + 1, sy + 1);
+                        ItemStack stack = stackFor(itemId);
+                        if (!stack.isEmpty()) ctx.renderItem(stack, sx + 1, sy + 1);
+                        String amount = String.valueOf(slotCounts[slot]);
+                        ctx.drawString(font, amount, sx + SLOT - font.width(amount) - 1, sy + SLOT - 8,
+                                0xFFFFFFFF, true);
                     }
                 }
             }
@@ -635,31 +715,30 @@ public class RecipeBuilderScreen extends Screen {
                     rx, ry, OUTPUT_SLOT, OUTPUT_SLOT);
         }
         if (!resultItemId.isEmpty()) {
-            var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(resultItemId));
-            if (item != null && item != Items.AIR)
-                ctx.renderItem(new ItemStack(item), rx + 5, ry + 5);
+            ItemStack stack = stackFor(resultItemId);
+            if (!stack.isEmpty()) ctx.renderItem(stack, rx + 5, ry + 5);
         }
 
         // Suggestion list background + icons
         if (!itemMatches.isEmpty()) {
             // One bottom padding pixel keeps the final 16×16 item icon above the border.
-            int sy = suggY(), sh = visibleSuggestions() * SUGG_H + 1;
+            int sy = suggY(), sh = visibleSuggestions() * SUGG_H + 2;
             ctx.fill(leftX(), sy, leftX() + leftW(), sy + sh, 0xFF1A1C28);
             drawBox(ctx, leftX(), sy, leftW(), sh, 0xFF4A5578);
             for (int i = suggestionScroll; i < suggestionScroll + visibleSuggestions(); i++) {
-                int ry2 = sy + (i - suggestionScroll) * SUGG_H;
-                if (mx >= leftX() && mx < leftX() + leftW() && my >= ry2 && my < ry2 + SUGG_H)
+                int ry2 = sy + 1 + (i - suggestionScroll) * SUGG_H;
+                if (!isOverSuggestionScrollbar(mx, my)
+                        && mx >= leftX() && mx < leftX() + leftW() && my >= ry2 && my < ry2 + SUGG_H)
                     ctx.fill(leftX() + 1, ry2, leftX() + leftW() - 1, ry2 + SUGG_H, 0x553355BB);
-                var item2 = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemMatches.get(i)));
-                if (item2 != null && item2 != Items.AIR)
-                    ctx.renderItem(new ItemStack(item2), leftX() + 2, ry2);
+                ItemStack stack = stackFor(itemMatches.get(i));
+                if (!stack.isEmpty()) ctx.renderItem(stack, leftX() + 2, ry2);
             }
             if (itemMatches.size() > visibleSuggestions()) {
                 int scrollbarX = suggestionScrollbarX();
-                ctx.fill(scrollbarX, sy + 1, leftX() + leftW() - 1, sy + sh - 1, 0xFF10141C);
+                ctx.fill(scrollbarX, sy + 1, leftX() + leftW(), sy + sh - 1, SCROLLBAR_TRACK_COLOR);
                 int thumbH = 15;
                 int maxScroll = Math.max(1, itemMatches.size() - visibleSuggestions());
-                int thumbY = sy + (sh - thumbH) * suggestionScroll / maxScroll;
+                int thumbY = sy + 1 + (sh - thumbH - 2) * suggestionScroll / maxScroll;
                 CustomRecipeSprites.draw(ctx,
                         draggingSuggestionScrollbar ? CustomRecipeSprites.SCROLLER_ACTIVE : CustomRecipeSprites.SCROLLER_IDLE,
                         scrollbarX, thumbY, 12, 15);
@@ -685,8 +764,8 @@ public class RecipeBuilderScreen extends Screen {
             if (empty) {
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, x + 1, y + 1, 18, 18);
             } else {
-                var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(used.get(i - 1)));
-                if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x + 2, y + 2);
+                ItemStack stack = stackFor(used.get(i - 1));
+                if (!stack.isEmpty()) ctx.renderItem(stack, x + 2, y + 2);
             }
         }
     }
@@ -713,9 +792,9 @@ public class RecipeBuilderScreen extends Screen {
             if (heldItemId.isEmpty()) {
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, ghostX - 1, ghostY - 1, 18, 18);
             } else {
-                var heldItem = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(heldItemId));
-                if (heldItem != null && heldItem != Items.AIR) {
-                ctx.renderItem(new ItemStack(heldItem), ghostX, ghostY);
+                ItemStack heldItem = stackFor(heldItemId);
+                if (!heldItem.isEmpty()) {
+                ctx.renderItem(heldItem, ghostX, ghostY);
                 // This GUI item pipeline has no alpha overload. Its
                 // translucent veil keeps the cursor item at 80% visual weight.
                 ctx.fill(ghostX, ghostY, ghostX + 16, ghostY + 16, 0x33000000);
@@ -725,10 +804,11 @@ public class RecipeBuilderScreen extends Screen {
 
         // Tooltip de l'ID complet au survol d'une suggestion
         if (!itemMatches.isEmpty()) {
-            int sy = suggY();
+            int sy = suggY() + 1;
             for (int i = suggestionScroll; i < suggestionScroll + visibleSuggestions(); i++) {
                 int ry = sy + (i - suggestionScroll) * SUGG_H;
-                if (mouseX >= leftX() && mouseX < leftX() + leftW()
+                if (!isOverSuggestionScrollbar(mouseX, mouseY)
+                        && mouseX >= leftX() && mouseX < leftX() + leftW()
                         && mouseY >= ry && mouseY < ry + SUGG_H) {
                     ctx.setTooltipForNextFrame(font,
                             List.of(Component.literal(itemMatches.get(i)).getVisualOrderText()),
@@ -761,7 +841,7 @@ public class RecipeBuilderScreen extends Screen {
         int button = click.button();
         // Right-clicking the preview area cancels the item currently carried
         // by the cursor; it never edits a recipe slot.
-        if (button == 1
+        if (button == RIGHT_MOUSE_BUTTON
                 && mx >= rightX() && mx < rightX() + rightW()
                 && my >= panelY() && my < panelY() + workspaceH()) {
             heldItemId = null;
@@ -770,6 +850,7 @@ public class RecipeBuilderScreen extends Screen {
             clearWidgets(); init();
             return true;
         }
+        if (button != LEFT_MOUSE_BUTTON) return super.mouseClicked(click, focused);
         int gx = gridX(), gy = gridY();
 
         // Click on a grid slot (shaped recipes only).
@@ -779,6 +860,14 @@ public class RecipeBuilderScreen extends Screen {
                     int slot = r * 3 + c;
                     int sx = gx + c * SLOT, sy = gy + r * SLOT;
                     if (mx >= sx && mx < sx + SLOT && my >= sy && my < sy + SLOT) {
+                        if (!slotItems[slot].isEmpty()) {
+                            String amount = String.valueOf(slotCounts[slot]);
+                            int amountX = sx + SLOT - font.width(amount) - 2;
+                            if (mx >= amountX && my >= sy + SLOT - 9) {
+                                editIngredientCount(slot, false);
+                                return true;
+                            }
+                        }
                         selectSlot(slot);
                         return true;
                     }
@@ -789,28 +878,23 @@ public class RecipeBuilderScreen extends Screen {
         if (!shaped) {
             int listX = shapelessListX();
             List<ShapelessRow> rows = shapelessRows();
-            if (rows.size() > VISIBLE_SHAPELESS_ROWS) {
-                int arrowX = shapelessArrowX();
-                if (shapelessScroll > 0
-                        && mx >= shapelessUpArrowX() && mx < shapelessUpArrowX() + 32
-                        && my >= shapelessUpArrowY() && my < shapelessUpArrowY() + 32) {
-                    shapelessScroll--;
-                    clearWidgets(); init();
-                    return true;
-                }
-                if (shapelessScroll < maxShapelessScroll()
-                        && mx >= arrowX && mx < arrowX + 32
-                        && my >= shapelessDownArrowY() && my < shapelessDownArrowY() + 32) {
-                    shapelessScroll++;
-                    clearWidgets(); init();
-                    return true;
-                }
+            if (isOverShapelessScrollbar(mx, my)) {
+                draggingShapelessScrollbar = true;
+                updateShapelessScrollbar(my);
+                return true;
             }
             for (int i = shapelessScroll; i < Math.min(rows.size(), shapelessScroll + VISIBLE_SHAPELESS_ROWS); i++) {
                 int slotY = shapelessListY() + (i - shapelessScroll) * SHAPELESS_ROW_H;
+                ShapelessRow row = rows.get(i);
+                if (!row.itemId().isEmpty()
+                        && mx >= listX + shapelessListW() - 62 && mx < listX + shapelessListW() - 22
+                        && my >= slotY + 4 && my < slotY + 22) {
+                    editIngredientCount(row.slotIndex(), true);
+                    return true;
+                }
                 if (mx >= listX + 4 && mx < listX + 4 + SLOT
                         && my >= slotY + 4 && my < slotY + 4 + SLOT) {
-                    selectShapelessSlot(rows.get(i).slotIndex());
+                    selectShapelessSlot(row.slotIndex());
                     return true;
                 }
             }
@@ -820,6 +904,14 @@ public class RecipeBuilderScreen extends Screen {
         int rx = resX(), ry = resY();
         if (mx >= rx && mx < rx + OUTPUT_SLOT && my >= ry && my < ry + OUTPUT_SLOT) {
             selectSlot(-1);
+            return true;
+        }
+
+        // The custom icon is not a vanilla Button: otherwise its default hover
+        // chrome leaks past the reject sprite.
+        if (button == LEFT_MOUSE_BUTTON && mx >= clearSearchX() && mx < clearSearchX() + 18
+                && my >= fieldY() && my < fieldY() + SEARCH_H) {
+            clearItemSearch();
             return true;
         }
 
@@ -845,9 +937,7 @@ public class RecipeBuilderScreen extends Screen {
         // Click on a suggestion
         if (!itemMatches.isEmpty()) {
             int sy = suggY(), sw = leftW();
-            if (itemMatches.size() > visibleSuggestions()
-                    && mx >= suggestionScrollbarX() && mx < leftX() + sw
-                    && my >= sy && my < sy + visibleSuggestions() * SUGG_H) {
+            if (isOverSuggestionScrollbar(mx, my)) {
                 draggingSuggestionScrollbar = true;
                 updateSuggestionScrollbar(my);
                 return true;
@@ -882,8 +972,8 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double horizontalAmount, double verticalAmount) {
-        if (!shaped && shapelessRowCount() > VISIBLE_SHAPELESS_ROWS
-                && mx >= shapelessListX() && mx < shapelessListX() + shapelessListW()
+        if (!shaped && hasShapelessScrollbar()
+                && mx >= shapelessScrollbarX() && mx < shapelessListX() + shapelessListW()
                 && my >= shapelessListY() && my < shapelessListY() + visibleShapelessRows() * SHAPELESS_ROW_H) {
             int direction = -(int) Math.signum(verticalAmount);
             int next = Math.max(0, Math.min(maxShapelessScroll(), shapelessScroll + direction));
@@ -916,7 +1006,11 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
-        double mouseX = click.x(), my = click.y();
+        double my = click.y();
+        if (draggingShapelessScrollbar) {
+            updateShapelessScrollbar(my);
+            return true;
+        }
         if (draggingSuggestionScrollbar) {
             updateSuggestionScrollbar(my);
             return true;
@@ -926,10 +1020,21 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent click) {
-        double mouseX = click.x(), mouseY = click.y();
-        int button = click.button();
+        draggingShapelessScrollbar = false;
         draggingSuggestionScrollbar = false;
         return super.mouseReleased(click);
+    }
+
+    private void updateShapelessScrollbar(double mouseY) {
+        int maxScroll = maxShapelessScroll();
+        if (maxScroll <= 0) return;
+        double progress = Math.max(0.0, Math.min(1.0,
+                (mouseY - shapelessScrollbarY()) / Math.max(1, shapelessScrollbarH() - 1)));
+        int next = (int) Math.round(progress * maxScroll);
+        if (next != shapelessScroll) {
+            shapelessScroll = next;
+            clearWidgets(); init();
+        }
     }
 
     private void updateSuggestionScrollbar(double mouseY) {
@@ -988,8 +1093,7 @@ public class RecipeBuilderScreen extends Screen {
 
         if (shaped) {
             entry.type = "shaped";
-            // Assign a letter per unique item
-            Map<String, Character> itemToChar = new LinkedHashMap<>();
+            Map<IngredientKey, Character> itemToChar = new LinkedHashMap<>();
             char next = 'A';
             String[] rows = new String[3];
             for (int r = 0; r < 3; r++) {
@@ -999,19 +1103,28 @@ public class RecipeBuilderScreen extends Screen {
                     if (id == null || id.isEmpty()) {
                         row.append(' ');
                     } else {
-                        if (!itemToChar.containsKey(id)) itemToChar.put(id, next++);
-                        row.append(itemToChar.get(id));
+                        IngredientKey ingredient = new IngredientKey(id, slotCounts[r * 3 + c]);
+                        if (!itemToChar.containsKey(ingredient)) itemToChar.put(ingredient, next++);
+                        row.append(itemToChar.get(ingredient));
                     }
                 }
                 rows[r] = row.toString();
             }
             entry.pattern = Arrays.asList(rows);
-            for (Map.Entry<String, Character> kv : itemToChar.entrySet())
-                entry.keys.put(String.valueOf(kv.getValue()), kv.getKey());
+            for (Map.Entry<IngredientKey, Character> kv : itemToChar.entrySet()) {
+                String symbol = String.valueOf(kv.getValue());
+                entry.keys.put(symbol, kv.getKey().itemId());
+                entry.key_counts.put(symbol, kv.getKey().count());
+            }
         } else {
             entry.type = "shapeless";
-            for (String itemId : shapelessItems)
-                if (itemId != null && !itemId.isEmpty()) entry.ingredients.add(itemId);
+            for (int i = 0; i < shapelessItems.size(); i++) {
+                String itemId = shapelessItems.get(i);
+                if (itemId != null && !itemId.isEmpty()) {
+                    entry.ingredients.add(itemId);
+                    entry.ingredient_counts.add(CustomRecipeEntry.clampIngredientCount(shapelessCounts.get(i)));
+                }
+            }
         }
 
         RecipeIntegrity.rememberRequiredMods(entry);
@@ -1030,6 +1143,8 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     private String toDisplayName(String id) {
+        CustomItemEntry custom = CustomItemLibrary.isReference(id) ? CustomItemLibrary.find(parent.customItems, id) : null;
+        if (custom != null) return custom.name;
         String path = id.contains(":") ? id.split(":")[1] : id;
         String[] words = path.split("_");
         StringBuilder sb = new StringBuilder();
@@ -1038,7 +1153,13 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     private String shortId(String id) {
+        CustomItemEntry custom = CustomItemLibrary.isReference(id) ? CustomItemLibrary.find(parent.customItems, id) : null;
+        if (custom != null) return custom.name;
         return id.startsWith("minecraft:") ? id.substring(10) : id;
+    }
+
+    private ItemStack stackFor(String value) {
+        return ClientItemStacks.fromReference(value, parent.rootConfig());
     }
 
     @Override
@@ -1052,7 +1173,8 @@ public class RecipeBuilderScreen extends Screen {
 
     private String draftFingerprint() {
         return shaped + "|" + resultItemId + "|" + resultCount + "|" + knownByDefault + "|" + alsoSaveToLibrary
-                + "|" + Arrays.toString(slotItems) + "|" + String.join("\\u001F", shapelessItems);
+                + "|" + Arrays.toString(slotItems) + "|" + Arrays.toString(slotCounts)
+                + "|" + String.join("\\u001F", shapelessItems) + "|" + shapelessCounts;
     }
 
     private void renderShapelessIngredientList(GuiGraphics ctx, int mouseX, int mouseY) {
@@ -1061,8 +1183,7 @@ public class RecipeBuilderScreen extends Screen {
         int w = shapelessListW();
         ctx.drawString(font, Component.translatable("customrecipe.builder.shapeless_ingredients", shapelessIngredientCount()), x, shapelessHeaderY(), 0xFF8FC7E8, false);
         int removeX = x + w - 22;
-        int plusX = removeX - 16;
-        int minusX = plusX - 16;
+        int countX = removeX - 38;
         List<ShapelessRow> rows = shapelessRows();
         for (int i = shapelessScroll; i < Math.min(rows.size(), shapelessScroll + VISIBLE_SHAPELESS_ROWS); i++) {
             ShapelessRow row = rows.get(i);
@@ -1077,43 +1198,25 @@ public class RecipeBuilderScreen extends Screen {
                     x + 4, rowY + 4, SLOT, SLOT);
             ctx.drawString(font, (i + 1) + ")", x + 26, rowY + 8, 0xFF3F3F3F, false);
             if (itemId != null && !itemId.isEmpty()) {
-                var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemId));
-                if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x + 5, rowY + 5);
-                String name = font.plainSubstrByWidth(toDisplayName(itemId), Math.max(20, minusX - x - 68));
+                ItemStack stack = stackFor(itemId);
+                if (!stack.isEmpty()) ctx.renderItem(stack, x + 5, rowY + 5);
+                String name = font.plainSubstrByWidth(toDisplayName(itemId), Math.max(20, countX - x - 46));
                 ctx.drawString(font, name, x + 42, rowY + 8, 0xFFDDDDDD, false);
-                ctx.drawString(font, "×" + row.count(), minusX - 26, rowY + 7, 0xFFEECC77, false);
+                ctx.drawString(font, "×" + row.count(), countX, rowY + 7,
+                        selectedShapelessSlot == row.slotIndex() ? 0xFFFFFFFF : 0xFFEECC77, false);
             }
         }
-        if (rows.size() > VISIBLE_SHAPELESS_ROWS) {
-            int trackX = x - 6;
-            int trackY = y;
-            int trackH = visibleShapelessRows() * SHAPELESS_ROW_H;
-            int thumbH = Math.max(14, trackH * VISIBLE_SHAPELESS_ROWS / rows.size());
+        if (hasShapelessScrollbar()) {
+            int trackX = shapelessScrollbarX();
+            int trackY = shapelessScrollbarY();
+            int trackH = shapelessScrollbarH();
+            int thumbH = 15;
             int thumbY = trackY + (trackH - thumbH) * shapelessScroll / maxShapelessScroll();
-            ctx.fill(trackX, trackY, trackX + 3, trackY + trackH, 0xAA101820);
-            ctx.fill(trackX, thumbY, trackX + 3, thumbY + thumbH, 0xFF9AB1BE);
-            if (shapelessScroll > 0) drawShapelessScrollArrow(ctx, shapelessUpArrowX(), shapelessUpArrowY(), true,
-                    mouseX >= shapelessUpArrowX() && mouseX < shapelessUpArrowX() + 32
-                            && mouseY >= shapelessUpArrowY() && mouseY < shapelessUpArrowY() + 32);
-            if (shapelessScroll < maxShapelessScroll())
-                drawShapelessScrollArrow(ctx, shapelessArrowX(), shapelessDownArrowY(), false,
-                        mouseX >= shapelessArrowX() && mouseX < shapelessArrowX() + 32
-                                && mouseY >= shapelessDownArrowY() && mouseY < shapelessDownArrowY() + 32);
+            ctx.fill(trackX, trackY, trackX + 12, trackY + trackH, SCROLLBAR_TRACK_COLOR);
+            CustomRecipeSprites.draw(ctx,
+                    draggingShapelessScrollbar ? CustomRecipeSprites.SCROLLER_ACTIVE : CustomRecipeSprites.SCROLLER_IDLE,
+                    trackX, thumbY, 12, 15);
         }
-    }
-
-    private void drawShapelessScrollArrow(GuiGraphics ctx, int x, int y, boolean up, boolean hovered) {
-        Identifier texture = hovered ? CustomRecipeSprites.MOVE_DOWN_HIGHLIGHTED : CustomRecipeSprites.MOVE_DOWN;
-        if (!up) {
-            CustomRecipeSprites.draw(ctx, texture, x, y, 32, 32);
-            return;
-        }
-        ctx.pose().pushMatrix();
-        ctx.pose().translate(x + 16, y + 16);
-        ctx.pose().rotate((float) Math.PI);
-        ctx.pose().translate(-x - 16, -y - 16);
-        CustomRecipeSprites.draw(ctx, texture, x, y, 32, 32);
-        ctx.pose().popMatrix();
     }
 
     /** Closed lock: fixed shaped layout. Open lock: free shapeless ingredient order. */

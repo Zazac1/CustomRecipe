@@ -6,6 +6,7 @@ import fr.zazac1.customrecipe.ModNetworking;
 import com.google.gson.Gson;
 
 import java.util.List;
+import net.minecraft.server.permissions.Permissions;
 
 /** Client-only sender for the OP server editor. */
 public final class ClientServerConfigNetworking {
@@ -27,6 +28,11 @@ public final class ClientServerConfigNetworking {
 
     public static void requestVanillaDetails(String recipeId) {
         ModNetworking.queryVanillaDetails(recipeId);
+    }
+
+    public static boolean canManageServer() {
+        var player = net.minecraft.client.Minecraft.getInstance().player;
+        return player != null && player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
     }
 
     private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,

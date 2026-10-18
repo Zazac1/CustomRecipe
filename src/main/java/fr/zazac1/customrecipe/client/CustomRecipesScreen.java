@@ -1,17 +1,16 @@
 package fr.zazac1.customrecipe.client;
 
-import net.minecraft.client.input.MouseButtonEvent;
-
 import fr.zazac1.customrecipe.ConfigLoader;
-import fr.zazac1.customrecipe.BuiltinRecipeIds;
-import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
+import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.RecipeIntegrity;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.MultiLineTextWidget;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -19,6 +18,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,7 +27,7 @@ import java.util.Map;
 public class CustomRecipesScreen extends Screen {
 
     private static final int PAD      = 8;
-    private static final int ROW      = 20;
+    private static final int ROW      = 22;
     private static final int HEADER_H = 16;
     private static final int MINI     = 18;
     // Compact normal previews so the table can always show one more complete row.
@@ -36,6 +36,10 @@ public class CustomRecipesScreen extends Screen {
     private static final int SHAPELESS_DETAIL_W = 150;
     private static final int QUICK_ADD_W = 24;
     private static final int QUICK_ADD_GAP = 4;
+    private static final int OUTER_BUTTON_W = 200;
+    private static final int OUTER_BUTTON_H = 18;
+    private static final int SAVE_BUTTON_H = 22;
+    private static final int OUTER_BUTTON_GAP = 4;
 
     private final ConfigScreen parent;
     private final List<CustomRecipeEntry> recipes;
@@ -70,10 +74,14 @@ public class CustomRecipesScreen extends Screen {
         return 26 + Math.max(1, (available - 26) / 20) * 20;
     }
     private int bottomReserve() {
-        if (libraryPicker) return 30;
-        // World mode has two action buttons before Back; keep the table above both.
-        return parent.target().isWorld() ? 92 : 48;
+        if (libraryPicker) return 26;
+        return parent.target().isWorld() ? 74 : 52;
     }
+    private int outerButtonX() { return width / 2 - OUTER_BUTTON_W / 2; }
+    private int saveButtonY() { return height - 4 - SAVE_BUTTON_H; }
+    private int addRecipeButtonY() { return saveButtonY() - OUTER_BUTTON_GAP - OUTER_BUTTON_H; }
+    private int addFromLibraryButtonY() { return addRecipeButtonY() - OUTER_BUTTON_GAP - OUTER_BUTTON_H; }
+    private int bulkActionX() { return tableRight() - OUTER_BUTTON_W; }
     private int rowsTop()     { return listTop() + HEADER_H; }
     private int maxVisible()  { return Math.max(1, (listH() - HEADER_H) / ROW); }
     private int rowY(int i)   { return rowsTop() + (i - scroll) * ROW; }
@@ -174,7 +182,7 @@ public class CustomRecipesScreen extends Screen {
     protected void init() {
         // A recipe can recover when a previously missing mod is installed again.
         // Refresh first so stale persisted corruption flags never survive that recovery.
-        for (CustomRecipeEntry recipe : recipes) RecipeIntegrity.refresh(recipe);
+        for (CustomRecipeEntry recipe : recipes) RecipeIntegrity.refresh(recipe, parent.customItems);
         if (!parent.isServerManaged()) {
             LocalRecipeConflictDetector.refresh(recipes, minecraft);
         } else {
@@ -216,19 +224,17 @@ public class CustomRecipesScreen extends Screen {
                         : on  ? (sel ? 0x44005533 : 0x22005500)
                             : (sel ? 0x44662200 : 0x44550000);
                 // The state tint runs under the action controls too, then gently fades out.
-                ctx.fillGradient(PAD + 1, y, tableRight() - 1, y + ROW - 2,
+                ctx.fillGradient(PAD + 1, y, tableRight() - 1, y + ROW,
                         rowColor, (rowColor & 0x00FFFFFF) | 0x18000000);
                 // Icône de l'item résultat
                 String resId = recipes.get(i).result;
-                Identifier resultId = resId == null ? null : Identifier.tryParse(resId);
-                if (resultId != null && BuiltInRegistries.ITEM.containsKey(resultId)) {
-                    ctx.renderItem(new ItemStack(BuiltInRegistries.ITEM.getValue(resultId)), itemIconX(), y + 2);
-                }
-                drawRecipeStatusIcon(ctx, warningIconX(), y + 2, corrupted, conflict);
+                ItemStack resultStack = stackFor(resId);
+                if (!resultStack.isEmpty()) ctx.renderItem(resultStack, itemIconX(), y + 3);
+                drawRecipeStatusIcon(ctx, warningIconX(), y + 3, corrupted, conflict);
                 boolean shapedType = "shaped".equalsIgnoreCase(recipes.get(i).type);
-                drawRecipeTypeIcon(ctx, typeIconX() + (shapedType ? 1 : 0), y + (shapedType ? 3 : 2),
+                drawRecipeTypeIcon(ctx, typeIconX() + (shapedType ? 1 : 0), y + (shapedType ? 4 : 3),
                         shapedType, 0xFF8FC7E8);
-                drawKnownByDefaultIcon(ctx, knownTypeIconX(), y + 1,
+                drawKnownByDefaultIcon(ctx, knownTypeIconX(), y + 2,
                         Boolean.TRUE.equals(recipes.get(i).known_by_default));
             }
             if (hasQuickAdd()) renderQuickAddPanel(ctx);
@@ -504,7 +510,11 @@ public class CustomRecipesScreen extends Screen {
                     warning.setMaxRows(1);
                     addRenderableWidget(warning);
                     addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.disable_conflict").withColor(0xFFCC55), b -> {
-                        disableConflict(conflict);
+                        CustomRecipeEntry customConflict = recipes.stream()
+                                .filter(candidate -> candidate != e && conflict.equals(candidate.serverRecipeId().toString()))
+                                .findFirst().orElse(null);
+                        if (customConflict != null) customConflict.enabled = Boolean.FALSE;
+                        else if (!parent.disabledRecipes.contains(conflict)) parent.disabledRecipes.add(conflict);
                         clearWidgets(); init();
                     }).bounds(detailRight() - 204, detailY() + 26, 198, 18).build());
                 } else if (!known) {
@@ -534,25 +544,26 @@ public class CustomRecipesScreen extends Screen {
             }
         }
 
-        // ── Boutons du bas ────────────────────────────────────────────────
+        // World-wide actions stay in the table header, like Fabric 1.3.7;
+        // this leaves room for a full final row and keeps them usable at any scroll position.
         if (!libraryPicker && parent.target().isWorld()) {
             addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.enable_all"), b -> {
                 setAllRecipeStates(true);
                 clearWidgets(); init();
-            }).bounds(width / 2 - 100, height - 88, 98, 18).build());
+            }).bounds(bulkActionX(), 4, 98, OUTER_BUTTON_H).build());
             addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.disable_all"), b -> {
                 setAllRecipeStates(false);
                 clearWidgets(); init();
-            }).bounds(width / 2 + 2, height - 88, 98, 18).build());
+            }).bounds(bulkActionX() + 102, 4, 98, OUTER_BUTTON_H).build());
             addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.add_from_library"),
                     b -> minecraft.setScreen(new CustomRecipesScreen(parent, true))
-            ).bounds(width / 2 - 100, height - 66, 200, 18).build());
+            ).bounds(outerButtonX(), addFromLibraryButtonY(), OUTER_BUTTON_W, OUTER_BUTTON_H).build());
         }
 
         if (!libraryPicker) {
             addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.add_recipe_new"),
                     b -> minecraft.setScreen(new RecipeBuilderScreen(parent, this, null, -1))
-            ).bounds(width / 2 - 100, height - 44, 200, 18).build());
+            ).bounds(outerButtonX(), addRecipeButtonY(), OUTER_BUTTON_W, OUTER_BUTTON_H).build());
         }
 
         if (libraryPicker) {
@@ -561,9 +572,9 @@ public class CustomRecipesScreen extends Screen {
             ).bounds(width / 2 - 75, height - 22, 150, 18).build());
         } else {
             String saveLabel = Component.translatable("customrecipe.button.save").getString();
-            int saveY = height - 26;
+            int saveY = saveButtonY();
             addRenderableWidget(Button.builder(Component.empty(), b -> parent.saveFromSubmenu())
-                    .bounds(width / 2 - 100, saveY, 200, 22).build());
+                    .bounds(outerButtonX(), saveY, OUTER_BUTTON_W, SAVE_BUTTON_H).build());
             addRenderableOnly((ctx, mouseX, mouseY, delta) -> {
                 int iconX = width / 2 - font.width(saveLabel) / 2 - 20;
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, iconX, saveY + 3, 16, 16);
@@ -597,9 +608,8 @@ public class CustomRecipesScreen extends Screen {
         String result = quickAddIsBuiltin(quickIndex)
                 ? BuiltinRecipesScreen.quickAddResult(quickAddBuiltinIndex(quickIndex))
                 : quickAddCustomRecipeIndex(quickIndex) < 0 ? "" : parent.quickAddRecipes.get(quickAddCustomRecipeIndex(quickIndex)).result;
-        Identifier id = Identifier.tryParse(result);
-        if (id != null && BuiltInRegistries.ITEM.containsKey(id))
-            ctx.renderItem(new ItemStack(BuiltInRegistries.ITEM.getValue(id)), x, y);
+        ItemStack resultStack = stackFor(result);
+        if (!resultStack.isEmpty()) ctx.renderItem(resultStack, x, y);
     }
 
     private void renderDetailFills(GuiGraphics ctx, CustomRecipeEntry e, boolean quickAddPreview) {
@@ -628,6 +638,7 @@ public class CustomRecipesScreen extends Screen {
 
         renderShapedIngredientColumns(ctx, shapedIngredientRows(e));
         String[][] grid = buildDisplayGrid(e);
+        int[][] countGrid = buildDisplayCountGrid(e);
         int gx = detailGridX(), gy = detailGridY();
 
         for (int r = 0; r < 3; r++) {
@@ -637,9 +648,11 @@ public class CustomRecipesScreen extends Screen {
                 drawBox(ctx, sx, sy, MINI, MINI, 0xFF555555);
                 String id = grid[r][c];
                 if (id != null && !id.isEmpty()) {
-                    var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(id));
-                    if (item != null && item != Items.AIR)
-                        ctx.renderItem(new ItemStack(item), sx + 1, sy + 1);
+                    ItemStack stack = stackFor(id);
+                    if (!stack.isEmpty()) ctx.renderItem(stack, sx + 1, sy + 1);
+                    String amount = String.valueOf(countGrid[r][c]);
+                    ctx.drawString(font, amount, sx + MINI - font.width(amount) - 1,
+                            sy + MINI - 8, 0xFFFFFFFF, true);
                 }
             }
         }
@@ -650,9 +663,8 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
         drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
         if (e.result != null && !e.result.isEmpty()) {
-            var ri = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(e.result));
-            if (ri != null && ri != Items.AIR)
-                ctx.renderItem(new ItemStack(ri), resultX + 1, resultY + 1);
+            ItemStack stack = stackFor(e.result);
+            if (!stack.isEmpty()) ctx.renderItem(stack, resultX + 1, resultY + 1);
         }
     }
 
@@ -669,26 +681,32 @@ public class CustomRecipesScreen extends Screen {
     }
 
     private List<ShapelessIngredient> shapelessIngredientRows(CustomRecipeEntry e) {
-        return groupedIngredientRows(e.ingredients);
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        if (e.ingredients != null) {
+            for (int i = 0; i < e.ingredients.size(); i++) {
+                String itemId = e.ingredients.get(i);
+                if (itemId != null && !itemId.isEmpty()) counts.merge(itemId, e.ingredientCount(i), Integer::sum);
+            }
+        }
+        return ingredientRows(counts);
     }
 
     private List<ShapelessIngredient> shapedIngredientRows(CustomRecipeEntry e) {
-        List<String> ingredients = new ArrayList<>();
-        for (String[] row : buildDisplayGrid(e)) {
-            for (String itemId : row) {
-                if (itemId != null && !itemId.isEmpty()) ingredients.add(itemId);
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        if (e.pattern != null && e.keys != null) {
+            for (String row : e.pattern) {
+                if (row == null) continue;
+                for (int i = 0; i < row.length(); i++) {
+                    String symbol = String.valueOf(row.charAt(i));
+                    String itemId = e.keys.get(symbol);
+                    if (itemId != null && !itemId.isEmpty()) counts.merge(itemId, e.keyCount(symbol), Integer::sum);
+                }
             }
         }
-        return groupedIngredientRows(ingredients);
+        return ingredientRows(counts);
     }
 
-    private List<ShapelessIngredient> groupedIngredientRows(List<String> ingredients) {
-        Map<String, Integer> counts = new LinkedHashMap<>();
-        if (ingredients != null) {
-            for (String itemId : ingredients) {
-                if (itemId != null && !itemId.isEmpty()) counts.merge(itemId, 1, Integer::sum);
-            }
-        }
+    private List<ShapelessIngredient> ingredientRows(Map<String, Integer> counts) {
         List<ShapelessIngredient> rows = new ArrayList<>();
         counts.forEach((itemId, count) -> rows.add(new ShapelessIngredient(itemId, count)));
         return rows;
@@ -705,8 +723,8 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
         drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
         if (e.result != null && !e.result.isEmpty()) {
-            var result = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(e.result));
-            if (result != null && result != Items.AIR) ctx.renderItem(new ItemStack(result), resultX + 1, resultY + 1);
+            ItemStack stack = stackFor(e.result);
+            if (!stack.isEmpty()) ctx.renderItem(stack, resultX + 1, resultY + 1);
         }
     }
 
@@ -714,8 +732,8 @@ public class CustomRecipesScreen extends Screen {
         for (int i = 0; i < rows.size(); i++) {
             ShapelessIngredient row = rows.get(i);
             int rowY = y + i * MINI;
-            var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(row.itemId()));
-            if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, rowY + 1);
+            ItemStack stack = stackFor(row.itemId());
+            if (!stack.isEmpty()) ctx.renderItem(stack, x, rowY + 1);
             String name = font.plainSubstrByWidth(toName(row.itemId()), 104);
             ctx.drawString(font, name, x + 20, rowY + 5, 0xFFDDDDDD, false);
             ctx.drawString(font, "x" + row.count(), x + 126, rowY + 5, 0xFFEECC77, false);
@@ -740,8 +758,8 @@ public class CustomRecipesScreen extends Screen {
     }
 
     private void renderIngredientRow(GuiGraphics ctx, ShapelessIngredient row, int x, int y) {
-        var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(row.itemId()));
-        if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, y + 1);
+        ItemStack stack = stackFor(row.itemId());
+        if (!stack.isEmpty()) ctx.renderItem(stack, x, y + 1);
         String name = font.plainSubstrByWidth(toName(row.itemId()), 104);
         ctx.drawString(font, name, x + 20, y + 5, 0xFFDDDDDD, false);
         ctx.drawString(font, "x" + row.count(), x + 126, y + 5, 0xFFEECC77, false);
@@ -771,19 +789,43 @@ public class CustomRecipesScreen extends Screen {
         return grid;
     }
 
+    private int[][] buildDisplayCountGrid(CustomRecipeEntry e) {
+        int[][] counts = new int[3][3];
+        for (int[] row : counts) Arrays.fill(row, 1);
+        if ("shaped".equalsIgnoreCase(e.type)) {
+            if (e.pattern == null) return counts;
+            for (int r = 0; r < 3 && r < e.pattern.size(); r++) {
+                String row = e.pattern.get(r);
+                if (row == null) continue;
+                for (int c = 0; c < 3 && c < row.length(); c++) {
+                    char symbol = row.charAt(c);
+                    if (symbol != ' ') counts[r][c] = e.keyCount(String.valueOf(symbol));
+                }
+            }
+        } else if (e.ingredients != null) {
+            for (int i = 0; i < e.ingredients.size() && i < 9; i++) counts[i / 3][i % 3] = e.ingredientCount(i);
+        }
+        return counts;
+    }
+
     /** Switches between fixed shaped slots and free shapeless ingredients. */
     private void toggleRecipeType(CustomRecipeEntry e) {
         String[][] grid = buildDisplayGrid(e);
+        int[][] countGrid = buildDisplayCountGrid(e);
         if ("shaped".equalsIgnoreCase(e.type)) {
-            shapedLayouts.put(e, new ShapedLayout(e.pattern, e.keys));
+            shapedLayouts.put(e, new ShapedLayout(e.pattern, e.keys, e.key_counts));
             e.type = "shapeless";
             e.ingredients = new ArrayList<>();
+            e.ingredient_counts = new ArrayList<>();
             for (int row = 0; row < 3; row++)
                 for (int column = 0; column < 3; column++)
-                    if (grid[row][column] != null && !grid[row][column].isEmpty())
+                    if (grid[row][column] != null && !grid[row][column].isEmpty()) {
                         e.ingredients.add(grid[row][column]);
+                        e.ingredient_counts.add(countGrid[row][column]);
+                    }
             e.pattern = new ArrayList<>();
             e.keys = new LinkedHashMap<>();
+            e.key_counts = new LinkedHashMap<>();
             return;
         }
 
@@ -792,12 +834,15 @@ public class CustomRecipesScreen extends Screen {
         if (original != null) {
             e.pattern = new ArrayList<>(original.pattern());
             e.keys = new LinkedHashMap<>(original.keys());
+            e.key_counts = new LinkedHashMap<>(original.keyCounts());
             e.ingredients = new ArrayList<>();
+            e.ingredient_counts = new ArrayList<>();
             return;
         }
         e.pattern = new ArrayList<>();
         e.keys = new LinkedHashMap<>();
-        Map<String, Character> letters = new LinkedHashMap<>();
+        e.key_counts = new LinkedHashMap<>();
+        Map<CountedIngredient, Character> letters = new LinkedHashMap<>();
         char nextLetter = 'A';
         for (int row = 0; row < 3; row++) {
             StringBuilder patternRow = new StringBuilder(3);
@@ -807,23 +852,29 @@ public class CustomRecipesScreen extends Screen {
                     patternRow.append(' ');
                     continue;
                 }
-                Character letter = letters.get(itemId);
+                CountedIngredient ingredient = new CountedIngredient(itemId, countGrid[row][column]);
+                Character letter = letters.get(ingredient);
                 if (letter == null) {
                     letter = nextLetter++;
-                    letters.put(itemId, letter);
+                    letters.put(ingredient, letter);
                     e.keys.put(String.valueOf(letter), itemId);
+                    e.key_counts.put(String.valueOf(letter), ingredient.count());
                 }
                 patternRow.append(letter);
             }
             e.pattern.add(patternRow.toString());
         }
         e.ingredients = new ArrayList<>();
+        e.ingredient_counts = new ArrayList<>();
     }
 
-    private record ShapedLayout(List<String> pattern, Map<String, String> keys) {
-        private ShapedLayout(List<String> pattern, Map<String, String> keys) {
+    private record CountedIngredient(String itemId, int count) {}
+
+    private record ShapedLayout(List<String> pattern, Map<String, String> keys, Map<String, Integer> keyCounts) {
+        private ShapedLayout(List<String> pattern, Map<String, String> keys, Map<String, Integer> keyCounts) {
             this.pattern = pattern == null ? List.of() : new ArrayList<>(pattern);
             this.keys = keys == null ? Map.of() : new LinkedHashMap<>(keys);
+            this.keyCounts = keyCounts == null ? Map.of() : new LinkedHashMap<>(keyCounts);
         }
     }
 
@@ -901,7 +952,7 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
-        double mouseX = click.x(), mouseY = click.y();
+        double mouseY = click.y();
         if (draggingRecipeScrollbar) {
             updateRecipeScrollbar(mouseY);
             return true;
@@ -911,8 +962,6 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent click) {
-        double mouseX = click.x(), mouseY = click.y();
-        int button = click.button();
         draggingRecipeScrollbar = false;
         return super.mouseReleased(click);
     }
@@ -988,20 +1037,23 @@ public class CustomRecipesScreen extends Screen {
 
     private boolean isCorrupted(CustomRecipeEntry entry) {
         return Boolean.TRUE.equals(entry.corrupted)
-                || (!parent.isServerManaged() && !RecipeIntegrity.missingItems(entry).isEmpty());
+                || (!parent.isServerManaged() && !RecipeIntegrity.missingItems(entry, parent.customItems).isEmpty());
     }
 
     private List<String> missingItems(CustomRecipeEntry entry) {
         java.util.LinkedHashSet<String> missing = new java.util.LinkedHashSet<>();
         if (entry.missing_items != null) missing.addAll(entry.missing_items);
-        missing.addAll(RecipeIntegrity.missingItems(entry));
+        missing.addAll(RecipeIntegrity.missingItems(entry, parent.customItems));
         return new java.util.ArrayList<>(missing);
     }
 
     private String firstEnabledConflict(CustomRecipeEntry entry) {
-        if (entry.conflicting_recipes == null) return null;
-        return entry.conflicting_recipes.stream()
-                .filter(this::isConflictEnabled)
+        java.util.stream.Stream<String> duplicates = entry.conflicting_recipes == null
+                ? java.util.stream.Stream.empty() : entry.conflicting_recipes.stream();
+        java.util.stream.Stream<String> overlaps = entry.same_shape_recipes == null
+                ? java.util.stream.Stream.empty() : entry.same_shape_recipes.stream();
+        return java.util.stream.Stream.concat(duplicates, overlaps)
+                .filter(id -> id != null && !parent.disabledRecipes.contains(id))
                 .findFirst()
                 .orElse(null);
     }
@@ -1009,52 +1061,9 @@ public class CustomRecipesScreen extends Screen {
     private String firstEnabledSameShapeRecipe(CustomRecipeEntry entry) {
         if (entry.same_shape_recipes == null) return null;
         return entry.same_shape_recipes.stream()
-                .filter(this::isConflictEnabled)
+                .filter(id -> id != null && !parent.disabledRecipes.contains(id))
                 .findFirst()
                 .orElse(null);
-    }
-
-    /**
-     * Conflict ids can name vanilla/mod recipes, optional bundled templates, or
-     * another Custom Recipe entry. Each category stores its enabled state in a
-     * different place, so checking disabledRecipes alone left stale warnings.
-     */
-    private boolean isConflictEnabled(String id) {
-        if (id == null || parent.disabledRecipes.contains(id)) return false;
-
-        Identifier recipeId = Identifier.tryParse(id);
-        if (recipeId != null
-                && recipeId.getNamespace().equals(CustomRecipeMod.MOD_ID)
-                && BuiltinRecipeIds.contains(recipeId.getPath())) {
-            return !parent.isBuiltinRecipeDisabled(recipeId.getPath());
-        }
-
-        for (CustomRecipeEntry candidate : recipes) {
-            if (candidate != null && candidate.serverRecipeId().toString().equals(id)) {
-                return isActiveForThisScreen(candidate);
-            }
-        }
-        return true;
-    }
-
-    private void disableConflict(String id) {
-        Identifier recipeId = Identifier.tryParse(id);
-        if (recipeId != null
-                && recipeId.getNamespace().equals(CustomRecipeMod.MOD_ID)
-                && BuiltinRecipeIds.contains(recipeId.getPath())) {
-            parent.initializeBuiltinRecipes();
-            if (!parent.disabled.contains(recipeId.getPath())) parent.disabled.add(recipeId.getPath());
-            return;
-        }
-
-        for (CustomRecipeEntry candidate : recipes) {
-            if (candidate != null && candidate.serverRecipeId().toString().equals(id)) {
-                candidate.enabled = Boolean.FALSE;
-                return;
-            }
-        }
-
-        if (!parent.disabledRecipes.contains(id)) parent.disabledRecipes.add(id);
     }
 
     private boolean isActiveForThisScreen(CustomRecipeEntry entry) {
@@ -1073,12 +1082,19 @@ public class CustomRecipesScreen extends Screen {
 
     private String toName(String id) {
         if (id == null || id.isEmpty()) return "?";
+        CustomItemEntry custom = CustomItemLibrary.isReference(id)
+                ? CustomItemLibrary.find(parent.customItems, id) : null;
+        if (custom != null) return custom.name;
         String path = id.contains(":") ? id.split(":")[1] : id;
         String[] parts = path.split("_");
         StringBuilder sb = new StringBuilder();
         for (String w : parts)
             if (!w.isEmpty()) sb.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1)).append(' ');
         return sb.toString().trim();
+    }
+
+    private ItemStack stackFor(String value) {
+        return ClientItemStacks.fromReference(value, parent.rootConfig());
     }
 
     /** Small scroll/list marker shown beside range indicators. */

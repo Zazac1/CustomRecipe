@@ -11,7 +11,7 @@ import net.minecraft.network.chat.Component;
 
 /** Advanced raw server JSON editor. */
 public class ServerJsonScreen extends Screen {
-    private static final int MAX_JSON_CHARS = 30_000;
+    private static final int MAX_JSON_CHARS = 1_000_000;
 
     private final ConfigScreen parent;
     private final String initialJson;

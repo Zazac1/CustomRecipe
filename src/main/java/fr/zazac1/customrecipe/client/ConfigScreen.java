@@ -4,6 +4,7 @@ import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.BuiltinRecipeIds;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
+import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.RecipeVariantRule;
 import fr.zazac1.customrecipe.RecipeTarget;
@@ -48,6 +49,7 @@ public class ConfigScreen extends Screen {
     final List<RecipeVariantRule> disabledRecipeVariants;
     final List<String> hiddenQuickAddBuiltin;
     final List<CustomRecipeEntry> quickAddRecipes;
+    final List<CustomItemEntry> customItems;
     private boolean builtinRecipesInitialized;
 
     public ConfigScreen(Screen parent) {
@@ -130,6 +132,7 @@ public class ConfigScreen extends Screen {
         this.hiddenQuickAddBuiltin = new ArrayList<>(targetConfig.hidden_quick_add_builtin);
         this.quickAddRecipes = new ArrayList<>(targetConfig.quick_add_recipes);
         this.builtinRecipesInitialized = targetConfig.builtin_recipes_initialized;
+        this.customItems = new ArrayList<>(baseConfig.custom_items);
         this.initialConfigJson = ConfigLoader.toJson(baseConfig);
     }
 
@@ -151,7 +154,7 @@ public class ConfigScreen extends Screen {
         int buttonHeight = 28;
         int gap = 8;
         int x = width / 2 - buttonWidth / 2;
-        int top = height / 2 - (buttonHeight * 5 + gap * 4) / 2;
+        int top = height / 2 - (buttonHeight * 6 + gap * 5) / 2;
         boolean hasWorldTarget = target.isWorld();
 
         addRenderableOnly((ctx, mouseX, mouseY, delta) ->
@@ -181,7 +184,15 @@ public class ConfigScreen extends Screen {
                 .bounds(x, libraryY, buttonWidth, buttonHeight).build());
         addHomeButton(libraryY, buttonWidth, Component.translatable("customrecipe.home.library").getString(), null, Items.BOOKSHELF, true);
 
-        int createY = libraryY + buttonHeight + gap;
+        int customItemsY = libraryY + buttonHeight + gap;
+        addRenderableWidget(Button.builder(Component.empty(),
+                b -> minecraft.setScreen(new CustomItemsScreen(this)))
+                .bounds(x, customItemsY, buttonWidth, buttonHeight).build());
+        addHomeButton(customItemsY, buttonWidth,
+                Component.translatable("customrecipe.home.custom_items").getString(),
+                Integer.toString(customItems.size()), Items.FISHING_ROD, true);
+
+        int createY = customItemsY + buttonHeight + gap;
         addRenderableWidget(Button.builder(Component.empty(),
                 b -> minecraft.setScreen(new RecipeBuilderScreen(this)))
                 .bounds(x, createY, buttonWidth, buttonHeight).build());
@@ -400,6 +411,7 @@ public class ConfigScreen extends Screen {
         baseConfig.disabled_recipes = original.disabled_recipes;
         baseConfig.disabled_recipe_variants = original.disabled_recipe_variants;
         baseConfig.custom_recipes = original.custom_recipes;
+        baseConfig.custom_items = original.custom_items;
         baseConfig.shown_world_editor_tips = original.shown_world_editor_tips;
     }
 
@@ -495,6 +507,7 @@ public class ConfigScreen extends Screen {
     }
 
     ModConfig currentConfig() {
+        baseConfig.custom_items = new ArrayList<>(customItems);
         targetConfig.custom_recipes = new ArrayList<>(recipes);
         targetConfig.disabled_builtin = new ArrayList<>(disabled);
         targetConfig.known_by_default_builtin = new ArrayList<>(knownByDefaultBuiltin);
@@ -506,7 +519,11 @@ public class ConfigScreen extends Screen {
         return baseConfig;
     }
 
+    ModConfig rootConfig() { return currentConfig(); }
+
     void replaceConfig(ModConfig config) {
+        customItems.clear();
+        customItems.addAll(config.custom_items);
         recipes.clear();
         WorldRecipeConfig replacement = target.resolve(config);
         recipes.addAll(replacement.custom_recipes);
