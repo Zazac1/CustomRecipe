@@ -3,6 +3,7 @@ package fr.zazac1.customrecipe.client;
 import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.ModConfig;
+import fr.zazac1.customrecipe.access.DefaultMaxStackSizeAccess;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponents;
@@ -37,10 +38,12 @@ final class ClientItemStacks {
 
         return BuiltInRegistries.ITEM.get(id).map(holder -> {
             if (!holder.areComponentsBound()) {
+                int maxStackSize = ((DefaultMaxStackSizeAccess) (Object) holder.value())
+                        .customrecipe$defaultMaxStackSize();
                 holder.bindComponents(DataComponentMap.builder()
                         .set(DataComponents.ITEM_MODEL, id)
                         .set(DataComponents.ITEM_NAME, Component.translatable(holder.value().getDescriptionId()))
-                        .set(DataComponents.MAX_STACK_SIZE, holder.value().getDefaultMaxStackSize())
+                        .set(DataComponents.MAX_STACK_SIZE, maxStackSize)
                         .build());
             }
             return new ItemStack(holder);
