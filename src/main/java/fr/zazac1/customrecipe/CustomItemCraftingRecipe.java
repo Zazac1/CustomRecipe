@@ -29,7 +29,8 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
     }
 
     @Override public boolean matches(CraftingContainer input, Level world) {
-        return requiredCounts(input).length == input.getContainerSize();
+        int[] required = requiredCounts(input);
+        return required.length > 0 && required.length == input.getContainerSize();
     }
 
     @Override public int[] requiredCounts(CraftingContainer input) {
