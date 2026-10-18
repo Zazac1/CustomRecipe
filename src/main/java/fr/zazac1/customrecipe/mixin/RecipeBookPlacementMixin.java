@@ -8,6 +8,7 @@ import net.minecraft.recipe.RecipeEntry;
 import net.minecraft.recipe.input.CraftingRecipeInput;
 import net.minecraft.screen.AbstractCraftingScreenHandler;
 import net.minecraft.screen.AbstractRecipeScreenHandler;
+import net.minecraft.screen.ScreenHandler;
 import net.minecraft.server.world.ServerWorld;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -67,24 +68,20 @@ public abstract class RecipeBookPlacementMixin {
             if (missing > 0) return;
         }
 
-        int lastChangedGridSlot = -1;
         for (Target target : targets) {
             int missing = target.missing();
+            ItemStack completed = target.stack().copy();
             for (int slot = 0; slot < inventorySize && missing > 0; slot++) {
                 ItemStack candidate = inventory.getStack(slot);
                 if (candidate.isEmpty() || !ItemStack.areItemsAndComponentsEqual(candidate, target.stack())) continue;
                 ItemStack moved = inventory.removeStack(slot, Math.min(missing, candidate.getCount()));
-                target.stack().increment(moved.getCount());
+                completed.increment(moved.getCount());
                 missing -= moved.getCount();
             }
-            lastChangedGridSlot = target.gridIndex();
+            craftingInventory.setStack(target.gridIndex(), completed);
         }
         inventory.markDirty();
-        if (lastChangedGridSlot >= 0) {
-            // The stacks were mutated without intermediate menu updates. Notify once
-            // after every slot is complete so the counted recipe can match immediately.
-            craftingInventory.setStack(lastChangedGridSlot, craftingInventory.getStack(lastChangedGridSlot));
-        }
+        ((ScreenHandler) (Object) this).sendContentUpdates();
     }
 
     private record Target(int gridIndex, ItemStack stack, int missing) {}
