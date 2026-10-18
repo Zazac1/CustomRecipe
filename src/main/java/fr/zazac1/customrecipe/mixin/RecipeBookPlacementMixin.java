@@ -80,6 +80,7 @@ public abstract class RecipeBookPlacementMixin {
          customrecipe$handler().getSlot(target.screenSlot()).setStack(completed);
       }
       inventory.markDirty();
+      customrecipe$handler().sendContentUpdates();
    }
 
    private AbstractRecipeScreenHandler<?, ?> customrecipe$handler() {
