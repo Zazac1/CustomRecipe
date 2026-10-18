@@ -11,10 +11,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.MultiLineTextWidget;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -225,10 +222,8 @@ public class CustomRecipesScreen extends Screen {
                         rowColor, (rowColor & 0x00FFFFFF) | 0x18000000);
                 // Icône de l'item résultat
                 String resId = recipes.get(i).result;
-                ResourceLocation resultId = resId == null ? null : ResourceLocation.tryParse(resId);
-                if (resultId != null && BuiltInRegistries.ITEM.containsKey(resultId)) {
-                    ctx.renderItem(new ItemStack(BuiltInRegistries.ITEM.get(resultId)), itemIconX(), y + 3);
-                }
+                ItemStack resultStack = stackFor(resId);
+                if (!resultStack.isEmpty()) ctx.renderItem(resultStack, itemIconX(), y + 3);
                 drawRecipeStatusIcon(ctx, warningIconX(), y + 3, corrupted, conflict);
                 boolean shapedType = "shaped".equalsIgnoreCase(recipes.get(i).type);
                 drawRecipeTypeIcon(ctx, typeIconX() + (shapedType ? 1 : 0), y + (shapedType ? 4 : 3),
@@ -602,9 +597,8 @@ public class CustomRecipesScreen extends Screen {
         String result = quickAddIsBuiltin(quickIndex)
                 ? BuiltinRecipesScreen.quickAddResult(quickAddBuiltinIndex(quickIndex))
                 : quickAddCustomRecipeIndex(quickIndex) < 0 ? "" : parent.quickAddRecipes.get(quickAddCustomRecipeIndex(quickIndex)).result;
-        ResourceLocation id = ResourceLocation.tryParse(result);
-        if (id != null && BuiltInRegistries.ITEM.containsKey(id))
-            ctx.renderItem(new ItemStack(BuiltInRegistries.ITEM.get(id)), x, y);
+        ItemStack resultStack = stackFor(result);
+        if (!resultStack.isEmpty()) ctx.renderItem(resultStack, x, y);
     }
 
     private void renderDetailFills(GuiGraphics ctx, CustomRecipeEntry e, boolean quickAddPreview) {
@@ -643,9 +637,12 @@ public class CustomRecipesScreen extends Screen {
                 drawBox(ctx, sx, sy, MINI, MINI, 0xFF555555);
                 String id = grid[r][c];
                 if (id != null && !id.isEmpty()) {
-                    var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
-                    if (item != null && item != Items.AIR)
-                        ctx.renderItem(new ItemStack(item), sx + 1, sy + 1);
+                    ItemStack stack = stackFor(id);
+                    if (!stack.isEmpty()) {
+                        ctx.renderItem(stack, sx + 1, sy + 1);
+                        ctx.renderItemDecorations(font, stack, sx + 1, sy + 1,
+                                String.valueOf(countGrid[r][c]));
+                    }
                 }
             }
         }
@@ -656,9 +653,8 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
         drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
         if (e.result != null && !e.result.isEmpty()) {
-            var ri = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(e.result));
-            if (ri != null && ri != Items.AIR)
-                ctx.renderItem(new ItemStack(ri), resultX + 1, resultY + 1);
+            ItemStack stack = stackFor(e.result);
+            if (!stack.isEmpty()) ctx.renderItem(stack, resultX + 1, resultY + 1);
         }
     }
 
@@ -717,8 +713,8 @@ public class CustomRecipesScreen extends Screen {
         ctx.fill(resultX + 1, resultY + 1, resultX + MINI - 1, resultY + MINI - 1, 0xFF3A3A3A);
         drawBox(ctx, resultX, resultY, MINI, MINI, 0xFF908830);
         if (e.result != null && !e.result.isEmpty()) {
-            var result = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(e.result));
-            if (result != null && result != Items.AIR) ctx.renderItem(new ItemStack(result), resultX + 1, resultY + 1);
+            ItemStack stack = stackFor(e.result);
+            if (!stack.isEmpty()) ctx.renderItem(stack, resultX + 1, resultY + 1);
         }
     }
 
@@ -726,8 +722,8 @@ public class CustomRecipesScreen extends Screen {
         for (int i = 0; i < rows.size(); i++) {
             ShapelessIngredient row = rows.get(i);
             int rowY = y + i * MINI;
-            var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(row.itemId()));
-            if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, rowY + 1);
+            ItemStack stack = stackFor(row.itemId());
+            if (!stack.isEmpty()) ctx.renderItem(stack, x, rowY + 1);
             String name = font.plainSubstrByWidth(toName(row.itemId()), 104);
             ctx.drawString(font, name, x + 20, rowY + 5, 0xFFDDDDDD, false);
             ctx.drawString(font, "x" + row.count(), x + 126, rowY + 5, 0xFFEECC77, false);
@@ -752,8 +748,8 @@ public class CustomRecipesScreen extends Screen {
     }
 
     private void renderIngredientRow(GuiGraphics ctx, ShapelessIngredient row, int x, int y) {
-        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(row.itemId()));
-        if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, y + 1);
+        ItemStack stack = stackFor(row.itemId());
+        if (!stack.isEmpty()) ctx.renderItem(stack, x, y + 1);
         String name = font.plainSubstrByWidth(toName(row.itemId()), 104);
         ctx.drawString(font, name, x + 20, y + 5, 0xFFDDDDDD, false);
         ctx.drawString(font, "x" + row.count(), x + 126, y + 5, 0xFFEECC77, false);

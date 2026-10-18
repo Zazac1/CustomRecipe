@@ -29,7 +29,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
     }
 
     @Override public boolean matches(CraftingContainer input, Level world) {
-        return delegate.matches(input, world) && requiredCounts(input).length == input.getContainerSize();
+        return requiredCounts(input).length == input.getContainerSize();
     }
 
     @Override public int[] requiredCounts(CraftingContainer input) {
@@ -72,7 +72,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
     }
 
     private int[] requiredShapedCounts(CraftingContainer input, boolean enforceAmounts) {
-        List<String> rows = shrink(definition.pattern);
+        List<String> rows = shrinkPattern(definition.pattern);
         if (rows.isEmpty()) return new int[0];
         int patternWidth = rows.get(0).length();
         int patternHeight = rows.size();
@@ -122,7 +122,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         return id != null && BuiltInRegistries.ITEM.getKey(actual.getItem()).equals(id);
     }
 
-    private static List<String> shrink(List<String> pattern) {
+    public static List<String> shrinkPattern(List<String> pattern) {
         if (pattern == null || pattern.isEmpty()) return List.of();
         int top = 0, bottom = pattern.size() - 1;
         while (top <= bottom && pattern.get(top).isBlank()) top++;

@@ -17,10 +17,13 @@ This update adds reusable Custom Items and lets recipes require complete ingredi
 - Recipes can distinguish a saved special item from the ordinary version of the same item.
 - Recipe previews display every required quantity, and crafting consumes the configured amounts.
 - Selecting a recipe from the recipe book fills and displays the complete required stack in each crafting slot when enough items are available.
+- Shaped recipes smaller than the full 3×3 grid can be placed anywhere in the crafting table while keeping their required shape.
 
 ## Fixed
 
 - Ingredient quantities are visible in the recipe-book preview inside the crafting table.
+- Ingredient quantities remain readable above item icons in recipe previews and in the recipe builder.
+- Saved Custom Items appear in the ingredient search and can be selected for shaped or shapeless recipes.
 - The **Give** and **Delete** buttons in the Custom Items library are available whenever their actions are permitted.
 - The **Give** button remains unavailable outside a world and for players without server administration permission.
 - Recipe outputs using a saved Custom Item display the correct item icon.
