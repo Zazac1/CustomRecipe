@@ -190,7 +190,7 @@ public abstract class ServerRecipeManagerMixin {
     private RecipeHolder<CraftingRecipe> buildShaped(CustomRecipeEntry entry, ItemStack result,
                                                       ResourceLocation key, String recipeGroup,
                                                       List<CustomItemEntry> customItems) {
-        List<String> pattern = entry.pattern;
+        List<String> pattern = CustomItemCraftingRecipe.shrinkPattern(entry.pattern);
         Map<String, String> keysMap = entry.keys;
         if (pattern == null || pattern.isEmpty()) return null;
         if (keysMap == null || keysMap.isEmpty()) return null;
