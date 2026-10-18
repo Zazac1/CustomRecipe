@@ -11,6 +11,7 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
+import net.minecraft.client.MinecraftClient;
 
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -22,13 +23,23 @@ public final class ClientServerConfigNetworking {
     private static final Gson GSON = new Gson();
     private static BiConsumer<Boolean, String> pendingSave;
 
+    /** Never uploads server-management data from a non-administrator client. */
+    public static boolean canManageServer() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null || client.getNetworkHandler() == null) return false;
+        if (client.getServer() != null) return true;
+        return client.player.hasPermissionLevel(2);
+    }
+
     public static void save(ModConfig config) {
+        if (!canManageServer() || !ClientPlayNetworking.canSend(SaveServerConfigPayload.ID)) return;
         ClientPlayNetworking.send(SaveServerConfigPayload.ID,
                 PacketByteBufs.create().writeString(ConfigLoader.toJson(config), MAX_CONFIG_CHARS));
     }
 
     /** Sends one save request and waits for the server's durable-write acknowledgement. */
     public static boolean save(ModConfig config, BiConsumer<Boolean, String> completion) {
+        if (!canManageServer() || !ClientPlayNetworking.canSend(SaveServerConfigPayload.ID)) return false;
         if (pendingSave != null) return false;
         String json = ConfigLoader.toJson(config);
         if (json.length() > MAX_CONFIG_CHARS) {
@@ -47,18 +58,21 @@ public final class ClientServerConfigNetworking {
     }
 
     public static void validate(ModConfig config) {
+        if (!canManageServer() || !ClientPlayNetworking.canSend(ValidateServerConfigPayload.ID)) return;
         ClientPlayNetworking.send(ValidateServerConfigPayload.ID,
                 PacketByteBufs.create().writeString(ConfigLoader.toJson(config), MAX_CONFIG_CHARS));
     }
 
     public static void searchVanilla(String query, boolean matchIngredients, boolean matchOutput,
                                      String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {
+        if (!canManageServer() || !ClientPlayNetworking.canSend(VanillaRecipeQueryPayload.ID)) return;
         ClientPlayNetworking.send(VanillaRecipeQueryPayload.ID,
                 PacketByteBufs.create().writeString(GSON.toJson(new RecipeQuery(query, matchIngredients, matchOutput,
                         statusFilter, sourceFilter, disabledRecipeIds, page))));
     }
 
     public static void requestVanillaDetails(String recipeId) {
+        if (!canManageServer() || !ClientPlayNetworking.canSend(VanillaRecipeDetailsQueryPayload.ID)) return;
         ClientPlayNetworking.send(VanillaRecipeDetailsQueryPayload.ID, PacketByteBufs.create().writeString(recipeId));
     }
 

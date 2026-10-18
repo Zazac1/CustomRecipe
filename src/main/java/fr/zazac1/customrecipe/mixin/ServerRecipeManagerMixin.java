@@ -2,8 +2,20 @@ package fr.zazac1.customrecipe.mixin;
 
 import com.google.gson.JsonElement;
 import fr.zazac1.customrecipe.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import net.minecraft.item.ItemStack;
-import net.minecraft.recipe.*;
+import net.minecraft.recipe.CraftingRecipe;
+import net.minecraft.recipe.Ingredient;
+import net.minecraft.recipe.Recipe;
+import net.minecraft.recipe.RecipeManager;
+import net.minecraft.recipe.ShapedRecipe;
+import net.minecraft.recipe.ShapelessRecipe;
 import net.minecraft.recipe.book.CraftingRecipeCategory;
 import net.minecraft.registry.Registries;
 import net.minecraft.resource.ResourceManager;
@@ -15,7 +27,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import java.util.*;
 
 @Mixin(RecipeManager.class)
 public abstract class ServerRecipeManagerMixin {
@@ -23,58 +34,124 @@ public abstract class ServerRecipeManagerMixin {
     @Shadow public abstract void setRecipes(Iterable<Recipe<?>> recipes);
 
     @Inject(method = "apply(Ljava/util/Map;Lnet/minecraft/resource/ResourceManager;Lnet/minecraft/util/profiler/Profiler;)V", at = @At("TAIL"))
-    private void customrecipe$applyConfig(Map<Identifier, JsonElement> ignored, ResourceManager manager, Profiler profiler, CallbackInfo ci) {
+    private void customrecipe$applyConfig(Map<Identifier, JsonElement> ignored, ResourceManager manager,
+                                          Profiler profiler, CallbackInfo ci) {
         ConfigLoader.invalidate();
-        WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
-        for (CustomRecipeEntry entry : config.custom_recipes) RecipeIntegrity.refresh(entry);
+        ModConfig rootConfig = ConfigLoader.get();
+        WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
         List<Recipe<?>> recipes = new ArrayList<>(values());
         recipes.removeIf(recipe -> recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID)
                 && config.disabled_builtin.contains(recipe.getId().getPath()));
-        recipes.removeIf(recipe -> config.disabled_recipes.contains(recipe.getId().toString()) && !(recipe instanceof CraftingRecipe));
-        int index = 0;
+        recipes.removeIf(recipe -> config.disabled_recipes.contains(recipe.getId().toString())
+                && !(recipe instanceof CraftingRecipe));
+
+        boolean recipeStateChanged = false;
+        List<Recipe<?>> exactOrCounted = new ArrayList<>();
+        List<Recipe<?>> ordinary = new ArrayList<>();
         for (CustomRecipeEntry entry : config.custom_recipes) {
-            if (!Boolean.FALSE.equals(entry.server_enabled) && !Boolean.FALSE.equals(entry.enabled)
-                    && !Boolean.TRUE.equals(entry.corrupted)) {
-                Recipe<?> recipe = build(entry, recipeBookGroup(entry)); if (recipe != null) recipes.add(recipe);
+            if (entry == null || Boolean.FALSE.equals(entry.server_enabled) || Boolean.FALSE.equals(entry.enabled)) continue;
+            recipeStateChanged |= RecipeIntegrity.refresh(entry, rootConfig.custom_items);
+            Recipe<?> recipe = Boolean.TRUE.equals(entry.corrupted) ? null
+                    : build(entry, recipeBookGroup(entry), rootConfig.custom_items);
+            if (recipe != null) {
+                if (usesExactOrCountedIngredient(entry)) exactOrCounted.add(recipe);
+                else ordinary.add(recipe);
             }
-            index++;
         }
+        if (recipeStateChanged) ConfigLoader.saveIntegrityState(ConfigLoader.get());
+        recipes.addAll(0, exactOrCounted);
+        recipes.addAll(ordinary);
         setRecipes(recipes);
     }
 
-    private Recipe<?> build(CustomRecipeEntry entry, String recipeGroup) {
-        if (entry == null || entry.result == null) return null;
-        Identifier resultId = Identifier.tryParse(entry.result);
-        if (resultId == null || !Registries.ITEM.containsId(resultId)) return null;
+    private boolean usesExactOrCountedIngredient(CustomRecipeEntry entry) {
+        if (entry.hasCountedIngredients()) return true;
+        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
+                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
+                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
+        return values.anyMatch(CustomItemLibrary::isReference);
+    }
+
+    private Recipe<?> build(CustomRecipeEntry entry, String recipeGroup, List<CustomItemEntry> customItems) {
+        if (entry.result == null || entry.result.isBlank()) return null;
+        ItemStack result = resolveStack(entry.result, customItems);
+        if (result.isEmpty()) return null;
+        result.setCount(Math.max(1, entry.count));
         Identifier id = entry.serverRecipeId();
-        ItemStack result = new ItemStack(Registries.ITEM.get(resultId), Math.max(1, entry.count));
         if (!"shaped".equalsIgnoreCase(entry.type)) {
             List<Ingredient> list = new ArrayList<>();
-            for (String raw : entry.ingredients) { Identifier item = Identifier.tryParse(raw); if (item == null || !Registries.ITEM.containsId(item)) return null; list.add(Ingredient.ofItems(Registries.ITEM.get(item))); }
-            return list.isEmpty() ? null : new ShapelessRecipe(id, recipeGroup, CraftingRecipeCategory.MISC, result, DefaultedList.copyOf(Ingredient.EMPTY, list.toArray(new Ingredient[0])));
+            if (entry.ingredients == null) return null;
+            for (String raw : entry.ingredients) {
+                Identifier item = Identifier.tryParse(ingredientBaseId(raw, customItems));
+                if (item == null || !Registries.ITEM.containsId(item)) return null;
+                list.add(Ingredient.ofItems(Registries.ITEM.get(item)));
+            }
+            if (list.isEmpty()) return null;
+            CraftingRecipe recipe = new ShapelessRecipe(id, recipeGroup, CraftingRecipeCategory.MISC, result,
+                    DefaultedList.copyOf(Ingredient.EMPTY, list.toArray(new Ingredient[0])));
+            return exactWrapper(recipe, entry, customItems);
         }
         if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
-        int width = entry.pattern.stream().mapToInt(String::length).max().orElse(0), height = entry.pattern.size();
+        int width = entry.pattern.stream().mapToInt(String::length).max().orElse(0);
+        int height = entry.pattern.size();
         if (width < 1 || width > 3 || height > 3) return null;
         DefaultedList<Ingredient> input = DefaultedList.ofSize(width * height, Ingredient.EMPTY);
         for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
             char symbol = x < entry.pattern.get(y).length() ? entry.pattern.get(y).charAt(x) : ' ';
             if (symbol == ' ') continue;
-            String raw = entry.keys.get(String.valueOf(symbol)); Identifier item = raw == null ? null : Identifier.tryParse(raw);
+            String raw = entry.keys.get(String.valueOf(symbol));
+            Identifier item = raw == null ? null : Identifier.tryParse(ingredientBaseId(raw, customItems));
             if (item == null || !Registries.ITEM.containsId(item)) return null;
             input.set(y * width + x, Ingredient.ofItems(Registries.ITEM.get(item)));
         }
-        return new ShapedRecipe(id, recipeGroup, CraftingRecipeCategory.MISC, width, height, input, result);
+        CraftingRecipe recipe = new ShapedRecipe(id, recipeGroup, CraftingRecipeCategory.MISC,
+                width, height, input, result);
+        return exactWrapper(recipe, entry, customItems);
+    }
+
+    private ItemStack resolveStack(String value, List<CustomItemEntry> customItems) {
+        if (CustomItemLibrary.isReference(value)) {
+            return CustomItemLibrary.decode(CustomItemLibrary.find(customItems, value), null);
+        }
+        Identifier id = Identifier.tryParse(value);
+        return id != null && Registries.ITEM.containsId(id) ? new ItemStack(Registries.ITEM.get(id)) : ItemStack.EMPTY;
+    }
+
+    private String ingredientBaseId(String value, List<CustomItemEntry> customItems) {
+        if (!CustomItemLibrary.isReference(value)) return value;
+        return CustomItemLibrary.baseItemId(CustomItemLibrary.find(customItems, value));
+    }
+
+    private CraftingRecipe exactWrapper(CraftingRecipe recipe, CustomRecipeEntry entry,
+                                        List<CustomItemEntry> customItems) {
+        Map<String, ItemStack> stacks = new HashMap<>();
+        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
+                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
+                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
+        values.filter(CustomItemLibrary::isReference).distinct().forEach(reference -> {
+            ItemStack stack = resolveStack(reference, customItems);
+            if (!stack.isEmpty()) {
+                ItemStack one = stack.copy();
+                one.setCount(1);
+                stacks.put(reference, one);
+            }
+        });
+        return stacks.isEmpty() && !entry.hasCountedIngredients()
+                ? recipe : new CustomItemCraftingRecipe(recipe, entry, stacks);
     }
 
     private String recipeBookGroup(CustomRecipeEntry entry) {
         String signature;
         if ("shaped".equalsIgnoreCase(entry.type)) {
             signature = "shaped:" + String.join("/", entry.pattern == null ? List.of() : entry.pattern)
-                    + ":" + (entry.keys == null ? Map.of() : new TreeMap<>(entry.keys));
+                    + ":" + (entry.keys == null ? Map.of() : new TreeMap<>(entry.keys))
+                    + ":" + (entry.key_counts == null ? Map.of() : new TreeMap<>(entry.key_counts));
         } else {
-            List<String> ingredients = new ArrayList<>(entry.ingredients == null ? List.of() : entry.ingredients);
-            ingredients.sort(String::compareTo);
+            List<String> ingredients = new ArrayList<>();
+            if (entry.ingredients != null) for (int i = 0; i < entry.ingredients.size(); i++) {
+                ingredients.add(entry.ingredients.get(i) + "×" + entry.ingredientCount(i));
+            }
+            Collections.sort(ingredients);
             signature = "shapeless:" + String.join(",", ingredients);
         }
         return "customrecipe_" + Integer.toUnsignedString(signature.hashCode(), 36);

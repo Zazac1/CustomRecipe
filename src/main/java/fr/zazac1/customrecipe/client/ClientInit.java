@@ -2,6 +2,9 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeMod;
+import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
+import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
@@ -43,6 +46,9 @@ public class ClientInit implements ClientModInitializer {
     /** The exact option value (including Auto = 0) from before the editor flow. */
     private static Integer guiScaleBeforeCustomRecipe;
     private static final Gson GSON = new Gson();
+    /** Opening an editor from a command must happen after the command/chat screen has finished closing. */
+    private static Runnable deferredEditorOpen;
+    private static int deferredEditorOpenTicks;
 
     @Override
     public void onInitializeClient() {
@@ -64,6 +70,7 @@ public class ClientInit implements ClientModInitializer {
                 })
         ));
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            openDeferredEditorIfReady();
             if (pendingSoloEditorTicks > 0 && --pendingSoloEditorTicks == 0) {
                 if (client.getServer() != null) {
                     client.setScreen(ConfigScreen.fromPauseMenu(new GameMenuScreen(true)));
@@ -106,27 +113,29 @@ public class ClientInit implements ClientModInitializer {
             CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
         });
         ClientPlayNetworking.registerGlobalReceiver(ServerConfigPayload.ID, (client, handler, buffer, responseSender) -> {
+            if (!ClientServerConfigNetworking.canManageServer()) return;
             var config = ConfigLoader.fromJson(buffer.readString(500_000));
             client.execute(() -> {
                 if (config == null) {
                     if (client.player != null) client.player.sendMessage(Text.translatable("customrecipe.chat.invalid_server_config"), false);
                     return;
                 }
-                int imported = mergeLocalRecipes(config);
-                if (imported > 0 && client.player != null) client.player.sendMessage(
-                        Text.translatable("customrecipe.chat.local_recipes_ready", imported), false);
+                LocalMergeResult imported = mergeLocalContent(config);
+                if ((imported.recipes() > 0 || imported.customItems() > 0) && client.player != null) client.player.sendMessage(
+                        Text.translatable("customrecipe.chat.local_content_ready", imported.recipes(), imported.customItems()), false);
                 ClientServerConfigNetworking.validate(config);
             });
         });
         ClientPlayNetworking.registerGlobalReceiver(ValidatedServerConfigPayload.ID, (client, handler, buffer, responseSender) -> {
+            if (!ClientServerConfigNetworking.canManageServer()) return;
             var config = ConfigLoader.fromJson(buffer.readString(500_000));
             client.execute(() -> {
                 if (config == null) {
                     if (client.player != null) client.player.sendMessage(Text.translatable("customrecipe.chat.invalid_server_validation"), false);
                     return;
                 }
-                client.setScreen(new ConfigScreen(client.currentScreen, config,
-                        "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
+                deferEditorOpen(() -> client.setScreen(new ConfigScreen(client.currentScreen, config,
+                        "Server Recipes (OP)", true, ClientServerConfigNetworking::save)));
             });
         });
         ClientPlayNetworking.registerGlobalReceiver(ServerConfigSaveResultPayload.ID, (client, handler, buffer, responseSender) -> {
@@ -147,6 +156,23 @@ public class ClientInit implements ClientModInitializer {
                 else if (client.currentScreen instanceof VanillaRecipeDetailsScreen screen) screen.applyDetails(details);
             });
         });
+    }
+
+    /** Defers the screen transition by one complete client tick. */
+    private static void deferEditorOpen(Runnable open) {
+        deferredEditorOpen = open;
+        deferredEditorOpenTicks = 1;
+    }
+
+    private static void openDeferredEditorIfReady() {
+        if (deferredEditorOpen == null) return;
+        if (deferredEditorOpenTicks > 0) {
+            deferredEditorOpenTicks--;
+            return;
+        }
+        Runnable open = deferredEditorOpen;
+        deferredEditorOpen = null;
+        open.run();
     }
 
     /** Keeps the editor readable while preserving the player's exact original scale. */
@@ -206,29 +232,68 @@ public class ClientInit implements ClientModInitializer {
         return client.getServer().getSavePath(WorldSavePath.ROOT);
     }
 
-    /** Stages local ModMenu recipes in the server editor without sending them automatically. */
-    private static int mergeLocalRecipes(fr.zazac1.customrecipe.ModConfig serverConfig) {
-        int added = 0;
-        for (var localRecipe : ConfigLoader.get().custom_recipes) {
+    private record LocalMergeResult(int recipes, int customItems) {}
+
+    /** Stages the admin's local recipes and full-stack items in the server editor. */
+    private static LocalMergeResult mergeLocalContent(ModConfig serverConfig) {
+        ModConfig localConfig = ConfigLoader.get();
+        java.util.Map<String, String> referenceRemap = new java.util.LinkedHashMap<>();
+        int addedItems = 0;
+        for (CustomItemEntry localItem : localConfig.custom_items) {
+            if (localItem == null) continue;
+            String oldReference = CustomItemLibrary.reference(localItem.id);
+            CustomItemEntry serverItem = CustomItemLibrary.find(serverConfig.custom_items, localItem.id);
+            if (serverItem != null && java.util.Objects.equals(serverItem.stack_data, localItem.stack_data)) {
+                referenceRemap.put(oldReference, CustomItemLibrary.reference(serverItem.id));
+                continue;
+            }
+
+            String importedId = serverItem == null ? localItem.id
+                    : CustomItemLibrary.uniqueId(serverConfig.custom_items, localItem.id + "_local");
+            CustomItemEntry copy = copyLocalCustomItem(localItem, importedId);
+            serverConfig.custom_items.add(copy);
+            referenceRemap.put(oldReference, CustomItemLibrary.reference(importedId));
+            addedItems++;
+        }
+
+        int addedRecipes = 0;
+        for (CustomRecipeEntry localRecipe : localConfig.custom_recipes) {
+            CustomRecipeEntry draft = copyLocalRecipeAsDraft(localRecipe, referenceRemap);
             boolean alreadyOnServer = serverConfig.custom_recipes.stream()
-                    .anyMatch(serverRecipe -> ConfigLoader.sameRecipe(localRecipe, serverRecipe));
+                    .anyMatch(serverRecipe -> ConfigLoader.sameRecipe(draft, serverRecipe));
             if (!alreadyOnServer) {
-                serverConfig.custom_recipes.add(copyLocalRecipeAsDraft(localRecipe));
-                added++;
+                serverConfig.custom_recipes.add(draft);
+                addedRecipes++;
             }
         }
-        return added;
+        return new LocalMergeResult(addedRecipes, addedItems);
     }
 
-    private static fr.zazac1.customrecipe.CustomRecipeEntry copyLocalRecipeAsDraft(
-            fr.zazac1.customrecipe.CustomRecipeEntry source) {
-        var copy = new fr.zazac1.customrecipe.CustomRecipeEntry();
+    private static CustomItemEntry copyLocalCustomItem(CustomItemEntry source, String id) {
+        CustomItemEntry copy = new CustomItemEntry();
+        copy.id = id;
+        copy.name = source.name;
+        copy.item_id = source.item_id;
+        copy.stack_data = source.stack_data;
+        return copy;
+    }
+
+    private static CustomRecipeEntry copyLocalRecipeAsDraft(
+            CustomRecipeEntry source, java.util.Map<String, String> referenceRemap) {
+        var copy = new CustomRecipeEntry();
         copy.id = source.id;
         copy.type = source.type;
-        copy.ingredients = new java.util.ArrayList<>(source.ingredients);
-        copy.pattern = new java.util.ArrayList<>(source.pattern);
-        copy.keys = new java.util.LinkedHashMap<>(source.keys);
-        copy.result = source.result;
+        copy.ingredients = source.ingredients == null ? new java.util.ArrayList<>()
+                : source.ingredients.stream().map(value -> remap(value, referenceRemap))
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+        copy.ingredient_counts = source.ingredient_counts == null ? new java.util.ArrayList<>()
+                : new java.util.ArrayList<>(source.ingredient_counts);
+        copy.pattern = source.pattern == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(source.pattern);
+        copy.keys = new java.util.LinkedHashMap<>();
+        if (source.keys != null) source.keys.forEach((key, value) -> copy.keys.put(key, remap(value, referenceRemap)));
+        copy.key_counts = source.key_counts == null ? new java.util.LinkedHashMap<>()
+                : new java.util.LinkedHashMap<>(source.key_counts);
+        copy.result = remap(source.result, referenceRemap);
         copy.count = source.count;
         copy.enabled = null;
         copy.server_enabled = null;
@@ -236,5 +301,9 @@ public class ClientInit implements ClientModInitializer {
         copy.world_names = new java.util.LinkedHashMap<>();
         copy.known_by_default = source.known_by_default;
         return copy;
+    }
+
+    private static String remap(String value, java.util.Map<String, String> referenceRemap) {
+        return value == null ? null : referenceRemap.getOrDefault(value, value);
     }
 }

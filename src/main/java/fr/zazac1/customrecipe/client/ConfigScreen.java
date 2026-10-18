@@ -3,6 +3,7 @@ package fr.zazac1.customrecipe.client;
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
+import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.RecipeVariantRule;
 import fr.zazac1.customrecipe.RecipeTarget;
@@ -49,6 +50,7 @@ public class ConfigScreen extends Screen {
     final List<RecipeVariantRule> disabledRecipeVariants;
     final List<String> hiddenQuickAddBuiltin;
     final List<CustomRecipeEntry> quickAddRecipes;
+    final List<CustomItemEntry> customItems;
 
     public ConfigScreen(Screen parent) {
         this(parent, ConfigLoader.get(), "Custom Recipe", false, ConfigLoader::saveAndInvalidate, null, false);
@@ -96,6 +98,7 @@ public class ConfigScreen extends Screen {
         this.disabledRecipeVariants = new ArrayList<>(targetConfig.disabled_recipe_variants);
         this.hiddenQuickAddBuiltin = new ArrayList<>(targetConfig.hidden_quick_add_builtin);
         this.quickAddRecipes = new ArrayList<>(targetConfig.quick_add_recipes);
+        this.customItems = new ArrayList<>(config.custom_items);
         this.initialConfigJson = ConfigLoader.toJson(baseConfig);
     }
 
@@ -112,7 +115,7 @@ public class ConfigScreen extends Screen {
         int buttonHeight = 28;
         int gap = 8;
         int x = width / 2 - buttonWidth / 2;
-        int top = height / 2 - (buttonHeight * 5 + gap * 4) / 2;
+        int top = height / 2 - (buttonHeight * 6 + gap * 5) / 2;
         boolean hasWorldTarget = target.isWorld();
 
         addDrawable((ctx, mouseX, mouseY, delta) ->
@@ -141,7 +144,14 @@ public class ConfigScreen extends Screen {
                 .dimensions(x, libraryY, buttonWidth, buttonHeight).build());
         addHomeButton(libraryY, buttonWidth, Text.translatable("customrecipe.home.library").getString(), null, Items.BOOKSHELF, true);
 
-        int createY = libraryY + buttonHeight + gap;
+        int customItemsY = libraryY + buttonHeight + gap;
+        addDrawableChild(ButtonWidget.builder(Text.empty(),
+                b -> client.setScreen(new CustomItemsScreen(this)))
+                .dimensions(x, customItemsY, buttonWidth, buttonHeight).build());
+        addHomeButton(customItemsY, buttonWidth, Text.translatable("customrecipe.home.custom_items").getString(),
+                customItems.size() + "", Items.FISHING_ROD, true);
+
+        int createY = customItemsY + buttonHeight + gap;
         addDrawableChild(ButtonWidget.builder(Text.empty(),
                 b -> client.setScreen(new RecipeBuilderScreen(this)))
                 .dimensions(x, createY, buttonWidth, buttonHeight).build());
@@ -274,8 +284,12 @@ public class ConfigScreen extends Screen {
 
     private void exportAll() {
         WindowsFileDialogs.saveJson(exportFileName(), path -> {
-            try { ConfigLoader.exportTo(currentConfig(), path); } catch (java.io.IOException ignored) {}
-        }, error -> {});
+            try {
+                ConfigLoader.exportTo(currentConfig(), path);
+            } catch (java.io.IOException error) {
+                reportFileError("exporter", error);
+            }
+        }, this::reportFileDialogError);
     }
 
     private String exportFileName() {
@@ -296,8 +310,37 @@ public class ConfigScreen extends Screen {
                         + importedTarget.known_by_default_builtin.size()
                         + importedTarget.hidden_quick_add_builtin.size();
                 client.setScreen(new ImportConfigurationScreen(this, imported, recipeCount, vanillaCount));
-            } catch (java.io.IOException ignored) {}
-        }, error -> {});
+            } catch (java.io.IOException error) {
+                reportFileError("importer", error);
+            }
+        }, this::reportFileDialogError);
+    }
+
+    private void reportFileDialogError(String detail) {
+        fr.zazac1.customrecipe.CustomRecipeMod.LOGGER.error("[Custom Recipe] File chooser error: {}", detail);
+        if (client.player != null) {
+            client.player.sendMessage(Text.literal("[Custom Recipe] " + detail), false);
+        }
+    }
+
+    private void reportFileError(String action, Throwable error) {
+        String detail = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+        reportFileError(action, detail, error);
+    }
+
+    private void reportFileError(String action, String detail) {
+        reportFileError(action, detail, null);
+    }
+
+    private void reportFileError(String action, String detail, Throwable error) {
+        if (error == null) {
+            fr.zazac1.customrecipe.CustomRecipeMod.LOGGER.error("[Custom Recipe] Impossible d'{} une configuration : {}", action, detail);
+        } else {
+            fr.zazac1.customrecipe.CustomRecipeMod.LOGGER.error("[Custom Recipe] Impossible d'{} une configuration.", action, error);
+        }
+        if (client.player != null) {
+            client.player.sendMessage(Text.literal("[Custom Recipe] Impossible d'" + action + " une configuration : " + detail), false);
+        }
     }
 
     void confirmImportedConfiguration(ModConfig imported) {
@@ -378,6 +421,7 @@ public class ConfigScreen extends Screen {
     private void restoreConfig(ModConfig original) {
         baseConfig.recipe_target_version = original.recipe_target_version;
         baseConfig.global_library = original.global_library;
+        baseConfig.custom_items = original.custom_items;
         baseConfig.world_configs = original.world_configs;
         baseConfig.world_names = original.world_names;
         baseConfig.editor_world_id = original.editor_world_id;
@@ -428,6 +472,7 @@ public class ConfigScreen extends Screen {
     }
 
     RecipeTarget target() { return target; }
+    ModConfig rootConfig() { currentConfig(); return baseConfig; }
 
     void addFromLibrary(CustomRecipeEntry source) {
         if (!target.isWorld() || source == null) return;
@@ -489,6 +534,7 @@ public class ConfigScreen extends Screen {
         targetConfig.disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
         targetConfig.hidden_quick_add_builtin = new ArrayList<>(hiddenQuickAddBuiltin);
         targetConfig.quick_add_recipes = new ArrayList<>(quickAddRecipes);
+        baseConfig.custom_items = new ArrayList<>(customItems);
         return baseConfig;
     }
 
@@ -508,6 +554,8 @@ public class ConfigScreen extends Screen {
         hiddenQuickAddBuiltin.addAll(replacement.hidden_quick_add_builtin);
         quickAddRecipes.clear();
         quickAddRecipes.addAll(replacement.quick_add_recipes);
+        customItems.clear();
+        customItems.addAll(config.custom_items);
     }
 
     @Override

@@ -890,8 +890,19 @@ public class VanillaRecipesScreen extends Screen {
             boolean disabled = isRecipeDisabled(selectedRecipe.id()) || isVariantDisabled(selectedRecipe.id(), variant.materialId());
             ctx.fill(x, y, x + 20, y + 20, disabled ? 0xAA4A0000 : 0xAA004A18);
             drawPreviewBorder(ctx, x, y, disabled ? 0xFFFF3333 : 0xFF22DD55);
-            if (selectedVariant != null && selectedVariant.materialId().equals(variant.materialId())) drawPreviewSelection(ctx, x, y);
             drawPreviewItem(ctx, variant.materialId(), x + 2, y + 2);
+        }
+        // Draw the selection after every card so neighboring green/red borders
+        // cannot cover one of its corners.
+        if (selectedVariant != null) {
+            for (int index = 0; index < Math.min(48, selectedDetails.variants().size()); index++) {
+                VanillaRecipeDetails.VariantPreview variant = selectedDetails.variants().get(index);
+                if (!selectedVariant.materialId().equals(variant.materialId())) continue;
+                int x = variantsX + (index % columns) * 24;
+                int y = previewVariantGridY() + (index / columns) * 24;
+                drawPreviewSelection(ctx, x, y);
+                break;
+            }
         }
     }
 
