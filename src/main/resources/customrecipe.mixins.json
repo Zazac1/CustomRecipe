@@ -5,6 +5,8 @@
   "mixins": [
     "ServerRecipeManagerMixin",
     "CraftingScreenHandlerMixin",
+    "RecipeDisplayEntryMixin",
+    "RecipeFinderMixin",
     "RecipeBookPlacementMixin",
     "ResultSlotMixin"
   ],
