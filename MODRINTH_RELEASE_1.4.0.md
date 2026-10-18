@@ -23,6 +23,7 @@ This update adds reusable Custom Items and lets recipes require complete ingredi
 - The **Give** and **Delete** buttons in the Custom Items library are available whenever their actions are permitted.
 - The **Give** button remains unavailable outside a world and for players without server administration permission.
 - Recipe outputs using a saved Custom Item display the correct item icon.
+- Ingredient quantities are visible in the recipe-book preview inside the crafting table.
 - Editing an ingredient quantity no longer causes an error while the field is temporarily empty.
 - Recipe conflicts refresh correctly after a server configuration is saved.
 
