@@ -17,6 +17,8 @@
   "customrecipe.button.add_recipe_new": "+ Añadir receta",
   "customrecipe.button.add_from_library": "Añadir desde la biblioteca",
   "customrecipe.button.add_all_from_library": "Agregar todas las recetas globales",
+  "customrecipe.button.enable_all": "Activar todo",
+  "customrecipe.button.disable_all": "Desactivar todo",
 
 
   "customrecipe.button.export": "Exportar",
@@ -148,6 +150,10 @@
   ,"customrecipe.custom_items.command_hint": "Sostén un objeto y usa /customrecipe_item save [nombre]"
   ,"customrecipe.custom_items.empty": "Todavía no hay objetos personalizados guardados."
   ,"customrecipe.custom_items.give": "Dar"
+  ,"customrecipe.custom_items.rename": "Renombrar"
+  ,"customrecipe.custom_items.name": "Nombre"
+  ,"customrecipe.custom_items.id": "Identificador"
+  ,"customrecipe.custom_items.id_invalid": "Elige un identificador válido que no esté en uso."
   ,"customrecipe.custom_items.delete": "Eliminar"
   ,"customrecipe.chat.custom_item.empty_hand": "Sostén en la mano principal el objeto que quieres guardar."
   ,"customrecipe.chat.custom_item.invalid_id": "El ID del objeto personalizado no es válido."

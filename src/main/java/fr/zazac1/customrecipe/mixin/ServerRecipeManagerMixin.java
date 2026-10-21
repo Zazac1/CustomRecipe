@@ -2,9 +2,12 @@ package fr.zazac1.customrecipe.mixin;
 
 import com.google.gson.JsonElement;
 import fr.zazac1.customrecipe.ConfigLoader;
+import fr.zazac1.customrecipe.BuiltinRecipeTemplates;
 import fr.zazac1.customrecipe.CustomItemCraftingRecipe;
 import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.CustomItemLibrary;
+import fr.zazac1.customrecipe.CustomItemShapedRecipe;
+import fr.zazac1.customrecipe.CustomItemShapelessRecipe;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.ModConfig;
@@ -48,8 +51,9 @@ public abstract class ServerRecipeManagerMixin {
         ModConfig rootConfig = ConfigLoader.get();
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
         List<Recipe<?>> recipes = new ArrayList<>(getRecipes());
+        // Bundled JSON files are templates only; Quick Add creates independent custom copies.
         recipes.removeIf(recipe -> recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID)
-                && config.disabled_builtin.contains(recipe.getId().getPath()));
+                && BuiltinRecipeTemplates.contains(recipe.getId().getPath()));
         recipes.removeIf(recipe -> config.disabled_recipes.contains(recipe.getId().toString())
                 && !(recipe instanceof CraftingRecipe));
 
@@ -100,7 +104,7 @@ public abstract class ServerRecipeManagerMixin {
             NonNullList<Ingredient> input = NonNullList.create();
             input.addAll(list);
             CraftingRecipe recipe = new ShapelessRecipe(id, recipeGroup, CraftingBookCategory.MISC, result, input);
-            return exactWrapper(recipe, entry, customItems);
+            return exactWrapper(recipe, result, entry, customItems);
         }
         if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
         List<String> pattern = CustomItemCraftingRecipe.shrinkPattern(entry.pattern);
@@ -119,7 +123,7 @@ public abstract class ServerRecipeManagerMixin {
         }
         CraftingRecipe recipe = new ShapedRecipe(id, recipeGroup, CraftingBookCategory.MISC,
                 width, height, input, result);
-        return exactWrapper(recipe, entry, customItems);
+        return exactWrapper(recipe, result, entry, customItems);
     }
 
     private ItemStack resolveStack(String value, List<CustomItemEntry> customItems) {
@@ -136,7 +140,7 @@ public abstract class ServerRecipeManagerMixin {
         return CustomItemLibrary.baseItemId(CustomItemLibrary.find(customItems, value));
     }
 
-    private CraftingRecipe exactWrapper(CraftingRecipe recipe, CustomRecipeEntry entry,
+    private CraftingRecipe exactWrapper(CraftingRecipe recipe, ItemStack result, CustomRecipeEntry entry,
                                         List<CustomItemEntry> customItems) {
         Map<String, ItemStack> stacks = new HashMap<>();
         java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
@@ -150,8 +154,14 @@ public abstract class ServerRecipeManagerMixin {
                 stacks.put(reference, one);
             }
         });
-        return stacks.isEmpty() && !entry.hasCountedIngredients()
-                ? recipe : new CustomItemCraftingRecipe(recipe, entry, stacks);
+        if (stacks.isEmpty() && !entry.hasCountedIngredients()) return recipe;
+        if (recipe instanceof ShapedRecipe shaped) {
+            return new CustomItemShapedRecipe(shaped, result, entry, stacks);
+        }
+        if (recipe instanceof ShapelessRecipe shapeless) {
+            return new CustomItemShapelessRecipe(shapeless, result, entry, stacks);
+        }
+        return recipe;
     }
 
     private String recipeBookGroup(CustomRecipeEntry entry) {

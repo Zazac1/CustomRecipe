@@ -33,7 +33,14 @@ public final class ClientServerConfigNetworking {
 
     /** Sends one save request and waits for the server's durable-write acknowledgement. */
     public static boolean save(ModConfig config, BiConsumer<Boolean, String> completion) {
-        if (!canManageServer() || pendingSave != null) return false;
+        if (!canManageServer()) {
+            completion.accept(false, "The server editor is not available for this connection.");
+            return false;
+        }
+        if (pendingSave != null) {
+            completion.accept(false, "A server save is already in progress.");
+            return false;
+        }
         String json = ConfigLoader.toJson(config);
         if (json.length() > MAX_CONFIG_CHARS) {
             completion.accept(false, "The configuration is too large to send to the server.");

@@ -101,14 +101,16 @@ public final class ServerConfigNetworking {
         if (player == null) return;
         var server = player.server;
         if (!player.hasPermissions(2)) {
-            player.sendSystemMessage(Component.literal("[Custom Recipe] Permission denied."));
-            sendSaveResult(player, false, "Permission denied.");
+            sendSaveResult(player, false, "You do not have permission to edit server recipes.");
+            return;
+        }
+        if (json.length() > MAX_JSON_CHARS) {
+            sendSaveResult(player, false, "The submitted configuration is too large.");
             return;
         }
         ModConfig config = ConfigLoader.fromJson(json);
         if (config == null) {
-            player.sendSystemMessage(Component.literal("[Custom Recipe] Invalid JSON; nothing was changed."));
-            sendSaveResult(player, false, "The saved configuration is invalid.");
+            sendSaveResult(player, false, "The submitted configuration is invalid.");
             return;
         }
         config.editor_world_id = "";
@@ -117,15 +119,25 @@ public final class ServerConfigNetworking {
         for (CustomRecipeEntry entry : ConfigLoader.activeWorldConfig(config).custom_recipes) {
             RecipeIntegrity.refresh(entry, config.custom_items);
         }
-        RecipeConflictChecker.validate(server, config);
-        if (!ConfigLoader.saveAndInvalidate(config)) {
-            player.sendSystemMessage(Component.literal("[Custom Recipe] Could not write the server config; nothing was applied."));
-            sendSaveResult(player, false, "The server could not write its configuration.");
+        try {
+            RecipeConflictChecker.validate(server, config);
+        } catch (RuntimeException error) {
+            CustomRecipeMod.LOGGER.error("Could not validate a proposed server configuration", error);
+            sendSaveResult(player, false, "The server could not validate this configuration.");
             return;
         }
-        player.sendSystemMessage(Component.literal("[Custom Recipe] Server config saved. Reloading recipes..."));
-        sendSaveResult(player, true, "");
-        server.getCommands().performPrefixedCommand(player.createCommandSourceStack(), "reload");
+        if (!ConfigLoader.saveAndInvalidate(config)) {
+            sendSaveResult(player, false, "The server could not write its configuration to disk.");
+            return;
+        }
+        try {
+            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withSuppressedOutput(), "reload");
+        } catch (RuntimeException error) {
+            CustomRecipeMod.LOGGER.error("Saved the server configuration, but could not reload recipes", error);
+            sendSaveResult(player, false, "The configuration was saved, but recipes could not be reloaded.");
+            return;
+        }
+        sendSaveResult(player, true, "Server recipes were saved and the reload was started.");
     }
 
     static void handleValidate(ServerPlayer player, String json) {

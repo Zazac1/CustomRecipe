@@ -769,7 +769,11 @@ public class RecipeBuilderScreen extends Screen {
         }
         if (!resultItemId.isEmpty()) {
             ItemStack stack = stackFor(resultItemId);
-            if (!stack.isEmpty()) ctx.renderItem(stack, rx + 5, ry + 5);
+            if (!stack.isEmpty()) {
+                ctx.renderItem(stack, rx + 5, ry + 5);
+                ctx.renderItemDecorations(font, stack, rx + 5, ry + 5,
+                        String.valueOf(resultCount));
+            }
         }
 
         // Suggestion list background + icons
@@ -884,6 +888,12 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        // The bottom action bar always has priority over a palette that reaches
+        // it on short windows or large GUI scales.
+        if (button == LEFT_MOUSE_BUTTON && mx >= width / 2.0 - 110 && mx < width / 2.0 + 110
+                && my >= height - 48) {
+            return super.mouseClicked(mx, my, button);
+        }
         // This icon is rendered directly: a vanilla Button behind reject.png
         // leaks its hover chrome. Handle the full 18×18 target before the field.
         int clearSearchX = leftX() + leftW() - 18;
