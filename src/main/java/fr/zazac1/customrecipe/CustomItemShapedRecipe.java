@@ -1,0 +1,31 @@
+package fr.zazac1.customrecipe;
+
+import java.util.Map;
+import net.minecraft.inventory.RecipeInputInventory;
+import net.minecraft.item.ItemStack;
+import net.minecraft.recipe.ShapedRecipe;
+import net.minecraft.world.World;
+
+/** Keeps the vanilla shaped serializer compatible with exact/count-aware matching. */
+public final class CustomItemShapedRecipe extends ShapedRecipe implements CountedCraftingRecipe {
+    private final CustomItemCraftingRecipe matcher;
+
+    public CustomItemShapedRecipe(ShapedRecipe delegate, ItemStack result, CustomRecipeEntry definition,
+                                  Map<String, ItemStack> customStacks) {
+        super(delegate.getId(), delegate.getGroup(), delegate.getCategory(), delegate.getWidth(),
+                delegate.getHeight(), delegate.getIngredients(), result.copy());
+        matcher = new CustomItemCraftingRecipe(delegate, definition, customStacks);
+    }
+
+    @Override public boolean matches(RecipeInputInventory input, World world) {
+        return matcher.matches(input, world);
+    }
+
+    @Override public int[] requiredCounts(RecipeInputInventory input) {
+        return matcher.requiredCounts(input);
+    }
+
+    @Override public int[] placementCounts(RecipeInputInventory input) {
+        return matcher.placementCounts(input);
+    }
+}

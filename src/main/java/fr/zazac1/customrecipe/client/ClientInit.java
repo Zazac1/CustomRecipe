@@ -256,17 +256,29 @@ public class ClientInit implements ClientModInitializer {
             addedItems++;
         }
 
-        int addedRecipes = 0;
-        for (CustomRecipeEntry localRecipe : localConfig.custom_recipes) {
-            CustomRecipeEntry draft = copyLocalRecipeAsDraft(localRecipe, referenceRemap);
-            boolean alreadyOnServer = serverConfig.custom_recipes.stream()
-                    .anyMatch(serverRecipe -> ConfigLoader.sameRecipe(draft, serverRecipe));
-            if (!alreadyOnServer) {
-                serverConfig.custom_recipes.add(draft);
-                addedRecipes++;
-            }
+        int addedRecipes = mergeDraftRecipes(localConfig.global_library.custom_recipes,
+                serverConfig.global_library.custom_recipes, referenceRemap);
+        if (localConfig.custom_recipes != null && !localConfig.custom_recipes.isEmpty()) {
+            WorldRecipeConfig activeTarget = serverConfig.getOrCreateWorldConfig(
+                    serverConfig.editor_world_id, serverConfig.editor_world_name);
+            addedRecipes += mergeDraftRecipes(localConfig.custom_recipes, activeTarget.custom_recipes, referenceRemap);
         }
         return new LocalMergeResult(addedRecipes, addedItems);
+    }
+
+    private static int mergeDraftRecipes(java.util.List<CustomRecipeEntry> source,
+                                         java.util.List<CustomRecipeEntry> destination,
+                                         java.util.Map<String, String> referenceRemap) {
+        if (source == null || destination == null) return 0;
+        int added = 0;
+        for (CustomRecipeEntry localRecipe : source) {
+            if (localRecipe == null) continue;
+            CustomRecipeEntry draft = copyLocalRecipeAsDraft(localRecipe, referenceRemap);
+            if (destination.stream().anyMatch(serverRecipe -> ConfigLoader.sameRecipe(draft, serverRecipe))) continue;
+            destination.add(draft);
+            added++;
+        }
+        return added;
     }
 
     private static CustomItemEntry copyLocalCustomItem(CustomItemEntry source, String id) {
@@ -297,8 +309,8 @@ public class ClientInit implements ClientModInitializer {
         copy.count = source.count;
         copy.enabled = null;
         copy.server_enabled = null;
-        copy.world_ids = new java.util.ArrayList<>();
-        copy.world_names = new java.util.LinkedHashMap<>();
+        copy.world_ids = null;
+        copy.world_names = null;
         copy.known_by_default = source.known_by_default;
         return copy;
     }

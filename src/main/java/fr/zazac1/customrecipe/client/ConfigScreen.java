@@ -4,6 +4,7 @@ import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.RecipeVariantRule;
 import fr.zazac1.customrecipe.RecipeTarget;
@@ -243,33 +244,28 @@ public class ConfigScreen extends Screen {
         ).dimensions(cx, cy, btnW, btnH).build());
 
         addDrawableChild(ButtonWidget.builder(
-                Text.literal("Built-in Recipes"),
-                b -> client.setScreen(new BuiltinRecipesScreen(this))
-        ).dimensions(cx, cy + 24, btnW, btnH).build());
-
-        addDrawableChild(ButtonWidget.builder(
                 Text.literal("Create a Recipe"),
                 b -> client.setScreen(new RecipeBuilderScreen(this))
-        ).dimensions(cx, cy + 48, btnW, btnH).build());
+        ).dimensions(cx, cy + 24, btnW, btnH).build());
 
         if (serverManaged) {
             addDrawableChild(ButtonWidget.builder(
                     Text.literal("Default Recipes"),
                     // This editor changes server recipes, so it only browses the server catalog.
                     b -> client.setScreen(new VanillaRecipesScreen(this))
-            ).dimensions(cx, cy + 72, btnW, btnH).build());
+            ).dimensions(cx, cy + 48, btnW, btnH).build());
 
             addDrawableChild(ButtonWidget.builder(
                     Text.literal("Manual Edit"),
                     b -> client.setScreen(new ServerJsonScreen(this, currentConfig()))
-            ).dimensions(cx, cy + 96, btnW, btnH).build());
+            ).dimensions(cx, cy + 72, btnW, btnH).build());
         } else {
             boolean hasWorldTarget = target.isWorld();
             ButtonWidget vanillaButton = ButtonWidget.builder(
                     Text.literal(hasWorldTarget ? "Default Recipes" : "Select a world for Default Recipes")
                             .setStyle(net.minecraft.text.Style.EMPTY.withColor(hasWorldTarget ? 0xFFFFFF : 0x777777)),
                     b -> client.setScreen(new VanillaRecipesScreen(this, true))
-            ).dimensions(cx, cy + 72, btnW, btnH).build();
+            ).dimensions(cx, cy + 48, btnW, btnH).build();
             vanillaButton.active = hasWorldTarget;
             if (!hasWorldTarget) vanillaButton.setTooltip(net.minecraft.client.gui.tooltip.Tooltip.of(
                     Text.literal("Select a world to access its vanilla recipes.")));
@@ -279,7 +275,7 @@ public class ConfigScreen extends Screen {
         addDrawableChild(ButtonWidget.builder(
                 Text.literal("Save"),
                 b -> save()
-        ).dimensions(cx, cy + (serverManaged ? 128 : 104), btnW, btnH).build());
+        ).dimensions(cx, cy + (serverManaged ? 104 : 80), btnW, btnH).build());
     }
 
     private void exportAll() {
@@ -363,14 +359,15 @@ public class ConfigScreen extends Screen {
     private void saveServerAndReturn() {
         if (serverSavePending) return;
         serverSavePending = true;
-        if (client.player != null) client.player.sendMessage(Text.translatable("customrecipe.chat.server_applying"), false);
         boolean queued = ClientServerConfigNetworking.save(currentConfig(), (saved, message) -> {
             serverSavePending = false;
             if (saved) {
                 initialConfigJson = ConfigLoader.toJson(currentConfig());
+                if (client.player != null) client.player.sendMessage(Text.literal("[Custom Recipe] " + message), false);
                 client.setScreen(parent);
-            } else if (client.player != null) {
-                client.player.sendMessage(Text.literal("[Custom Recipe] Save failed: " + message), false);
+            } else {
+                if (client.player != null) client.player.sendMessage(Text.literal("[Custom Recipe] Save failed: " + message), false);
+                client.setScreen(this);
             }
         });
         if (!queued) serverSavePending = false;
@@ -378,7 +375,9 @@ public class ConfigScreen extends Screen {
 
     /** Saves without skipping the screen that opened a sub-menu. */
     private void saveAndReturn(Screen returnTo, boolean announceSave) {
-        saveAction.accept(currentConfig());
+        ModConfig configToSave = currentConfig();
+        saveAction.accept(configToSave);
+        initialConfigJson = ConfigLoader.toJson(configToSave);
         if (!serverManaged && client.getServer() != null) {
             if (announceSave && client.player != null) {
                 client.player.sendMessage(Text.translatable("customrecipe.chat.applying"), false);
@@ -524,6 +523,63 @@ public class ConfigScreen extends Screen {
     void selectTarget(RecipeTarget nextTarget) {
         if (targetLocked) return;
         client.setScreen(createTargetScreen(nextTarget));
+    }
+
+    boolean canUseCustomItemId(CustomItemEntry entry, String requestedId) {
+        String candidateId = CustomItemLibrary.sanitizeId(requestedId);
+        if (candidateId.isEmpty()) return false;
+        for (CustomItemEntry candidate : customItems) {
+            if (candidate != null && candidate != entry
+                    && candidateId.equals(CustomItemLibrary.sanitizeId(candidate.id))) return false;
+        }
+        return true;
+    }
+
+    boolean renameCustomItem(CustomItemEntry entry, String requestedName, String requestedId) {
+        if (entry == null || requestedName == null) return false;
+        String name = requestedName.strip();
+        String newId = CustomItemLibrary.sanitizeId(requestedId);
+        if (name.isEmpty() || !canUseCustomItemId(entry, newId)) return false;
+
+        String oldId = CustomItemLibrary.sanitizeId(entry.id);
+        entry.name = name;
+        if (!oldId.equals(newId)) {
+            currentConfig();
+            String oldReference = CustomItemLibrary.reference(oldId);
+            String newReference = CustomItemLibrary.reference(newId);
+            remapCustomItemReferences(baseConfig.global_library, oldReference, newReference);
+            if (baseConfig.world_configs != null) {
+                for (WorldRecipeConfig config : baseConfig.world_configs.values()) {
+                    remapCustomItemReferences(config, oldReference, newReference);
+                }
+            }
+            remapCustomItemReferences(baseConfig.custom_recipes, oldReference, newReference);
+            entry.id = newId;
+        }
+        return true;
+    }
+
+    private static void remapCustomItemReferences(WorldRecipeConfig config, String oldReference, String newReference) {
+        if (config == null) return;
+        remapCustomItemReferences(config.custom_recipes, oldReference, newReference);
+        remapCustomItemReferences(config.quick_add_recipes, oldReference, newReference);
+    }
+
+    private static void remapCustomItemReferences(List<CustomRecipeEntry> entries, String oldReference, String newReference) {
+        if (entries == null) return;
+        for (CustomRecipeEntry recipe : entries) {
+            if (recipe == null) continue;
+            if (recipe.ingredients != null) {
+                recipe.ingredients.replaceAll(value -> oldReference.equals(value) ? newReference : value);
+            }
+            if (recipe.keys != null) {
+                recipe.keys.replaceAll((key, value) -> oldReference.equals(value) ? newReference : value);
+            }
+            if (oldReference.equals(recipe.result)) recipe.result = newReference;
+            if (recipe.missing_items != null) {
+                recipe.missing_items.replaceAll(value -> oldReference.equals(value) ? newReference : value);
+            }
+        }
     }
 
     ModConfig currentConfig() {
