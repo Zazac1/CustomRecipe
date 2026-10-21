@@ -1,10 +1,10 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
-import fr.zazac1.customrecipe.BuiltinRecipeIds;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomItemEntry;
+import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.RecipeVariantRule;
 import fr.zazac1.customrecipe.RecipeTarget;
@@ -40,6 +40,7 @@ public class ConfigScreen extends Screen {
     private final RecipeTarget target;
     private final WorldRecipeConfig targetConfig;
     private String initialConfigJson;
+    private boolean serverSavePending;
 
     /** Shared state — modified by sub-screens, saved on Save. */
     final List<CustomRecipeEntry> recipes;
@@ -283,33 +284,28 @@ public class ConfigScreen extends Screen {
         ).bounds(cx, cy, btnW, btnH).build());
 
         addRenderableWidget(Button.builder(
-                Component.literal("Built-in Recipes"),
-                b -> minecraft.setScreen(new BuiltinRecipesScreen(this))
-        ).bounds(cx, cy + 24, btnW, btnH).build());
-
-        addRenderableWidget(Button.builder(
                 Component.literal("Create a Recipe"),
                 b -> minecraft.setScreen(new RecipeBuilderScreen(this))
-        ).bounds(cx, cy + 48, btnW, btnH).build());
+        ).bounds(cx, cy + 24, btnW, btnH).build());
 
         if (serverManaged) {
             addRenderableWidget(Button.builder(
                     Component.literal("Default Recipes"),
                     // This editor changes server recipes, so it only browses the server catalog.
                     b -> minecraft.setScreen(new VanillaRecipesScreen(this))
-            ).bounds(cx, cy + 72, btnW, btnH).build());
+            ).bounds(cx, cy + 48, btnW, btnH).build());
 
             addRenderableWidget(Button.builder(
                     Component.literal("Manual Edit"),
                     b -> minecraft.setScreen(new ServerJsonScreen(this, currentConfig()))
-            ).bounds(cx, cy + 96, btnW, btnH).build());
+            ).bounds(cx, cy + 72, btnW, btnH).build());
         } else {
             boolean hasWorldTarget = target.isWorld();
             Button vanillaButton = Button.builder(
                     Component.literal(hasWorldTarget ? "Default Recipes" : "Select a world for Default Recipes")
                             .withColor(hasWorldTarget ? 0xFFFFFF : 0x777777),
                     b -> minecraft.setScreen(new VanillaRecipesScreen(this, true))
-            ).bounds(cx, cy + 72, btnW, btnH).build();
+            ).bounds(cx, cy + 48, btnW, btnH).build();
             vanillaButton.active = hasWorldTarget;
             if (!hasWorldTarget) vanillaButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
                     Component.literal("Select a world to access its vanilla recipes.")));
@@ -319,7 +315,7 @@ public class ConfigScreen extends Screen {
         addRenderableWidget(Button.builder(
                 Component.literal("Save"),
                 b -> save()
-        ).bounds(cx, cy + (serverManaged ? 128 : 104), btnW, btnH).build());
+        ).bounds(cx, cy + (serverManaged ? 104 : 80), btnW, btnH).build());
     }
 
     private void exportAll() {
@@ -354,12 +350,35 @@ public class ConfigScreen extends Screen {
         minecraft.setScreen(new ConfigScreen(parent, imported, title.getString(), serverManaged, saveAction, target, targetLocked));
     }
     void save() {
+        if (serverManaged) {
+            saveServerAndReturn();
+            return;
+        }
         saveAndReturn(parent, true);
+    }
+
+    private void saveServerAndReturn() {
+        if (serverSavePending) return;
+        serverSavePending = true;
+        boolean queued = ClientServerConfigNetworking.save(currentConfig(), (saved, message) -> {
+            serverSavePending = false;
+            if (saved) {
+                initialConfigJson = ConfigLoader.toJson(currentConfig());
+                if (minecraft.player != null) minecraft.player.displayClientMessage(Component.literal("[Custom Recipe] " + message), false);
+                minecraft.setScreen(parent);
+            } else {
+                if (minecraft.player != null) minecraft.player.displayClientMessage(Component.literal("[Custom Recipe] Save failed: " + message), false);
+                minecraft.setScreen(this);
+            }
+        });
+        if (!queued) serverSavePending = false;
     }
 
     /** Saves without skipping the screen that opened a sub-menu. */
     private void saveAndReturn(Screen returnTo, boolean announceSave) {
-        saveAction.accept(currentConfig());
+        ModConfig configToSave = currentConfig();
+        saveAction.accept(configToSave);
+        initialConfigJson = ConfigLoader.toJson(configToSave);
         if (!serverManaged && minecraft.getSingleplayerServer() != null) {
             if (announceSave && minecraft.player != null) {
                 minecraft.player.displayClientMessage(Component.translatable("customrecipe.chat.applying"), false);
@@ -506,6 +525,63 @@ public class ConfigScreen extends Screen {
         minecraft.setScreen(createTargetScreen(nextTarget));
     }
 
+    boolean canUseCustomItemId(CustomItemEntry entry, String requestedId) {
+        String candidateId = CustomItemLibrary.sanitizeId(requestedId);
+        if (candidateId.isEmpty()) return false;
+        for (CustomItemEntry candidate : customItems) {
+            if (candidate != null && candidate != entry
+                    && candidateId.equals(CustomItemLibrary.sanitizeId(candidate.id))) return false;
+        }
+        return true;
+    }
+
+    boolean renameCustomItem(CustomItemEntry entry, String requestedName, String requestedId) {
+        if (entry == null || requestedName == null) return false;
+        String name = requestedName.strip();
+        String newId = CustomItemLibrary.sanitizeId(requestedId);
+        if (name.isEmpty() || !canUseCustomItemId(entry, newId)) return false;
+
+        String oldId = CustomItemLibrary.sanitizeId(entry.id);
+        entry.name = name;
+        if (!oldId.equals(newId)) {
+            currentConfig();
+            String oldReference = CustomItemLibrary.reference(oldId);
+            String newReference = CustomItemLibrary.reference(newId);
+            remapCustomItemReferences(baseConfig.global_library, oldReference, newReference);
+            if (baseConfig.world_configs != null) {
+                for (WorldRecipeConfig config : baseConfig.world_configs.values()) {
+                    remapCustomItemReferences(config, oldReference, newReference);
+                }
+            }
+            remapCustomItemReferences(baseConfig.custom_recipes, oldReference, newReference);
+            entry.id = newId;
+        }
+        return true;
+    }
+
+    private static void remapCustomItemReferences(WorldRecipeConfig config, String oldReference, String newReference) {
+        if (config == null) return;
+        remapCustomItemReferences(config.custom_recipes, oldReference, newReference);
+        remapCustomItemReferences(config.quick_add_recipes, oldReference, newReference);
+    }
+
+    private static void remapCustomItemReferences(List<CustomRecipeEntry> entries, String oldReference, String newReference) {
+        if (entries == null) return;
+        for (CustomRecipeEntry recipe : entries) {
+            if (recipe == null) continue;
+            if (recipe.ingredients != null) {
+                recipe.ingredients.replaceAll(value -> oldReference.equals(value) ? newReference : value);
+            }
+            if (recipe.keys != null) {
+                recipe.keys.replaceAll((key, value) -> oldReference.equals(value) ? newReference : value);
+            }
+            if (oldReference.equals(recipe.result)) recipe.result = newReference;
+            if (recipe.missing_items != null) {
+                recipe.missing_items.replaceAll(value -> oldReference.equals(value) ? newReference : value);
+            }
+        }
+    }
+
     ModConfig currentConfig() {
         baseConfig.custom_items = new ArrayList<>(customItems);
         targetConfig.custom_recipes = new ArrayList<>(recipes);
@@ -540,18 +616,6 @@ public class ConfigScreen extends Screen {
         hiddenQuickAddBuiltin.addAll(replacement.hidden_quick_add_builtin);
         quickAddRecipes.clear();
         quickAddRecipes.addAll(replacement.quick_add_recipes);
-    }
-
-    boolean isBuiltinRecipeDisabled(String id) {
-        return !builtinRecipesInitialized || disabled.contains(id);
-    }
-
-    /** Starts an explicit built-in selection with every template disabled. */
-    void initializeBuiltinRecipes() {
-        if (builtinRecipesInitialized) return;
-        disabled.clear();
-        disabled.addAll(BuiltinRecipeIds.ALL);
-        builtinRecipesInitialized = true;
     }
 
     @Override

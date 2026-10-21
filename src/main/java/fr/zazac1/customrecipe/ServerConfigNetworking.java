@@ -147,29 +147,47 @@ public final class ServerConfigNetworking {
 
     public static void handleSave(ServerPlayer player, String json) {
             if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)) {
-                player.sendSystemMessage(Component.translatable("customrecipe.chat.permission_denied"));
+                sendSaveResult(player, false, "permission_denied", "You do not have permission to edit server recipes.");
                 return;
             }
             if (json.length() > MAX_JSON_CHARS) {
-                player.sendSystemMessage(Component.translatable("customrecipe.chat.server_too_large"));
+                sendSaveResult(player, false, "too_large", "The submitted configuration is too large.");
                 return;
             }
             ModConfig config = ConfigLoader.fromJson(json);
             if (config == null) {
-                player.sendSystemMessage(Component.translatable("customrecipe.chat.invalid_json"));
+                sendSaveResult(player, false, "invalid_config", "The submitted configuration is invalid.");
                 return;
             }
 
             config.editor_world_id = "";
             config.editor_world_name = "";
             WorldRecipeAssignments.migrateLegacyRecipes(config);
-            if (server(player) != null) validateProposedConfig(server(player), config);
-            ConfigLoader.saveAndInvalidate(config);
-            // SAVE_RESULT is the single user-facing acknowledgement.  Sending it here as
-            // chat as well made NeoForge clients display the same confirmation twice.
-            ModNetworking.send(player, ModNetworking.Action.SAVE_RESULT, "customrecipe.chat.server_applying");
-            if (server(player) != null) server(player).getCommands().performPrefixedCommand(
-                    player.createCommandSourceStack().withSuppressedOutput(), "reload");
+            var minecraftServer = server(player);
+            if (minecraftServer == null) {
+                sendSaveResult(player, false, "validation_failed", "The live server is not available for validation.");
+                return;
+            }
+            try {
+                validateProposedConfig(minecraftServer, config);
+            } catch (RuntimeException error) {
+                CustomRecipeMod.LOGGER.error("Could not validate a proposed server configuration", error);
+                sendSaveResult(player, false, "validation_failed", "The server could not validate this configuration.");
+                return;
+            }
+            if (!ConfigLoader.saveAndInvalidate(config)) {
+                sendSaveResult(player, false, "write_failed", "The server could not write its configuration to disk.");
+                return;
+            }
+            try {
+                minecraftServer.getCommands().performPrefixedCommand(
+                        player.createCommandSourceStack().withSuppressedOutput(), "reload");
+            } catch (RuntimeException error) {
+                CustomRecipeMod.LOGGER.error("Saved the server configuration, but could not reload recipes", error);
+                sendSaveResult(player, false, "reload_failed", "The configuration was saved, but recipes could not be reloaded.");
+                return;
+            }
+            sendSaveResult(player, true, "ok", "Server recipes were saved and the reload was started.");
     }
 
     public static void handleValidate(ServerPlayer player, String json) {
@@ -786,6 +804,13 @@ public final class ServerConfigNetworking {
         }
         return slots;
     }
+
+    private static void sendSaveResult(ServerPlayer player, boolean saved, String code, String message) {
+        ModNetworking.send(player, ModNetworking.Action.SAVE_RESULT,
+                GSON.toJson(new SaveResult(saved, code, message)));
+    }
+
+    private record SaveResult(boolean saved, String code, String message) {}
 
     private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,
                                String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {}

@@ -1,7 +1,6 @@
 package fr.zazac1.customrecipe.mixin;
 
 import fr.zazac1.customrecipe.ConfigLoader;
-import fr.zazac1.customrecipe.BuiltinRecipeIds;
 import fr.zazac1.customrecipe.DisabledCraftingRecipe;
 import fr.zazac1.customrecipe.RecipeVariantRule;
 import fr.zazac1.customrecipe.VariantFilteredCraftingRecipe;
@@ -54,15 +53,12 @@ public abstract class ServerRecipeManagerMixin {
         List<RecipeHolder<?>> priorityCustomRecipes = new ArrayList<>();
         List<RecipeHolder<?>> ordinaryCustomRecipes = new ArrayList<>();
 
-        // Bundled recipes are templates until this world explicitly initializes them.
-        if (!config.builtin_recipes_initialized || !config.disabled_builtin.isEmpty()) {
-            recipes.removeIf(entry -> {
-                Identifier id = entry.id().identifier();
-                if (!id.getNamespace().equals(CustomRecipeMod.MOD_ID)
-                        || !BuiltinRecipeIds.contains(id.getPath())) return false;
-                return !config.builtin_recipes_initialized || config.disabled_builtin.contains(id.getPath());
-            });
-        }
+        // Bundled JSON files are templates only; Quick Add creates independent custom copies.
+        recipes.removeIf(entry -> {
+            Identifier id = entry.id().identifier();
+            return id.getNamespace().equals(CustomRecipeMod.MOD_ID)
+                    && fr.zazac1.customrecipe.BuiltinRecipeTemplates.contains(id.getPath());
+        });
 
         // Keep disabled crafting recipes discoverable by management screens,
         // but encode their disabled state in the recipe itself.

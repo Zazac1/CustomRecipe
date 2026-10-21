@@ -254,9 +254,10 @@ public final class ClientInit {
         if (source == null || destination == null) return 0;
         int added = 0;
         for (var localRecipe : source) {
-            if (localRecipe == null || destination.stream()
-                    .anyMatch(serverRecipe -> ConfigLoader.sameRecipe(localRecipe, serverRecipe))) continue;
-            destination.add(copyLocalRecipeAsDraft(localRecipe, referenceRemap));
+            if (localRecipe == null) continue;
+            var draft = copyLocalRecipeAsDraft(localRecipe, referenceRemap);
+            if (destination.stream().anyMatch(serverRecipe -> ConfigLoader.sameRecipe(draft, serverRecipe))) continue;
+            destination.add(draft);
             added++;
         }
         return added;
@@ -302,11 +303,18 @@ public final class ClientInit {
         return value == null ? null : referenceRemap.getOrDefault(value, value);
     }
 
-    /** Confirms a completed server save without assuming that a screen is still open. */
-    public static void receiveSaveResult(String translationKey) {
-        Minecraft client = Minecraft.getInstance();
-        if (client.player != null && translationKey != null && !translationKey.isBlank()) {
-            client.player.displayClientMessage(Component.translatable(translationKey), false);
+    public static void receiveSaveResult(String json) {
+        try {
+            SaveResult result = GSON.fromJson(json, SaveResult.class);
+            if (result == null) {
+                ClientServerConfigNetworking.completeSave(false, "The server returned an invalid save response.");
+            } else {
+                ClientServerConfigNetworking.completeSave(result.saved(), result.message());
+            }
+        } catch (RuntimeException error) {
+            ClientServerConfigNetworking.completeSave(false, "The server returned an invalid save response.");
         }
     }
+
+    private record SaveResult(boolean saved, String code, String message) {}
 }
