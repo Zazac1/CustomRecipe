@@ -11,7 +11,7 @@ public record ValidateServerConfigPayload(String json) implements CustomPayload 
     public static final Id<ValidateServerConfigPayload> ID = new Id<>(
             Identifier.of(CustomRecipeMod.MOD_ID, "validate_server_config"));
     public static final PacketCodec<RegistryByteBuf, ValidateServerConfigPayload> CODEC =
-            PacketCodec.tuple(PacketCodecs.STRING, ValidateServerConfigPayload::json, ValidateServerConfigPayload::new);
+            PacketCodec.tuple(PacketCodecs.string(1_000_000), ValidateServerConfigPayload::json, ValidateServerConfigPayload::new);
 
     @Override
     public Id<? extends CustomPayload> getId() {
