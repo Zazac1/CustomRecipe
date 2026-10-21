@@ -743,7 +743,11 @@ public class RecipeBuilderScreen extends Screen {
         }
         if (!resultItemId.isEmpty()) {
             ItemStack stack = stackFor(resultItemId);
-            if (!stack.isEmpty()) ctx.drawItem(stack, rx + 5, ry + 5);
+            if (!stack.isEmpty()) {
+                ctx.drawItem(stack, rx + 5, ry + 5);
+                ctx.drawItemInSlot(textRenderer, stack, rx + 5, ry + 5,
+                        String.valueOf(resultCount));
+            }
         }
 
         // Suggestion list background + icons
@@ -860,6 +864,12 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        // The bottom action bar always has priority over a palette that reaches
+        // it on short windows or large GUI scales.
+        if (button == LEFT_MOUSE_BUTTON && mx >= width / 2.0 - 110 && mx < width / 2.0 + 110
+                && my >= height - 48) {
+            return super.mouseClicked(mx, my, button);
+        }
         // Right-clicking the preview area cancels the item currently carried
         // by the cursor; it never edits a recipe slot.
         if (button == RIGHT_MOUSE_BUTTON

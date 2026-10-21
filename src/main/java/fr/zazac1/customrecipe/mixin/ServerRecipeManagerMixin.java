@@ -54,13 +54,12 @@ public abstract class ServerRecipeManagerMixin {
       WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
       List<RecipeEntry<?>> recipes = new ArrayList<>(values());
 
-      if (!config.disabled_builtin.isEmpty()) {
-         recipes.removeIf(candidate -> {
-            Identifier id = candidate.id();
-            return id.getNamespace().equals(CustomRecipeMod.MOD_ID)
-                  && config.disabled_builtin.contains(id.getPath());
-         });
-      }
+      // Bundled JSON files are templates only; Quick Add creates independent custom copies.
+      recipes.removeIf(candidate -> {
+         Identifier id = candidate.id();
+         return id.getNamespace().equals(CustomRecipeMod.MOD_ID)
+               && fr.zazac1.customrecipe.BuiltinRecipeTemplates.contains(id.getPath());
+      });
       if (!config.disabled_recipes.isEmpty()) {
          recipes.removeIf(candidate -> config.disabled_recipes.contains(candidate.id().toString())
                && !(candidate.value() instanceof CraftingRecipe));
