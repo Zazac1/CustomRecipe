@@ -210,9 +210,10 @@ final class RecipeTargetSelectScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        renderBackground(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 8, 0xFFFFFF);
+        // Since 1.21.11 Screen#render owns the blurred background. Calling
+        // renderBackground here as well crashes when a world is loaded.
         super.render(context, mouseX, mouseY, delta);
+        context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 8, 0xFFFFFF);
         List<LocalWorld> shown = visibleWorlds();
         for (int row = 0; row < shownRows(); row++) {
             int index = scroll + row;

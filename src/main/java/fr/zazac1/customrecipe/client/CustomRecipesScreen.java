@@ -104,8 +104,8 @@ public class CustomRecipesScreen extends Screen {
     }
     private List<Integer> quickAddBuiltinIndices() {
         List<Integer> visible = new ArrayList<>();
-        for (int i = 0; i < BuiltinRecipesScreen.quickAddCount(); i++)
-            if (!parent.hiddenQuickAddBuiltin.contains(BuiltinRecipesScreen.quickAddId(i))) visible.add(i);
+        for (int i = 0; i < fr.zazac1.customrecipe.BuiltinRecipeTemplates.count(); i++)
+            if (!parent.hiddenQuickAddBuiltin.contains(fr.zazac1.customrecipe.BuiltinRecipeTemplates.id(i))) visible.add(i);
         return visible;
     }
     private boolean quickAddIsBuiltin(int index) { return index < quickAddBuiltinIndices().size(); }
@@ -115,7 +115,7 @@ public class CustomRecipesScreen extends Screen {
         return wanted >= 0 && wanted < parent.quickAddRecipes.size() ? wanted : -1;
     }
     private CustomRecipeEntry quickAddRecipe(int index) {
-        if (quickAddIsBuiltin(index)) return BuiltinRecipesScreen.createQuickAddRecipe(quickAddBuiltinIndex(index));
+        if (quickAddIsBuiltin(index)) return fr.zazac1.customrecipe.BuiltinRecipeTemplates.create(quickAddBuiltinIndex(index));
         int custom = quickAddCustomRecipeIndex(index);
         return custom < 0 ? null : parent.quickAddRecipes.get(custom);
     }
@@ -419,7 +419,7 @@ public class CustomRecipesScreen extends Screen {
             }).dimensions(detailRight() - 128, detailY() + 4, 102, 18).build());
             addDrawableChild(ButtonWidget.builder(Text.empty(), b -> {
                 if (quickAddIsBuiltin(quickIndex)) {
-                    String builtinId = BuiltinRecipesScreen.quickAddId(quickAddBuiltinIndex(quickIndex));
+                    String builtinId = fr.zazac1.customrecipe.BuiltinRecipeTemplates.id(quickAddBuiltinIndex(quickIndex));
                     if (!parent.hiddenQuickAddBuiltin.contains(builtinId)) parent.hiddenQuickAddBuiltin.add(builtinId);
                 } else {
                     int custom = quickAddCustomRecipeIndex(quickIndex);
@@ -589,7 +589,7 @@ public class CustomRecipesScreen extends Screen {
 
     private void drawQuickAddIcon(DrawContext ctx, int quickIndex, int x, int y) {
         String result = quickAddIsBuiltin(quickIndex)
-                ? BuiltinRecipesScreen.quickAddResult(quickAddBuiltinIndex(quickIndex))
+                ? fr.zazac1.customrecipe.BuiltinRecipeTemplates.result(quickAddBuiltinIndex(quickIndex))
                 : quickAddCustomRecipeIndex(quickIndex) < 0 ? "" : parent.quickAddRecipes.get(quickAddCustomRecipeIndex(quickIndex)).result;
         ItemStack resultStack = stackFor(result);
         if (!resultStack.isEmpty()) ctx.drawItem(resultStack, x, y);
@@ -648,6 +648,9 @@ public class CustomRecipesScreen extends Screen {
         if (e.result != null && !e.result.isEmpty()) {
             ItemStack stack = stackFor(e.result);
             if (!stack.isEmpty()) ctx.drawItem(stack, resultX + 1, resultY + 1);
+            String amount = String.valueOf(e.count);
+            ctx.drawText(textRenderer, amount, resultX + MINI - textRenderer.getWidth(amount) - 1,
+                    resultY + MINI - 8, 0xFFFFFFFF, true);
         }
     }
 
@@ -708,6 +711,9 @@ public class CustomRecipesScreen extends Screen {
         if (e.result != null && !e.result.isEmpty()) {
             ItemStack stack = stackFor(e.result);
             if (!stack.isEmpty()) ctx.drawItem(stack, resultX + 1, resultY + 1);
+            String amount = String.valueOf(e.count);
+            ctx.drawText(textRenderer, amount, resultX + MINI - textRenderer.getWidth(amount) - 1,
+                    resultY + MINI - 8, 0xFFFFFFFF, true);
         }
     }
 

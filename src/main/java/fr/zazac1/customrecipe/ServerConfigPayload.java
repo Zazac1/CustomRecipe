@@ -10,7 +10,7 @@ import net.minecraft.util.Identifier;
 public record ServerConfigPayload(String json) implements CustomPayload {
     public static final Id<ServerConfigPayload> ID = new Id<>(Identifier.of(CustomRecipeMod.MOD_ID, "server_config"));
     public static final PacketCodec<RegistryByteBuf, ServerConfigPayload> CODEC =
-            PacketCodec.tuple(PacketCodecs.STRING, ServerConfigPayload::json, ServerConfigPayload::new);
+            PacketCodec.tuple(PacketCodecs.string(1_000_000), ServerConfigPayload::json, ServerConfigPayload::new);
 
     @Override
     public Id<? extends CustomPayload> getId() {

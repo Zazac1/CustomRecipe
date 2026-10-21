@@ -72,10 +72,10 @@ final class ModSettingsScreen extends Screen {
     private void setDefaultTarget(RecipeTarget target) { config.default_editor_target_id = target.id(); config.default_editor_target_name = target.displayName(); save(); }
     private void save() { ConfigLoader.saveIntegrityState(config); }
     @Override public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        renderBackground(context, mouseX, mouseY, delta);
+        // Screen#render performs the one allowed blur for this frame.
+        super.render(context, mouseX, mouseY, delta);
         context.drawCenteredTextWithShadow(textRenderer, title, width / 2, height / 2 - 86, 0xFFFFFF);
         context.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.settings.preload_hint"), width / 2, height / 2 + 26, 0xAAAAAA);
-        super.render(context, mouseX, mouseY, delta);
     }
     @Override public void close() { client.setScreen(parent); }
 }
