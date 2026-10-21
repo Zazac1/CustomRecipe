@@ -45,6 +45,7 @@ public final class ServerConfigNetworking {
     public static void initialize() {
         PayloadTypeRegistry.clientboundPlay().register(ServerConfigPayload.ID, ServerConfigPayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(SaveServerConfigPayload.ID, SaveServerConfigPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(ServerConfigSaveResultPayload.ID, ServerConfigSaveResultPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(ValidatedServerConfigPayload.ID, ValidatedServerConfigPayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(ValidateServerConfigPayload.ID, ValidateServerConfigPayload.CODEC);
         PayloadTypeRegistry.clientboundPlay().register(VanillaRecipePagePayload.ID, VanillaRecipePagePayload.CODEC);
@@ -101,17 +102,17 @@ public final class ServerConfigNetworking {
         ServerPlayNetworking.registerGlobalReceiver(SaveServerConfigPayload.ID, (payload, context) -> {
             ServerPlayer player = context.player();
             if (!player.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))) {
-                player.sendSystemMessage(Component.translatable("customrecipe.chat.permission_denied"));
+                sendSaveResult(player, false, "permission_denied", "You do not have permission to edit server recipes.");
                 return;
             }
             if (payload.json().length() > MAX_JSON_CHARS) {
-                player.sendSystemMessage(Component.translatable("customrecipe.chat.server_too_large"));
+                sendSaveResult(player, false, "too_large", "The submitted configuration is too large.");
                 return;
             }
 
             ModConfig config = ConfigLoader.fromJson(payload.json());
             if (config == null) {
-                player.sendSystemMessage(Component.translatable("customrecipe.chat.invalid_json"));
+                sendSaveResult(player, false, "invalid_config", "The submitted configuration is invalid.");
                 return;
             }
 
@@ -120,10 +121,25 @@ public final class ServerConfigNetworking {
             WorldRecipeAssignments.migrateLegacyRecipes(config);
             // The editor may have changed after its initial preview. Recompute with
             // the live data-pack recipes before persisting this server configuration.
-            validateProposedConfig(context.server(), config);
-            ConfigLoader.saveAndInvalidate(config);
-            player.sendSystemMessage(Component.translatable("customrecipe.chat.server_applying"));
-            context.server().getCommands().performPrefixedCommand(player.createCommandSourceStack().withSuppressedOutput(), "reload");
+            try {
+                validateProposedConfig(context.server(), config);
+            } catch (RuntimeException error) {
+                CustomRecipeMod.LOGGER.error("Could not validate a proposed server configuration", error);
+                sendSaveResult(player, false, "validation_failed", "The server could not validate this configuration.");
+                return;
+            }
+            if (!ConfigLoader.saveAndInvalidate(config)) {
+                sendSaveResult(player, false, "write_failed", "The server could not write its configuration to disk.");
+                return;
+            }
+            try {
+                context.server().getCommands().performPrefixedCommand(player.createCommandSourceStack().withSuppressedOutput(), "reload");
+            } catch (RuntimeException error) {
+                CustomRecipeMod.LOGGER.error("Saved the server configuration, but could not reload recipes", error);
+                sendSaveResult(player, false, "reload_failed", "The configuration was saved, but recipes could not be reloaded.");
+                return;
+            }
+            sendSaveResult(player, true, "ok", "Server recipes were saved and the reload was started.");
         });
 
         ServerPlayNetworking.registerGlobalReceiver(ValidateServerConfigPayload.ID, (payload, context) -> {
@@ -498,6 +514,13 @@ public final class ServerConfigNetworking {
         }
         return slots;
     }
+
+    private static void sendSaveResult(ServerPlayer player, boolean saved, String code, String message) {
+        ServerPlayNetworking.send(player, new ServerConfigSaveResultPayload(
+                GSON.toJson(new SaveResult(saved, code, message))));
+    }
+
+    private record SaveResult(boolean saved, String code, String message) {}
 
     private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,
                                String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {}

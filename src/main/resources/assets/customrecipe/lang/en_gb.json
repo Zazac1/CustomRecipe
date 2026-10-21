@@ -17,6 +17,8 @@
   "customrecipe.button.add_recipe_new": "+ Add Recipe",
   "customrecipe.button.add_from_library": "Add From Library",
   "customrecipe.button.add_all_from_library": "Add All Global Library Recipes",
+  "customrecipe.button.enable_all": "Enable All",
+  "customrecipe.button.disable_all": "Disable All",
 
 
   "customrecipe.button.export": "Export",
@@ -148,6 +150,10 @@
   ,"customrecipe.custom_items.command_hint": "Hold an item, then use /customrecipe_item save [name]"
   ,"customrecipe.custom_items.empty": "No custom item saved yet."
   ,"customrecipe.custom_items.give": "Give"
+  ,"customrecipe.custom_items.rename": "Rename"
+  ,"customrecipe.custom_items.name": "Name"
+  ,"customrecipe.custom_items.id": "Identifier"
+  ,"customrecipe.custom_items.id_invalid": "Choose a valid, unused identifier."
   ,"customrecipe.custom_items.delete": "Delete"
   ,"customrecipe.chat.custom_item.empty_hand": "Hold the item you want to save in your main hand."
   ,"customrecipe.chat.custom_item.invalid_id": "This custom item ID is invalid."

@@ -14,11 +14,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.server.permissions.Permissions;
 
 import java.util.List;
+import java.util.function.BiConsumer;
 
 /** Client-only sender for the OP server editor. */
 @Environment(EnvType.CLIENT)
 public final class ClientServerConfigNetworking {
+    private static final int MAX_CONFIG_CHARS = 1_000_000;
     private static final Gson GSON = new Gson();
+    private static BiConsumer<Boolean, String> pendingSave;
 
     /** Never uploads server-management data from a non-administrator client. */
     public static boolean canManageServer() {
@@ -31,6 +34,31 @@ public final class ClientServerConfigNetworking {
     public static void save(ModConfig config) {
         if (!canManageServer() || !ClientPlayNetworking.canSend(SaveServerConfigPayload.ID)) return;
         ClientPlayNetworking.send(new SaveServerConfigPayload(ConfigLoader.toJson(config)));
+    }
+
+    public static boolean save(ModConfig config, BiConsumer<Boolean, String> completion) {
+        if (!canManageServer() || !ClientPlayNetworking.canSend(SaveServerConfigPayload.ID)) {
+            completion.accept(false, "The server editor is not available for this connection.");
+            return false;
+        }
+        if (pendingSave != null) {
+            completion.accept(false, "A server save is already in progress.");
+            return false;
+        }
+        String json = ConfigLoader.toJson(config);
+        if (json.length() > MAX_CONFIG_CHARS) {
+            completion.accept(false, "The configuration is too large to send to the server.");
+            return false;
+        }
+        pendingSave = completion;
+        ClientPlayNetworking.send(new SaveServerConfigPayload(json));
+        return true;
+    }
+
+    static void completeSave(boolean saved, String message) {
+        BiConsumer<Boolean, String> completion = pendingSave;
+        pendingSave = null;
+        if (completion != null) completion.accept(saved, message == null ? "" : message);
     }
 
     /** Requests a server-only integrity and conflict check without saving anything. */
