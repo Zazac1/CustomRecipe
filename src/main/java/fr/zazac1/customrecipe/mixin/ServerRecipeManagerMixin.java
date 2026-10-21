@@ -52,17 +52,12 @@ public abstract class ServerRecipeManagerMixin {
 
         List<RecipeEntry<?>> recipes = new ArrayList<>(original.recipes());
 
-        // 1. Remove disabled built-in recipes (namespace = "customrecipe")
-        if (!config.disabled_builtin.isEmpty()) {
-            recipes.removeIf(entry -> {
-                Identifier id = entry.id().getValue();
-                if (!id.getNamespace().equals(CustomRecipeMod.MOD_ID)) return false;
-                for (String disabled : config.disabled_builtin) {
-                    if (id.getPath().equals(disabled)) return true;
-                }
-                return false;
-            });
-        }
+        // Bundled JSON files are templates only; Quick Add creates independent custom copies.
+        recipes.removeIf(entry -> {
+            Identifier id = entry.id().getValue();
+            return id.getNamespace().equals(CustomRecipeMod.MOD_ID)
+                    && fr.zazac1.customrecipe.BuiltinRecipeTemplates.contains(id.getPath());
+        });
 
         // 1b. Non-crafting recipes can be removed. Crafting recipes stay in the manager
         // so the server browser can still show and re-enable them after a restart.

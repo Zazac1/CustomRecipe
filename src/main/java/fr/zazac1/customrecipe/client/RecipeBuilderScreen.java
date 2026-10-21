@@ -745,7 +745,11 @@ public class RecipeBuilderScreen extends Screen {
         }
         if (!resultItemId.isEmpty()) {
             ItemStack stack = stackFor(resultItemId);
-            if (!stack.isEmpty()) ctx.drawItem(stack, rx + 5, ry + 5);
+            if (!stack.isEmpty()) {
+                ctx.drawItem(stack, rx + 5, ry + 5);
+                ctx.drawStackOverlay(textRenderer, stack, rx + 5, ry + 5,
+                        String.valueOf(resultCount));
+            }
         }
 
         // Suggestion list background + icons
@@ -863,6 +867,12 @@ public class RecipeBuilderScreen extends Screen {
     @Override
     public boolean mouseClicked(Click click, boolean focused) {
         double mx = click.x(), my = click.y();
+        // Keep Cancel/Save clickable even if the reusable-item palette reaches
+        // the bottom action bar at a large GUI scale.
+        if (click.button() == LEFT_MOUSE_BUTTON && mx >= width / 2.0 - 110 && mx < width / 2.0 + 110
+                && my >= height - 48) {
+            return super.mouseClicked(click, focused);
+        }
         // Right-clicking the preview area cancels the item currently carried
         // by the cursor; it never edits a recipe slot.
         if (click.button() == RIGHT_MOUSE_BUTTON

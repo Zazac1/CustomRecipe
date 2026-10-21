@@ -10,7 +10,7 @@ import net.minecraft.util.Identifier;
 public record VanillaRecipePagePayload(String json) implements CustomPayload {
     public static final Id<VanillaRecipePagePayload> ID = new Id<>(Identifier.of(CustomRecipeMod.MOD_ID, "vanilla_recipe_page"));
     public static final PacketCodec<RegistryByteBuf, VanillaRecipePagePayload> CODEC =
-            PacketCodec.tuple(PacketCodecs.STRING, VanillaRecipePagePayload::json, VanillaRecipePagePayload::new);
+            PacketCodec.tuple(PacketCodecs.string(1_000_000), VanillaRecipePagePayload::json, VanillaRecipePagePayload::new);
 
     @Override public Id<? extends CustomPayload> getId() { return ID; }
 }
