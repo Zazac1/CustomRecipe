@@ -1,11 +1,11 @@
 package fr.zazac1.customrecipe;
 
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.server.ServerStartedEvent;
-import net.neoforged.neoforge.event.server.ServerStartingEvent;
-import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -19,12 +19,7 @@ public final class WorldRecipeAssignments {
     private static String activeWorldName = "";
 
     public static void initialize() {
-        NeoForge.EVENT_BUS.addListener(WorldRecipeAssignments::onServerStarting);
-        NeoForge.EVENT_BUS.addListener(WorldRecipeAssignments::onServerStarted);
-        NeoForge.EVENT_BUS.addListener(WorldRecipeAssignments::onServerStopped);
-    }
-
-    private static void onServerStarting(ServerStartingEvent event) {
+        NeoForge.EVENT_BUS.addListener((ServerStartingEvent event) -> {
             MinecraftServer server = event.getServer();
             activeWorldId = worldId(server.getWorldPath(LevelResource.ROOT));
             // The save root may be reported as "." by an integrated server.
@@ -34,21 +29,20 @@ public final class WorldRecipeAssignments {
                 activeWorldName = "Current world";
             }
             migrateLegacyRecipes();
-    }
+            ConfigLoader.ensureAutomaticLibraryRecipesForWorld(activeWorldId, activeWorldName);
+        });
         // The first data-pack recipe load happens before SERVER_STARTING, so it
         // cannot yet know the active save target. Reapply once the world target
         // is known; this is the same reload path used by the in-game Save button.
-    private static void onServerStarted(ServerStartedEvent event) {
-        MinecraftServer server = event.getServer();
-        server.execute(() -> {
+        NeoForge.EVENT_BUS.addListener((ServerStartedEvent event) -> event.getServer().execute(() -> {
+            MinecraftServer server = event.getServer();
             ConfigLoader.invalidate();
             server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSuppressedOutput(), "reload");
-        });
-    }
-
-    private static void onServerStopped(ServerStoppedEvent event) {
+        }));
+        NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) -> {
             activeWorldId = "";
             activeWorldName = "";
+        });
     }
 
     public static String activeWorldId() {

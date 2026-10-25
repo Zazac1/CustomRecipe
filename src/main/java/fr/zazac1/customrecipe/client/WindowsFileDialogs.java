@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 
-/** Uses the native Windows chooser in a separate process, never AWT inside the LWJGL minecraft. */
+/** Uses the native Windows chooser in a separate process, never AWT inside the LWJGL client. */
 final class WindowsFileDialogs {
     private static final String FILTER = "Custom Recipe config (*.json)|*.json|All files (*.*)|*.*";
 
@@ -43,7 +43,7 @@ final class WindowsFileDialogs {
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
                 Minecraft.getInstance().execute(() -> failed.accept(e.getMessage()));
             }
-        }, "CustomRecipe-WindowsFileDialog");
+        }, "CustomRecipe-NativeFileDialog");
         dialogThread.setDaemon(true);
         dialogThread.start();
     }

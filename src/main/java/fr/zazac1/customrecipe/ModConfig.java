@@ -13,7 +13,7 @@ public class ModConfig {
     /** Versions that last wrote this configuration or export. */
     public String saved_with_mod_version = "";
     public String saved_with_minecraft_version = "";
-    /** Reusable recipes. This target is intentionally not applied at runtime. */
+    /** Reusable recipes. Only entries marked All Worlds are synchronized to world targets. */
     public WorldRecipeConfig global_library = new WorldRecipeConfig();
 
     /** Full ItemStacks reusable by every recipe target. */
@@ -34,6 +34,12 @@ public class ModConfig {
     public String default_editor_target_id = "global";
     public String default_editor_target_name = "Global Library";
     public boolean preload_recipes_on_startup = true;
+
+    /** Default recipes disabled for every world unless that world explicitly enables them. */
+    public List<String> global_disabled_recipes = new ArrayList<>();
+
+    /** Recipe/material pairs disabled for every world unless locally enabled. */
+    public List<RecipeVariantRule> global_disabled_recipe_variants = new ArrayList<>();
 
     /**
      * Recipe IDs (without namespace) of built-in recipes to disable.

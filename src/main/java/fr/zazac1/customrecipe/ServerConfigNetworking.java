@@ -5,42 +5,36 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.OnDatapackSyncEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
-import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.ShapedRecipe;
-import net.minecraft.world.item.crafting.CraftingInput;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.Style;
-import net.minecraft.network.chat.ClickEvent;
-import net.minecraft.network.chat.HoverEvent;
-import net.minecraft.network.protocol.game.ClientboundUpdateRecipesPacket;
-import net.minecraft.resources.Identifier;
-import net.minecraft.ChatFormatting;
-import net.minecraft.server.permissions.Permissions;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.OnDatapackSyncEvent;
-import net.neoforged.neoforge.event.RegisterCommandsEvent;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
-import net.neoforged.neoforge.event.server.ServerStartedEvent;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.LinkedHashSet;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 import static net.minecraft.commands.Commands.literal;
 import static net.minecraft.commands.Commands.argument;
@@ -51,110 +45,81 @@ public final class ServerConfigNetworking {
     // Chunks are loaded transparently by the client while the list is scrolled.
     private static final int VANILLA_PAGE_SIZE = 40;
     private static final Gson GSON = new Gson();
-    /** Known book entries hidden temporarily by this mod, per connected player. */
-    private static final Map<UUID, Set<Identifier>> HIDDEN_RECIPE_BOOK_ENTRIES = new HashMap<>();
-    /** Players awaiting the filtered recipe catalogue after vanilla's data-pack packet. */
-    private static final Set<UUID> PENDING_RECIPE_CATALOGUES = new LinkedHashSet<>();
+
+    private static final java.util.Set<java.util.UUID> pendingRecipeSync = new java.util.HashSet<>();
 
     public static void initialize() {
-        NeoForge.EVENT_BUS.addListener(ServerConfigNetworking::onPlayerLogin);
-        NeoForge.EVENT_BUS.addListener((ServerStartedEvent event) -> refreshRecipeConflicts(event.getServer()));
-        NeoForge.EVENT_BUS.addListener(ServerConfigNetworking::onDatapackSync);
-        NeoForge.EVENT_BUS.addListener(ServerConfigNetworking::onServerTickPost);
         NeoForge.EVENT_BUS.addListener(ServerConfigNetworking::registerCommands);
-    }
-
-    private static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player && server(player) != null) {
-            awardDefaultRecipes(player, server(player), false);
-            // Queue a post-sync refresh so REI reads the final server recipe
-            // catalogue after the vanilla login packet.
-            PENDING_RECIPE_CATALOGUES.add(player.getUUID());
-        }
-    }
-
-    private static void onDatapackSync(OnDatapackSyncEvent event) {
-        net.minecraft.server.MinecraftServer server = event.getPlayerList().getServer();
-        refreshRecipeConflicts(server);
-        // NeoForge fires this event before Minecraft sends its complete recipe
-        // packet. Queue the filtered replacement for the tick post phase, when
-        // it is guaranteed to arrive after that vanilla packet on the client.
-        event.getRelevantPlayers().forEach(player -> PENDING_RECIPE_CATALOGUES.add(player.getUUID()));
-    }
-
-    private static void onServerTickPost(ServerTickEvent.Post event) {
-        if (PENDING_RECIPE_CATALOGUES.isEmpty()) return;
-        net.minecraft.server.MinecraftServer server = event.getServer();
-        WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
-        Set<UUID> pending = new HashSet<>(PENDING_RECIPE_CATALOGUES);
-        PENDING_RECIPE_CATALOGUES.removeAll(pending);
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (!pending.contains(player.getUUID())) continue;
-            syncVisibleRecipes(player, server);
-            awardDefaultRecipes(player, server, true);
-            // This follows the replacement packet, so REI rebuilds displays
-            // from the same enabled-only client catalogue as the recipe book.
-            ModNetworking.send(player, ModNetworking.Action.REFRESH_REI, "");
-        }
-    }
-
-    /**
-     * Keep disabled recipes in the server manager for the 1.21.1 recipe codec,
-     * while publishing an enabled-only catalogue to clients, including REI.
-     */
-    private static void syncVisibleRecipes(ServerPlayer player, net.minecraft.server.MinecraftServer server) {
-        WorldRecipeConfig config = ConfigLoader.activeWorldConfig();
-        player.connection.send(new ClientboundUpdateRecipesPacket(
-                server.getRecipeManager().getSynchronizedItemProperties(),
-                server.getRecipeManager().getSynchronizedStonecutterRecipes()));
+        NeoForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
+            if (event.getEntity() instanceof ServerPlayer player) pendingRecipeSync.add(player.getUUID());
+        });
+        NeoForge.EVENT_BUS.addListener((ServerStartedEvent event) -> refreshRecipeConflicts(event.getServer()));
+        NeoForge.EVENT_BUS.addListener((ServerStoppedEvent event) -> pendingRecipeSync.clear());
+        // Datapack sync fires before Minecraft sends its catalogue. Wait until
+        // the post tick to refresh the book and optional recipe viewers.
+        NeoForge.EVENT_BUS.addListener((OnDatapackSyncEvent event) -> {
+            refreshRecipeConflicts(event.getPlayerList().getServer());
+            event.getRelevantPlayers().forEach(player -> pendingRecipeSync.add(player.getUUID()));
+        });
+        NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post event) -> {
+            if (pendingRecipeSync.isEmpty()) return;
+            var pending = new java.util.HashSet<>(pendingRecipeSync);
+            pendingRecipeSync.removeAll(pending);
+            for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) {
+                if (pending.contains(player.getUUID())) awardDefaultRecipes(player, event.getServer(), true);
+            }
+            ReiCompat.refreshAfterRecipeReload(event.getServer());
+        });
     }
 
     private static void registerCommands(RegisterCommandsEvent event) {
-        event.getDispatcher().register(literal("customrecipe_item")
-                .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
-                .then(literal("save")
-                        .executes(context -> saveHeldItem(context.getSource(), null, null, false))
-                        .then(argument("name", StringArgumentType.greedyString())
-                                .executes(context -> saveHeldItem(context.getSource(), null,
-                                        StringArgumentType.getString(context, "name"), false))))
-                .then(literal("save_as")
-                        .then(argument("id", StringArgumentType.word())
-                                .executes(context -> saveHeldItem(context.getSource(),
-                                        StringArgumentType.getString(context, "id"), null, true))
-                                .then(argument("name", StringArgumentType.greedyString())
-                                        .executes(context -> saveHeldItem(context.getSource(),
-                                                StringArgumentType.getString(context, "id"),
-                                                StringArgumentType.getString(context, "name"), true)))))
-                .then(literal("give").then(argument("id", StringArgumentType.word())
-                        .executes(context -> giveCustomItem(context.getSource(),
-                                StringArgumentType.getString(context, "id")))))
-                .then(literal("remove").then(argument("id", StringArgumentType.word())
-                        .executes(context -> removeCustomItem(context.getSource(),
-                                StringArgumentType.getString(context, "id")))))
-                .then(literal("list").executes(context -> listCustomItems(context.getSource()))));
+        var dispatcher = event.getDispatcher();
+        var environment = event.getCommandSelection();
+            var permission = new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS);
+            dispatcher.register(literal("customrecipe_item")
+                    .requires(source -> environment != net.minecraft.commands.Commands.CommandSelection.DEDICATED
+                            || source.permissions().hasPermission(permission))
+                    .then(literal("save")
+                            .executes(context -> saveHeldItem(context.getSource(), null, null, false))
+                            .then(argument("name", StringArgumentType.greedyString())
+                                    .executes(context -> saveHeldItem(context.getSource(), null,
+                                            StringArgumentType.getString(context, "name"), false))))
+                    .then(literal("save_as")
+                            .then(argument("id", StringArgumentType.word())
+                                    .executes(context -> saveHeldItem(context.getSource(),
+                                            StringArgumentType.getString(context, "id"), null, true))
+                                    .then(argument("name", StringArgumentType.greedyString())
+                                            .executes(context -> saveHeldItem(context.getSource(),
+                                                    StringArgumentType.getString(context, "id"),
+                                                    StringArgumentType.getString(context, "name"), true)))))
+                    .then(literal("give").then(argument("id", StringArgumentType.word())
+                            .executes(context -> giveCustomItem(context.getSource(),
+                                    StringArgumentType.getString(context, "id")))))
+                    .then(literal("remove").then(argument("id", StringArgumentType.word())
+                            .executes(context -> removeCustomItem(context.getSource(),
+                                    StringArgumentType.getString(context, "id")))))
+                    .then(literal("list").executes(context -> listCustomItems(context.getSource()))));
 
-        // The local editor is opened from the client configuration screen.
-        // Do not expose the server-authoritative command from an integrated
-        // single-player server: its configuration flow is intentionally for
-        // dedicated servers only.
-        net.minecraft.server.MinecraftServer server =
-                net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
-        if (server == null || !server.isDedicatedServer()) return;
-        event.getDispatcher().register(literal("customrecipe_server")
-                .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
-                .executes(context -> openEditor(context.getSource())));
-    }
+            // This is the dedicated-server editor only. Local worlds use the pause-menu editor.
+            if (environment == net.minecraft.commands.Commands.CommandSelection.DEDICATED) {
+                dispatcher.register(literal("customrecipe_server")
+                        .requires(source -> source.permissions().hasPermission(permission))
+                        .executes(context -> openEditor(context.getSource())));
+            }
+        }
 
-    public static void handleSave(ServerPlayer player, String json) {
-            if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)) {
+    public static void handleSave(SaveServerConfigPayload payload, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+            if (!player.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))) {
                 sendSaveResult(player, false, "permission_denied", "You do not have permission to edit server recipes.");
                 return;
             }
-            if (json.length() > MAX_JSON_CHARS) {
+            if (payload.json().length() > MAX_JSON_CHARS) {
                 sendSaveResult(player, false, "too_large", "The submitted configuration is too large.");
                 return;
             }
-            ModConfig config = ConfigLoader.fromJson(json);
+
+            ModConfig config = ConfigLoader.fromJson(payload.json());
             if (config == null) {
                 sendSaveResult(player, false, "invalid_config", "The submitted configuration is invalid.");
                 return;
@@ -163,13 +128,10 @@ public final class ServerConfigNetworking {
             config.editor_world_id = "";
             config.editor_world_name = "";
             WorldRecipeAssignments.migrateLegacyRecipes(config);
-            var minecraftServer = server(player);
-            if (minecraftServer == null) {
-                sendSaveResult(player, false, "validation_failed", "The live server is not available for validation.");
-                return;
-            }
+            // The editor may have changed after its initial preview. Recompute with
+            // the live data-pack recipes before persisting this server configuration.
             try {
-                validateProposedConfig(minecraftServer, config);
+                validateProposedConfig(player.level().getServer(), config);
             } catch (RuntimeException error) {
                 CustomRecipeMod.LOGGER.error("Could not validate a proposed server configuration", error);
                 sendSaveResult(player, false, "validation_failed", "The server could not validate this configuration.");
@@ -180,8 +142,7 @@ public final class ServerConfigNetworking {
                 return;
             }
             try {
-                minecraftServer.getCommands().performPrefixedCommand(
-                        player.createCommandSourceStack().withSuppressedOutput(), "reload");
+                player.level().getServer().getCommands().performPrefixedCommand(player.createCommandSourceStack().withSuppressedOutput(), "reload");
             } catch (RuntimeException error) {
                 CustomRecipeMod.LOGGER.error("Saved the server configuration, but could not reload recipes", error);
                 sendSaveResult(player, false, "reload_failed", "The configuration was saved, but recipes could not be reloaded.");
@@ -190,69 +151,50 @@ public final class ServerConfigNetworking {
             sendSaveResult(player, true, "ok", "Server recipes were saved and the reload was started.");
     }
 
-    public static void handleValidate(ServerPlayer player, String json) {
-            if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)
-                    || json.length() > MAX_JSON_CHARS || server(player) == null) return;
-            ModConfig config = ConfigLoader.fromJson(json);
+    public static void handleValidate(ValidateServerConfigPayload payload, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+            if (!player.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))
+                    || payload.json().length() > MAX_JSON_CHARS) return;
+            ModConfig config = ConfigLoader.fromJson(payload.json());
             if (config == null) return;
-            validateProposedConfig(server(player), config);
-            String validated = ConfigLoader.toJson(config);
-            if (validated.length() <= MAX_JSON_CHARS) ModNetworking.send(player, ModNetworking.Action.VALIDATED_CONFIG, validated);
+
+            validateProposedConfig(player.level().getServer(), config);
+            String json = ConfigLoader.toJson(config);
+            if (json.length() <= MAX_JSON_CHARS) {
+                PacketDistributor.sendToPlayer(player, new ValidatedServerConfigPayload(json));
+            }
     }
 
-    public static void handleVanillaQuery(ServerPlayer player, String json) {
-            if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER) || server(player) == null || json.length() > MAX_JSON_CHARS) return;
-            RecipeQuery query = GSON.fromJson(json, RecipeQuery.class);
+    public static void handleVanillaQuery(VanillaRecipeQueryPayload payload, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+            if (!player.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))) {
+                return;
+            }
+            RecipeQuery query = GSON.fromJson(payload.json(), RecipeQuery.class);
             if (query == null) return;
-            VanillaRecipePage page = findVanillaRecipes(server(player), query);
-            String result = GSON.toJson(page);
-            if (result.length() <= MAX_JSON_CHARS) ModNetworking.send(player, ModNetworking.Action.VANILLA_PAGE, result);
+            VanillaRecipePage page = findVanillaRecipes(player.level().getServer(), query);
+            String json = GSON.toJson(page);
+            if (json.length() <= MAX_JSON_CHARS) {
+                PacketDistributor.sendToPlayer(player, new VanillaRecipePagePayload(json));
+            }
     }
 
-    public static void handleVanillaDetailsQuery(ServerPlayer player, String recipeId) {
-            if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER) || server(player) == null || recipeId.length() > 512) return;
-            VanillaRecipeDetails details = findVanillaRecipeDetails(server(player), recipeId);
-            String result = GSON.toJson(details);
-            if (result.length() <= MAX_JSON_CHARS) ModNetworking.send(player, ModNetworking.Action.VANILLA_DETAILS_PAGE, result);
+    public static void handleVanillaDetailsQuery(VanillaRecipeDetailsQueryPayload payload, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+            if (!player.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))) return;
+            VanillaRecipeDetails details = findVanillaRecipeDetails(player.level().getServer(), payload.recipeId());
+            String json = GSON.toJson(details);
+            if (json.length() <= MAX_JSON_CHARS) {
+                PacketDistributor.sendToPlayer(player, new VanillaRecipeDetailsPayload(json));
+            }
     }
 
     /** Tags are bound only after data-pack reload, so conflict comparison must happen here. */
     private static void refreshRecipeConflicts(net.minecraft.server.MinecraftServer server) {
         ModConfig rootConfig = ConfigLoader.get();
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
-        boolean changed = false;
-        for (CustomRecipeEntry entry : config.custom_recipes) {
-            List<String> conflicts = new ArrayList<>();
-            List<String> sameShape = new ArrayList<>();
-            RecipeHolder<?> customEntry = server.getRecipeManager()
-                    .byKey(recipeKey(entry.serverRecipeId())).orElse(null);
-            if (customEntry != null && customEntry.value() instanceof CraftingRecipe wrappedCustom) {
-                CraftingRecipe custom = unwrap(wrappedCustom);
-                for (RecipeHolder<?> candidate : server.getRecipeManager().getRecipes()) {
-                    Identifier id = candidate.id().identifier();
-                    if (!(candidate.value() instanceof CraftingRecipe wrappedExisting)
-                            || (id.getNamespace().equals(CustomRecipeMod.MOD_ID) && id.getPath().startsWith("custom/"))) {
-                        continue;
-                    }
-                    // The NeoForge recipe manager wraps disabled recipes and
-                    // material-filtered variants. Compare their real shaped /
-                    // shapeless structure, not the wrapper class itself.
-                    CraftingRecipe existing = unwrap(wrappedExisting);
-                    if (sameExactInputs(custom, existing)) {
-                        if (sameOutputItem(custom, existing, server)) conflicts.add(id.toString());
-                        else sameShape.add(id.toString());
-                    }
-                }
-            }
-            addCustomRecipeConflicts(entry, config.custom_recipes, conflicts, sameShape);
-            conflicts.sort(String::compareTo);
-            sameShape.sort(String::compareTo);
-            if (!conflicts.equals(entry.conflicting_recipes) || !sameShape.equals(entry.same_shape_recipes)) {
-                entry.conflicting_recipes = conflicts;
-                entry.same_shape_recipes = sameShape;
-                changed = true;
-            }
-        }
+        boolean changed = RecipeConflictAnalyzer.refresh(config.custom_recipes,
+                server.getRecipeManager().getRecipes(), config.disabled_recipes);
         if (changed) ConfigLoader.saveIntegrityState(rootConfig);
     }
 
@@ -261,175 +203,9 @@ public final class ServerConfigNetworking {
         WorldRecipeConfig targetConfig = ConfigLoader.activeWorldConfig(config);
         for (CustomRecipeEntry entry : targetConfig.custom_recipes) {
             RecipeIntegrity.refresh(entry, config.custom_items);
-            List<String> conflicts = new ArrayList<>();
-            List<String> sameShape = new ArrayList<>();
-            RecipeSignature signature = Boolean.TRUE.equals(entry.corrupted) ? null : signatureOf(entry);
-            if (signature != null) {
-                for (RecipeHolder<?> candidate : server.getRecipeManager().getRecipes()) {
-                    Identifier id = candidate.id().identifier();
-                    if (!(candidate.value() instanceof CraftingRecipe wrapped)
-                            || (id.getNamespace().equals(CustomRecipeMod.MOD_ID) && id.getPath().startsWith("custom/"))) {
-                        continue;
-                    }
-                    CraftingRecipe existing = unwrap(wrapped);
-                    if (!signature.equals(signatureOf(existing))) continue;
-                    if (sameOutputItem(entry, existing, server)) conflicts.add(id.toString());
-                    else sameShape.add(id.toString());
-                }
-                addCustomRecipeConflicts(entry, targetConfig.custom_recipes, conflicts, sameShape);
-            }
-            conflicts.sort(String::compareTo);
-            sameShape.sort(String::compareTo);
-            entry.conflicting_recipes = conflicts;
-            entry.same_shape_recipes = sameShape;
         }
-    }
-
-    /**
-     * Custom recipes can be disabled and therefore absent from RecipeManager.
-     * Compare the saved entries directly so every custom-to-custom collision is visible.
-     */
-    private static void addCustomRecipeConflicts(CustomRecipeEntry entry, List<CustomRecipeEntry> recipes,
-                                                 List<String> conflicts, List<String> sameShape) {
-        RecipeSignature signature = signatureOf(entry);
-        if (signature == null) return;
-        for (CustomRecipeEntry candidate : recipes) {
-            if (candidate == null || candidate == entry || sameRecipeId(entry, candidate)
-                    || Boolean.TRUE.equals(candidate.corrupted)
-                    || !WorldRecipeAssignments.isRecipeActive(candidate)
-                    || !signature.equals(signatureOf(candidate))) continue;
-            if (sameOutputItem(entry, candidate)) conflicts.add(candidate.serverRecipeId().toString());
-            else sameShape.add(candidate.serverRecipeId().toString());
-        }
-    }
-
-    /** Output count is intentionally ignored: the recipe-book ambiguity remains. */
-    private static boolean sameOutputItem(CustomRecipeEntry first, CustomRecipeEntry second) {
-        return first.result != null && first.result.equals(second.result);
-    }
-
-    private static boolean sameRecipeId(CustomRecipeEntry first, CustomRecipeEntry second) {
-        return first.id != null && !first.id.isBlank() && first.id.equals(second.id);
-    }
-
-    private static boolean sameOutputItem(CustomRecipeEntry entry, CraftingRecipe candidate,
-                                          net.minecraft.server.MinecraftServer server) {
-        Identifier resultId = Identifier.tryParse(entry.result);
-        if (resultId == null) return false;
-        try {
-            ItemStack result = candidate.assemble(CraftingInput.EMPTY, server.registryAccess());
-            return !result.isEmpty() && resultId.equals(BuiltInRegistries.ITEM.getKey(result.getItem()));
-        } catch (RuntimeException ignored) {
-            return false;
-        }
-    }
-
-    private static RecipeSignature signatureOf(CustomRecipeEntry entry) {
-        if ("shaped".equalsIgnoreCase(entry.type)) {
-            if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
-            int width = entry.pattern.stream().mapToInt(String::length).max().orElse(0);
-            List<String> slots = new ArrayList<>();
-            for (String row : entry.pattern) {
-                for (int column = 0; column < width; column++) {
-                    char symbol = column < row.length() ? row.charAt(column) : ' ';
-                    String item = symbol == ' ' ? "" : entry.keys.get(String.valueOf(symbol));
-                    if (symbol != ' ' && (item == null || item.isBlank())) return null;
-                    slots.add(item == null ? "" : item.trim());
-                }
-            }
-            return trimSignature(true, width, entry.pattern.size(), slots);
-        }
-        if (entry.ingredients == null || entry.ingredients.isEmpty()) return null;
-        List<String> ingredients = new ArrayList<>();
-        for (String item : entry.ingredients) {
-            if (item == null || item.isBlank()) return null;
-            ingredients.add(item.trim());
-        }
-        ingredients.sort(String::compareTo);
-        return new RecipeSignature(false, ingredients.size(), 1, ingredients);
-    }
-
-    private static RecipeSignature signatureOf(CraftingRecipe recipe) {
-        if (recipe instanceof ShapedRecipe shaped) {
-            List<String> slots = new ArrayList<>();
-            for (java.util.Optional<Ingredient> ingredient : shaped.getIngredients()) {
-                slots.add(ingredient.map(ServerConfigNetworking::ingredientSignature).orElse(""));
-            }
-            return trimSignature(true, shaped.getWidth(), shaped.getHeight(), slots);
-        }
-        List<String> ingredients = recipe.placementInfo().ingredients().stream()
-                .map(ServerConfigNetworking::ingredientSignature).sorted().toList();
-        return new RecipeSignature(false, ingredients.size(), 1, ingredients);
-    }
-
-    private static RecipeSignature trimSignature(boolean shaped, int sourceWidth, int sourceHeight, List<String> slots) {
-        int left = sourceWidth, right = -1, top = sourceHeight, bottom = -1;
-        for (int row = 0; row < sourceHeight; row++) {
-            for (int column = 0; column < sourceWidth; column++) {
-                if (slots.get(row * sourceWidth + column).isBlank()) continue;
-                left = Math.min(left, column);
-                right = Math.max(right, column);
-                top = Math.min(top, row);
-                bottom = Math.max(bottom, row);
-            }
-        }
-        if (right < left || bottom < top) return null;
-        List<String> trimmed = new ArrayList<>();
-        for (int row = top; row <= bottom; row++) {
-            for (int column = left; column <= right; column++) {
-                trimmed.add(slots.get(row * sourceWidth + column));
-            }
-        }
-        return new RecipeSignature(shaped, right - left + 1, bottom - top + 1, trimmed);
-    }
-
-    private record RecipeSignature(boolean shaped, int width, int height, List<String> ingredients) {}
-
-    private static boolean sameExactInputs(CraftingRecipe first, CraftingRecipe second) {
-        boolean firstShaped = first instanceof ShapedRecipe;
-        boolean secondShaped = second instanceof ShapedRecipe;
-        if (firstShaped != secondShaped) return false;
-        if (firstShaped) {
-            ShapedRecipe a = (ShapedRecipe) first;
-            ShapedRecipe b = (ShapedRecipe) second;
-            if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) return false;
-            List<java.util.Optional<Ingredient>> ingredientsA = a.getIngredients();
-            List<java.util.Optional<Ingredient>> ingredientsB = b.getIngredients();
-            if (ingredientsA.size() != ingredientsB.size()) return false;
-            for (int i = 0; i < ingredientsA.size(); i++) {
-                if (!ingredientsA.get(i).map(ServerConfigNetworking::ingredientSignature).orElse("")
-                        .equals(ingredientsB.get(i).map(ServerConfigNetworking::ingredientSignature).orElse(""))) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        List<String> firstIngredients = first.placementInfo().ingredients().stream()
-                .map(ServerConfigNetworking::ingredientSignature).sorted().toList();
-        List<String> secondIngredients = second.placementInfo().ingredients().stream()
-                .map(ServerConfigNetworking::ingredientSignature).sorted().toList();
-        return firstIngredients.equals(secondIngredients);
-    }
-
-    /** The output count may differ; a different output item is safe for the recipe book. */
-    private static boolean sameOutputItem(CraftingRecipe first, CraftingRecipe second,
-                                          net.minecraft.server.MinecraftServer server) {
-        try {
-            ItemStack firstResult = first.assemble(CraftingInput.EMPTY, server.registryAccess());
-            ItemStack secondResult = second.assemble(CraftingInput.EMPTY, server.registryAccess());
-            return !firstResult.isEmpty() && !secondResult.isEmpty()
-                    && firstResult.getItem() == secondResult.getItem();
-        } catch (RuntimeException ignored) {
-            return false;
-        }
-    }
-
-    private static String ingredientSignature(Ingredient ingredient) {
-        return ingredient.items().map(net.minecraft.core.Holder::value).map(ItemStack::new)
-                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
-                .sorted()
-                .collect(java.util.stream.Collectors.joining(","));
+        RecipeConflictAnalyzer.refresh(targetConfig.custom_recipes,
+                server.getRecipeManager().getRecipes(), targetConfig.disabled_recipes);
     }
 
     /** Quietly adds enabled defaults to the recipe book without recipe toasts. */
@@ -442,20 +218,19 @@ public final class ServerConfigNetworking {
                     || Boolean.TRUE.equals(entry.corrupted)) {
                 continue;
             }
-            server.getRecipeManager().byKey(recipeKey(entry.serverRecipeId()))
+            server.getRecipeManager().byKey(ResourceKey.create(Registries.RECIPE, entry.serverRecipeId()))
                     .ifPresent(recipes::add);
         }
         for (String builtinId : config.known_by_default_builtin) {
-            if (!config.builtin_recipes_initialized) continue;
             if (builtinId == null || config.disabled_builtin.contains(builtinId)) continue;
             Identifier id = Identifier.tryParse(CustomRecipeMod.MOD_ID + ":" + builtinId);
             if (id == null) continue;
-            server.getRecipeManager().byKey(recipeKey(id))
+            server.getRecipeManager().byKey(ResourceKey.create(Registries.RECIPE, id))
                     .ifPresent(recipes::add);
         }
 
+        boolean changed = false;
         var book = player.getRecipeBook();
-        boolean changed = syncDisabledRecipeBookEntries(player, server, config);
         for (RecipeHolder<?> recipe : recipes) {
             if (!book.contains(recipe.id())) {
                 book.add(recipe.id());
@@ -467,57 +242,9 @@ public final class ServerConfigNetworking {
         if (changed || refreshBook) book.sendInitialRecipeBook(player);
     }
 
-    /**
-     * Crafting recipes remain in RecipeManager so Minecraft's 1.21.1 recipe
-     * codec can synchronize them, but they must not stay selectable in the
-     * green recipe book. Variant rules hide the whole recipe too: the vanilla
-     * book cannot represent a recipe with one material excluded.
-     */
-    private static boolean syncDisabledRecipeBookEntries(ServerPlayer player, net.minecraft.server.MinecraftServer server,
-                                                         WorldRecipeConfig config) {
-        Set<Identifier> blockedIds = new HashSet<>();
-        for (String rawId : config.disabled_recipes) {
-            Identifier id = Identifier.tryParse(rawId);
-            if (id != null) blockedIds.add(id);
-        }
-        for (RecipeVariantRule rule : config.disabled_recipe_variants) {
-            if (rule == null) continue;
-            Identifier id = Identifier.tryParse(rule.recipe_id);
-            if (id != null) blockedIds.add(id);
-        }
-
-        var book = player.getRecipeBook();
-        Set<Identifier> previouslyHidden = HIDDEN_RECIPE_BOOK_ENTRIES
-                .computeIfAbsent(player.getUUID(), ignored -> new HashSet<>());
-        boolean changed = false;
-
-        // Restore only recipes that were known before Custom Recipe hid them.
-        for (Identifier id : new HashSet<>(previouslyHidden)) {
-            if (blockedIds.contains(id)) continue;
-            server.getRecipeManager().byKey(recipeKey(id)).ifPresent(recipe -> book.add(recipe.id()));
-            previouslyHidden.remove(id);
-            changed = true;
-        }
-
-        List<RecipeHolder<?>> toHide = new ArrayList<>();
-        for (Identifier id : blockedIds) {
-            server.getRecipeManager().byKey(recipeKey(id)).ifPresent(recipe -> {
-                if (book.contains(recipe.id())) {
-                    toHide.add(recipe);
-                    previouslyHidden.add(id);
-                }
-            });
-        }
-        if (!toHide.isEmpty()) {
-            book.removeRecipes(toHide, player);
-            changed = true;
-        }
-        return changed;
-    }
-
     private static int openEditor(CommandSourceStack source) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
-        if (!ModNetworking.canSend(player)) {
+        if (!player.connection.hasChannel(ServerConfigPayload.ID)) {
             source.sendFailure(Component.translatable("customrecipe.chat.client_mod_required"));
             return 0;
         }
@@ -578,7 +305,7 @@ public final class ServerConfigNetworking {
             return 0;
         }
         ServerPlayer player = source.getPlayerOrException();
-        if (!player.getInventory().add(stack.copy())) player.drop(stack.copy(), false);
+        if (!player.addItem(stack.copy())) player.drop(stack.copy(), false, net.minecraft.util.Prediction.SERVER_ONLY);
         source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.given", entry.name), false);
         return Command.SINGLE_SUCCESS;
     }
@@ -611,8 +338,8 @@ public final class ServerConfigNetworking {
     }
 
     private static void sendEditor(ServerPlayer player) {
-        if (!player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)
-                || !ModNetworking.canSend(player)) return;
+        if (!player.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))
+                || !player.connection.hasChannel(ServerConfigPayload.ID)) return;
         // The config can have changed through the local editor since the last reload.
         ConfigLoader.invalidate();
         ModConfig config = ConfigLoader.get();
@@ -625,20 +352,7 @@ public final class ServerConfigNetworking {
             player.sendSystemMessage(Component.translatable("customrecipe.chat.server_send_too_large"));
             return;
         }
-        ModNetworking.send(player, ModNetworking.Action.SERVER_CONFIG, json);
-    }
-
-    /**
-     * Builds the same authoritative catalogue used by a C2S query.  The local
-     * configuration UI calls this through the integrated server's task queue;
-     * that avoids relying on the early client resource-pack view.
-     */
-    public static VanillaRecipePage findVanillaRecipes(net.minecraft.server.MinecraftServer server,
-                                                       String query, boolean matchIngredients, boolean matchOutput,
-                                                       String statusFilter, String sourceFilter,
-                                                       List<String> disabledRecipeIds, int page) {
-        return findVanillaRecipes(server, new RecipeQuery(query, matchIngredients, matchOutput,
-                statusFilter, sourceFilter, disabledRecipeIds, page));
+        PacketDistributor.sendToPlayer(player, new ServerConfigPayload(json));
     }
 
     private static VanillaRecipePage findVanillaRecipes(net.minecraft.server.MinecraftServer server, RecipeQuery request) {
@@ -660,7 +374,7 @@ public final class ServerConfigNetworking {
             // Special recipes (for example decorated pots) require a real grid and throw on EMPTY.
             ItemStack result = ItemStack.EMPTY;
             try {
-                result = recipe.assemble(CraftingInput.EMPTY, server.registryAccess());
+                result = recipe.assemble(CraftingInput.EMPTY);
             } catch (RuntimeException ignored) {
                 // Their recipe ID remains searchable and they can still be disabled.
             }
@@ -671,25 +385,27 @@ public final class ServerConfigNetworking {
             int gridHeight = 0;
             boolean shapeless = !(recipe instanceof ShapedRecipe);
             List<String> ingredients = new ArrayList<>();
+            List<Ingredient> ingredientMatchers = new ArrayList<>();
             if (recipe instanceof ShapedRecipe shaped) {
                 // getIngredients includes blank cells and preserves the declared pattern.
                 gridWidth = shaped.getWidth();
                 gridHeight = shaped.getHeight();
                 for (var ingredient : shaped.getIngredients()) {
-                    ingredients.add(ingredient.map(ServerConfigNetworking::firstMatchingId).orElse(""));
+                    Ingredient value = ingredient.orElse(null);
+                    ingredients.add(value == null ? "" : firstMatchingId(value));
+                    if (value != null) ingredientMatchers.add(value);
                 }
             } else {
                 // Shapeless recipes deliberately keep the JSON ingredient order.
                 for (Ingredient ingredient : recipe.placementInfo().ingredients()) {
                     ingredients.add(firstMatchingId(ingredient));
+                    ingredientMatchers.add(ingredient);
                 }
             }
 
-            boolean outputMatch = request.matchOutput() && resultId.contains(query);
-            // Recipe IDs generally describe their output.  They must therefore
-            // follow the same Output toggle as the visible result item.
-            boolean recipeIdMatch = request.matchOutput() && recipeId.toString().contains(query);
-            boolean ingredientMatch = request.matchIngredients() && ingredients.stream().anyMatch(id -> id.contains(query));
+            boolean outputMatch = request.matchOutput() && itemMatchesQuery(resultId, query);
+            boolean ingredientMatch = request.matchIngredients() && ingredientMatchers.stream()
+                    .anyMatch(ingredient -> ingredientMatchesQuery(ingredient, query));
             boolean disabled = disabledRecipeIds.contains(recipeId.toString());
             boolean statusMatch = switch (statusFilter) {
                 case "ENABLED" -> !disabled && !special;
@@ -702,7 +418,8 @@ public final class ServerConfigNetworking {
                 case "VANILLA" -> recipeId.getNamespace().equals("minecraft");
                 default -> true;
             };
-            if (statusMatch && sourceMatch && (query.isEmpty() || recipeIdMatch || outputMatch || ingredientMatch)) {
+            if (statusMatch && sourceMatch && (query.isEmpty() || recipeId.toString().toLowerCase(Locale.ROOT).contains(query)
+                    || outputMatch || ingredientMatch)) {
                 matches.add(new VanillaRecipePage.VanillaRecipeInfo(
                         entry.id().identifier().toString(), resultId,
                         toPreviewSlots(ingredients, gridWidth, gridHeight, shapeless),
@@ -719,18 +436,28 @@ public final class ServerConfigNetworking {
     }
 
     private static String firstMatchingId(Ingredient ingredient) {
-        return ingredient.items().map(net.minecraft.core.Holder::value).map(ItemStack::new)
-                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
+        return ingredient.items()
+                .map(item -> BuiltInRegistries.ITEM.getKey(item.value()).toString())
                 .findFirst()
                 .orElse("");
     }
 
-    /** Returns details from the server-owned recipe manager for both local and remote editors. */
-    public static VanillaRecipeDetails findVanillaRecipeDetails(net.minecraft.server.MinecraftServer server, String rawId) {
-        var identifier = net.minecraft.resources.Identifier.tryParse(rawId);
+    private static boolean itemMatchesQuery(String itemId, String query) {
+        var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(itemId));
+        String name = item == null ? "" : new ItemStack(item).getHoverName().getString().toLowerCase(Locale.ROOT);
+        return itemId.toLowerCase(Locale.ROOT).contains(query) || name.contains(query);
+    }
+
+    private static boolean ingredientMatchesQuery(Ingredient ingredient, String query) {
+        return ingredient.items().anyMatch(entry -> itemMatchesQuery(
+                BuiltInRegistries.ITEM.getKey(entry.value()).toString(), query));
+    }
+
+    private static VanillaRecipeDetails findVanillaRecipeDetails(net.minecraft.server.MinecraftServer server, String rawId) {
+        var identifier = Identifier.tryParse(rawId);
         if (identifier == null) return new VanillaRecipeDetails(rawId, List.of());
-        var id = identifier;
-        RecipeHolder<?> entry = server.getRecipeManager().byKey(recipeKey(id)).orElse(null);
+        var id = ResourceKey.create(Registries.RECIPE, identifier);
+        RecipeHolder<?> entry = server.getRecipeManager().byKey(id).orElse(null);
         if (entry == null || !(entry.value() instanceof CraftingRecipe wrappedRecipe)) return new VanillaRecipeDetails(rawId, List.of());
         CraftingRecipe recipe = unwrap(wrappedRecipe);
         List<List<String>> choices = new ArrayList<>(java.util.Collections.nCopies(9, List.of()));
@@ -745,7 +472,7 @@ public final class ServerConfigNetworking {
                 for (int column = 0; column < gridWidth && column < 3; column++) {
                     int source = row * gridWidth + column;
                     choices.set(row * 3 + column, source < ingredients.size()
-                            ? ingredients.get(source).map(ServerConfigNetworking::ingredientChoices).orElse(List.of()) : List.of());
+                            ? ingredientChoices(ingredients.get(source).orElse(null)) : List.of());
                 }
             }
         } else {
@@ -778,15 +505,7 @@ public final class ServerConfigNetworking {
 
     private static List<String> ingredientChoices(Ingredient ingredient) {
         if (ingredient == null) return List.of();
-        return ingredient.items().map(net.minecraft.core.Holder::value).map(ItemStack::new).map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()).sorted().toList();
-    }
-
-    private static ResourceKey<Recipe<?>> recipeKey(Identifier id) {
-        return ResourceKey.create(Registries.RECIPE, id);
-    }
-
-    private static net.minecraft.server.MinecraftServer server(ServerPlayer player) {
-        return net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
+        return ingredient.items().map(item -> BuiltInRegistries.ITEM.getKey(item.value()).toString()).sorted().toList();
     }
 
     /** Always send a final 3x3 layout so no client-side axis interpretation is needed. */
@@ -806,8 +525,8 @@ public final class ServerConfigNetworking {
     }
 
     private static void sendSaveResult(ServerPlayer player, boolean saved, String code, String message) {
-        ModNetworking.send(player, ModNetworking.Action.SAVE_RESULT,
-                GSON.toJson(new SaveResult(saved, code, message)));
+        PacketDistributor.sendToPlayer(player, new ServerConfigSaveResultPayload(
+                GSON.toJson(new SaveResult(saved, code, message))));
     }
 
     private record SaveResult(boolean saved, String code, String message) {}

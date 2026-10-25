@@ -1,0 +1,122 @@
+[
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "shapeless: unordered ingredients and output count"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "shapeless: insufficient ingredients rejected"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "shaped: shifted mirrored pattern and counts"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "shaped: incorrect pattern rejected"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "normal craft: exact consumption and cursor result"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "shift craft: repeats without duplication or underconsumption"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "stale output: insufficient counted ingredients cannot be taken"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "components: damaged named ingredient and named output"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "components: plain or differently damaged item rejected"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "recipe book: exact components and quantities autofill"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "recipe book: maximum placement and shift crafting counted stacks"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "vanilla priority preserved"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "disabled vanilla recipe permits intentional custom replacement"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "material variant: oak chest blocked, spruce chest allowed"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "world override re-enables globally disabled torch"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "disabled and corrupted custom recipes excluded"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "world isolation and automatic library copies"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "known by default unlocked after join/reload"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "full and library export/import preserve content"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "custom stack codec preserves components and damage"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "server save: non-operator rejected without writing"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "server save: invalid JSON rejected without writing"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "server save: oversized config rejected without writing"
+  },
+  {
+    "status": "PASS",
+    "details": "",
+    "test": "server save: write failure preserves previous file"
+  }
+]

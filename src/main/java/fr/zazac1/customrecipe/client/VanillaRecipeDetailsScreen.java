@@ -2,15 +2,15 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.VanillaRecipePage;
 import fr.zazac1.customrecipe.VanillaRecipeDetails;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 import java.util.List;
 
@@ -31,15 +31,16 @@ public final class VanillaRecipeDetailsScreen extends Screen {
 
     @Override
     public void onClose() {
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 
     @Override
     protected void init() {
         ConfigScreen config = parent.configScreen();
-        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, config.target(), config.targetLabel()));
+        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, config.target(),
+                config.target().isWorld() ? config.target().displayName() : "Global Library"));
         if (details == null) parent.requestDetails(this, recipe.id());
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.gui.setScreen(parent))
                 .bounds(width / 2 - 50, height - 28, 100, 20).build());
 
         if (details != null) {
@@ -50,7 +51,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
                 int buttonY = 44 + (index / VARIANT_COLUMNS) * VARIANT_CELL;
                 Button button = addRenderableWidget(Button.builder(Component.empty(), b -> {
                     selectedVariant = variant;
-                    clearWidgets(); init();
+                    rebuildWidgets();
                 }).bounds(buttonX, buttonY, 20, 20).build());
                 button.setTooltip(Tooltip.create(Component.literal(itemName(variant.materialId()))));
             }
@@ -61,7 +62,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
                 addRenderableWidget(Button.builder(blocked ? Component.translatable("customrecipe.details.variant_disabled").withColor(0xFF5555)
                                 : Component.translatable("customrecipe.details.disable_variant").withColor(0xFF5555), b -> {
                             parent.toggleVariant(recipe.id(), material);
-                            clearWidgets(); init();
+                            rebuildWidgets();
                         }).bounds(x, actionsY, 142, 20).build());
             }
         }
@@ -70,7 +71,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
             addRenderableWidget(Button.builder(allDisabled ? Component.translatable("customrecipe.details.variants_disabled").withColor(0xFF5555)
                             : Component.translatable("customrecipe.details.disable_variants").withColor(0xFF5555), b -> {
                         parent.toggleAllVariants(recipe.id());
-                        clearWidgets(); init();
+                        rebuildWidgets();
                     }).bounds(variantGridX(), variantActionsY() + 24, 142, 20).build());
         }
     }
@@ -79,23 +80,18 @@ public final class VanillaRecipeDetailsScreen extends Screen {
         if (!recipe.id().equals(details.recipeId())) return;
         this.details = details;
         if (!details.variants().isEmpty() && selectedVariant == null) selectedVariant = details.variants().getFirst();
-        clearWidgets(); init();
+        rebuildWidgets();
     }
 
     @Override
-    public void renderBackground(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        super.renderBackground(ctx, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
         ctx.fillGradient(0, 0, width, height, 0xD0101010, 0xE0101010);
-    }
-
-    @Override
-    public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        super.render(ctx, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
 
         int left = width / 2 - 86;
         int top = height / 2 - 74;
-        ctx.drawCenteredString(font, Component.translatable("customrecipe.details.title"), width / 2, top - 30, 0xFFFFFFFF);
-        ctx.drawCenteredString(font, Component.literal(recipe.id()), width / 2, top - 16, 0xFFAAAAAA);
+        ctx.centeredText(font, Component.translatable("customrecipe.details.title"), width / 2, top - 30, 0xFFFFFFFF);
+        ctx.centeredText(font, Component.literal(recipe.id()), width / 2, top - 16, 0xFFAAAAAA);
 
         for (int slot = 0; slot < 9; slot++) {
             int column = slot % 3;
@@ -108,14 +104,14 @@ public final class VanillaRecipeDetailsScreen extends Screen {
                 drawItem(ctx, slots.get(slot), x + 2, y + 2);
             }
         }
-        ctx.drawString(font, "->", left + 82, top + 27, 0xFFFFFFFF);
+        ctx.text(font, "->", left + 82, top + 27, 0xFFFFFFFF, true);
         ctx.fill(left + 108, top + 24, left + 132, top + 48, 0xFF303030);
         drawItem(ctx, recipe.result(), left + 112, top + 28);
-        ctx.drawCenteredString(font, Component.literal(itemName(recipe.result())), width / 2, top + 82, 0xFFFFFFFF);
+        ctx.centeredText(font, Component.literal(itemName(recipe.result())), width / 2, top + 82, 0xFFFFFFFF);
         String layout = recipe.shapeless() ? "Shapeless: JSON ingredient order" : "Shaped: " + recipe.gridWidth() + "x" + recipe.gridHeight() + " pattern";
-        ctx.drawCenteredString(font, Component.literal(layout), width / 2, top + 98, 0xFFAAAAAA);
+        ctx.centeredText(font, Component.literal(layout), width / 2, top + 98, 0xFFAAAAAA);
         if (details != null && !details.variants().isEmpty()) {
-            ctx.drawString(font, "Material variants", variantGridX(), 26, 0xFFFFFFFF);
+            ctx.text(font, "Material variants", variantGridX(), 26, 0xFFFFFFFF, true);
             for (int index = 0; index < details.variants().size() && index < 48; index++) {
                 VanillaRecipeDetails.VariantPreview variant = details.variants().get(index);
                 int x = variantGridX() + (index % VARIANT_COLUMNS) * VARIANT_CELL;
@@ -133,19 +129,19 @@ public final class VanillaRecipeDetailsScreen extends Screen {
                 drawItem(ctx, variant.materialId(), x + 2, y + 2);
             }
         } else if (details != null) {
-            ctx.drawString(font, "No interchangeable material", width - 180, 26, 0xFFAAAAAA);
+            ctx.text(font, "No interchangeable material", width - 180, 26, 0xFFAAAAAA, true);
         }
     }
 
-    private void drawItem(GuiGraphics ctx, String id, int x, int y) {
+    private void drawItem(GuiGraphicsExtractor ctx, String id, int x, int y) {
         if (id == null || id.isBlank() || id.startsWith("#")) return;
         var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(id));
-        if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, y);
+        if (item != null && item != Items.AIR) ctx.item(ClientItemStacks.fromItem(item), x, y);
     }
 
     private String itemName(String id) {
         var item = BuiltInRegistries.ITEM.getValue(Identifier.tryParse(id));
-        return item == null || item == Items.AIR ? id : new ItemStack(item).getHoverName().getString();
+        return item == null || item == Items.AIR ? id : ClientItemStacks.fromItem(item).getHoverName().getString();
     }
 
     private int variantGridX() { return width - 150; }
@@ -156,7 +152,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
         return 44 + rows * VARIANT_CELL + 6;
     }
 
-    private void drawBorder(GuiGraphics ctx, int x, int y, int color, boolean selected) {
+    private void drawBorder(GuiGraphicsExtractor ctx, int x, int y, int color, boolean selected) {
         int thickness = selected ? 2 : 1;
         ctx.fill(x - thickness, y - thickness, x + 20 + thickness, y, color);
         ctx.fill(x - thickness, y + 20, x + 20 + thickness, y + 20 + thickness, color);
@@ -165,7 +161,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
     }
 
     /** Selection is white only; red/green always means the saved server state. */
-    private void drawSelectionCorners(GuiGraphics ctx, int x, int y) {
+    private void drawSelectionCorners(GuiGraphicsExtractor ctx, int x, int y) {
         int color = 0xFFFFFFFF;
         ctx.fill(x - 3, y - 3, x + 5, y - 1, color);
         ctx.fill(x - 3, y - 3, x - 1, y + 5, color);

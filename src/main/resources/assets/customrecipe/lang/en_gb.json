@@ -6,7 +6,9 @@
   "customrecipe.home.library": "Library",
   "customrecipe.home.create": "Create Recipes",
   "customrecipe.home.vanilla": "Default Recipes",
-  "customrecipe.home.vanilla.tooltip": "Select a world to access its default recipes.",
+  "customrecipe.home.vanilla.tooltip": "Configure default recipes globally or for the selected world.",
+  "customrecipe.home.vanilla.global_tooltip": "Disable recipes by default in every world. A world can explicitly re-enable them.",
+  "customrecipe.home.vanilla.world_tooltip": "Configure this world only. Recipes disabled globally can be re-enabled here.",
   "customrecipe.home.current_world_locked": "The current world is locked when opened from the pause menu.",
   "customrecipe.button.back": "Back",
   "customrecipe.button.cancel": "Cancel",
@@ -37,6 +39,7 @@
   "customrecipe.state.enabled": "Enabled",
   "customrecipe.state.disabled": "Disabled",
   "customrecipe.state.library": "Library",
+  "customrecipe.state.all_worlds": "All Worlds",
   "customrecipe.state.corrupted": "Corrupted",
   "customrecipe.screen.my_recipes": "My Recipes",
   "customrecipe.screen.global_library": "Global Library",
@@ -122,7 +125,7 @@
   ,"customrecipe.builder.result_count": "Result ×:"
   ,"customrecipe.builder.ingredient_count": "Ingredient ×:"
   ,"customrecipe.builder.save": "Save"
-  ,"customrecipe.chat.world_tip": "You can manage this world's custom recipes from the pause menu (Esc), by clicking %s, or through Custom Recipe's settings in the Mods menu."
+  ,"customrecipe.chat.world_tip": "You can manage this world's custom recipes from the pause menu (Esc), by clicking %s, or through the NeoForge Mods menu."
   ,"customrecipe.chat.world_tip.link": "Custom Recipe"
   ,"customrecipe.chat.world_tip.hover": "Open the Custom Recipe editor"
   ,"customrecipe.screen.built_in": "Built-in Recipes"

@@ -1,7 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomItemEntry;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -42,7 +42,7 @@ final class RenameCustomItemScreen extends Screen {
         idField.setResponder(value -> updateSaveState());
 
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.cancel"),
-                button -> minecraft.setScreen(parent)).bounds(width / 2 + 4, panelY + 116, 100, 20).build());
+                button -> minecraft.gui.setScreen(parent)).bounds(width / 2 + 4, panelY + 116, 100, 20).build());
         setFocused(nameField);
         nameField.setFocused(true);
     }
@@ -53,17 +53,17 @@ final class RenameCustomItemScreen extends Screen {
 
     private void save() {
         String name = nameField.getValue().strip();
-        if (parent.rename(entry, name, idField.getValue())) minecraft.setScreen(parent);
+        if (parent.rename(entry, name, idField.getValue())) minecraft.gui.setScreen(parent);
     }
 
     @Override
     public void onClose() {
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        parent.render(context, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        parent.extractRenderState(context, mouseX, mouseY, delta);
         context.fill(0, 0, width, height, 0x98000000);
 
         int panelWidth = Math.min(360, width - 32);
@@ -72,21 +72,21 @@ final class RenameCustomItemScreen extends Screen {
         int panelY = height / 2 - panelHeight / 2;
         context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF0181B1E);
         drawBorder(context, panelX, panelY, panelWidth, panelHeight, 0xFF6E7678);
-        super.render(context, mouseX, mouseY, delta);
+        super.extractRenderState(context, mouseX, mouseY, delta);
 
-        context.drawCenteredString(font, title, width / 2, panelY + 11, 0xFFFFFFFF);
-        context.drawString(font, Component.translatable("customrecipe.custom_items.name"), panelX + 16, panelY + 27, 0xFFCCCCCC);
-        context.drawString(font, Component.translatable("customrecipe.custom_items.id"), panelX + 16, panelY + 66, 0xFFCCCCCC);
+        context.centeredText(font, title, width / 2, panelY + 11, 0xFFFFFFFF);
+        context.text(font, Component.translatable("customrecipe.custom_items.name"), panelX + 16, panelY + 27, 0xFFCCCCCC, true);
+        context.text(font, Component.translatable("customrecipe.custom_items.id"), panelX + 16, panelY + 66, 0xFFCCCCCC, true);
         if (!idField.getValue().isBlank() && !parent.canUseId(entry, idField.getValue())) {
-            context.drawCenteredString(font, Component.translatable("customrecipe.custom_items.id_invalid"), width / 2, panelY + 101, 0xFFFF7777);
+            context.centeredText(font, Component.translatable("customrecipe.custom_items.id_invalid"), width / 2, panelY + 101, 0xFFFF7777);
         }
     }
 
-    private void drawBorder(GuiGraphics context, int x, int y, int width, int height, int color) {
-        context.fill(x, y, x + width, y + 1, color);
-        context.fill(x, y + height - 1, x + width, y + height, color);
-        context.fill(x, y, x + 1, y + height, color);
-        context.fill(x + width - 1, y, x + width, y + height, color);
+    private void drawBorder(GuiGraphicsExtractor context, int x, int y, int width, int height, int color) {
+        context.horizontalLine(x, x + width - 1, y, color);
+        context.horizontalLine(x, x + width - 1, y + height - 1, color);
+        context.verticalLine(x, y, y + height - 1, color);
+        context.verticalLine(x + width - 1, y, y + height - 1, color);
     }
 
     @Override

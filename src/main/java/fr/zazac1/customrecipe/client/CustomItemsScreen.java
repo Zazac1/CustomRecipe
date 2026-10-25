@@ -2,7 +2,7 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.CustomItemLibrary;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -37,7 +37,7 @@ final class CustomItemsScreen extends Screen {
             int giveX = deleteX - 60;
             int renameX = giveX - 84;
             addRenderableWidget(Button.builder(Component.translatable("customrecipe.custom_items.rename"),
-                    button -> minecraft.setScreen(new RenameCustomItemScreen(this, entry)))
+                    button -> minecraft.gui.setScreen(new RenameCustomItemScreen(this, entry)))
                     .bounds(renameX, rowY + 3, 80, 20).build());
             Button give = Button.builder(Component.translatable("customrecipe.custom_items.give"),
                     button -> give(entry)).bounds(giveX, rowY + 3, 56, 20).build();
@@ -55,11 +55,11 @@ final class CustomItemsScreen extends Screen {
         next.active = (page + 1) * pageSize < items.size();
         addRenderableWidget(next);
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"),
-                button -> minecraft.setScreen(parent)).bounds(width / 2 - 80, height - 25, 160, 20).build());
+                button -> minecraft.gui.setScreen(parent)).bounds(width / 2 - 80, height - 25, 160, 20).build());
     }
 
     private void give(CustomItemEntry entry) {
-        if (minecraft.level != null && minecraft.getConnection() != null && ClientServerConfigNetworking.canManageServer()) {
+        if (minecraft.level != null && ClientServerConfigNetworking.canManageServer()) {
             minecraft.getConnection().sendCommand("customrecipe_item give " + entry.id);
         }
     }
@@ -80,7 +80,7 @@ final class CustomItemsScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         context.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
         int rowWidth = rowWidth();
         int x = rowX();
@@ -93,25 +93,25 @@ final class CustomItemsScreen extends Screen {
             int rowY = top + (i - start) * 28;
             context.fill(x, rowY, x + rowWidth, rowY + 26, 0xAA202630);
         }
-        super.render(context, mouseX, mouseY, delta);
-        context.drawCenteredString(font, title, width / 2, 18, 0xFFFFFFFF);
-        context.drawCenteredString(font, Component.translatable("customrecipe.custom_items.command_hint"), width / 2, 33, 0xFFAAAAAA);
+        super.extractRenderState(context, mouseX, mouseY, delta);
+        context.centeredText(font, title, width / 2, 18, 0xFFFFFFFF);
+        context.centeredText(font, Component.translatable("customrecipe.custom_items.command_hint"), width / 2, 33, 0xFFAAAAAA);
         for (int i = start; i < Math.min(parent.customItems.size(), start + pageSize); i++) {
             CustomItemEntry entry = parent.customItems.get(i);
             int rowY = top + (i - start) * 28;
             ItemStack stack = ClientItemStacks.fromReference(CustomItemLibrary.reference(entry.id), parent.rootConfig());
-            if (!stack.isEmpty()) context.renderItem(stack, x + 5, rowY + 5);
-            context.drawString(font, entry.name, x + 26, rowY + 4, 0xFFFFFFFF, false);
-            context.drawString(font, entry.id + "  •  " + entry.item_id, x + 26, rowY + 15, 0xFF999999, false);
+            if (!stack.isEmpty()) context.item(stack, x + 5, rowY + 5);
+            context.text(font, entry.name, x + 26, rowY + 4, 0xFFFFFFFF, false);
+            context.text(font, entry.id + "  •  " + entry.item_id, x + 26, rowY + 15, 0xFF999999, false);
         }
         int pages = Math.max(1, (parent.customItems.size() + pageSize - 1) / pageSize);
-        context.drawCenteredString(font, Component.literal((page + 1) + " / " + pages), width / 2, height - 44, 0xFFCCCCCC);
+        context.centeredText(font, Component.literal((page + 1) + " / " + pages), width / 2, height - 44, 0xFFCCCCCC);
         if (parent.customItems.isEmpty()) {
-            context.drawCenteredString(font, Component.translatable("customrecipe.custom_items.empty"), width / 2, height / 2, 0xFFCCCCCC);
+            context.centeredText(font, Component.translatable("customrecipe.custom_items.empty"), width / 2, height / 2, 0xFFCCCCCC);
         }
     }
 
-    @Override public void onClose() { minecraft.setScreen(parent); }
+    @Override public void onClose() { minecraft.gui.setScreen(parent); }
 
     private int pageSize() { return Math.max(1, (height - 112) / 28); }
     private int rowWidth() { return Math.min(MAX_ROW_WIDTH, width - 24); }

@@ -2,17 +2,18 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
 
-$javaHomes = @(
-    'C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot',
-    'C:\Program Files\Java\jdk-21.0.11',
-    'C:\Program Files\Java\jdk-17'
+$javaHomes = @($env:JAVA_HOME) + @(
+    Get-ChildItem -LiteralPath 'C:\Program Files\Java', 'C:\Program Files\Eclipse Adoptium' -Directory -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty FullName
 )
 $javaHome = $javaHomes | Where-Object {
-    Test-Path -LiteralPath (Join-Path $_ 'bin\java.exe')
+    if (-not $_) { return $false }
+    $javaExecutable = Join-Path $_ 'bin\java.exe'
+    if (-not (Test-Path -LiteralPath $javaExecutable)) { return $false }
+    $version = (& $javaExecutable -version 2>&1 | Select-Object -First 1) -join ''
+    $version -match 'version "25[.]'
 } | Select-Object -First 1
-if (-not $javaHome) {
-    throw 'JDK 17 ou plus recent introuvable.'
-}
+if (-not $javaHome) { throw 'JDK 25 introuvable.' }
 
 $env:JAVA_HOME = $javaHome
 $env:GRADLE_USER_HOME = Join-Path $env:USERPROFILE '.gradle'
@@ -90,6 +91,13 @@ if ($properties -match '(?m)^enforce-whitelist=') {
 }
 Set-Content -LiteralPath $serverProperties -Value $properties -NoNewline
 
+# Respect an existing isolated test port or loopback binding.
+$testServerPort = 25565
+$testServerHost = $lanIp
+if ($properties -match '(?m)^server-port=(\d+)\s*$') { $testServerPort = [int]$Matches[1] }
+if ($properties -match '(?m)^server-ip=([^\r\n]+)') { $testServerHost = $Matches[1].Trim() }
+$testServerAddress = "${testServerHost}:$testServerPort"
+
 # Le client de développement utilise le compte hors ligne \"Dev\". Il doit être
 # opérateur pour exécuter les tests de recettes sans authentification Microsoft.
 $devOperator = [pscustomobject]@{
@@ -112,10 +120,10 @@ Write-Host 'Compilation du mod...'
 if ($LASTEXITCODE -ne 0) { throw 'Compilation échouée : lancement annulé.' }
 
 # Le build unique évite une course entre runServer et runClient sur les classes du mod.
-$serverScript = "`$host.UI.RawUI.WindowTitle = 'Custom Recipe NeoForge 1.21.11 - Serveur de test'; `$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer --console=plain --no-daemon -x compileJava -x processResources -x classes"
+$serverScript = "`$host.UI.RawUI.WindowTitle = 'Custom Recipe NeoForge 26.3 - Serveur de test'; `$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runServer --console=plain --no-daemon -x compileJava -x processResources -x classes"
 $clientScript = "`$env:JAVA_HOME = '$javaHome'; `$env:GRADLE_USER_HOME = '$env:GRADLE_USER_HOME'; Set-Location -LiteralPath '$projectRoot'; & '.\gradlew.bat' runClient --no-daemon -x compileJava -x processResources -x classes"
 
-Write-Host "Serveur : $lanIp`:25565"
+Write-Host "Serveur : $testServerAddress"
 Write-Host 'Mode local de développement : online-mode=false.'
 Write-Host 'Le serveur démarre dans une fenêtre dédiée, puis le client dans 6 secondes.'
 $serverLauncher = Start-Process -FilePath 'powershell.exe' -WorkingDirectory $projectRoot -ArgumentList '-NoExit', '-NoProfile', '-Command', $serverScript -PassThru
@@ -126,4 +134,4 @@ $serverLauncher = Start-Process -FilePath 'powershell.exe' -WorkingDirectory $pr
 Start-Sleep -Seconds 6
 Start-Process -FilePath 'powershell.exe' -WorkingDirectory $projectRoot -ArgumentList '-NoExit', '-NoProfile', '-Command', $clientScript
 
-Write-Host "Dans le client : Multijoueur > Ajouter un serveur > $lanIp`:25565"
+Write-Host "Dans le client : Multijoueur > Ajouter un serveur > $testServerAddress"

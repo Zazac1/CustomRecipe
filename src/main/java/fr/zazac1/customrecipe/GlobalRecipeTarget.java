@@ -1,6 +1,6 @@
 package fr.zazac1.customrecipe;
 
-/** The reusable recipe library. Library entries are never applied to a world. */
+/** The reusable recipe library. Entries marked All Worlds are synchronized automatically. */
 public final class GlobalRecipeTarget implements RecipeTarget {
     public static final GlobalRecipeTarget INSTANCE = new GlobalRecipeTarget();
 

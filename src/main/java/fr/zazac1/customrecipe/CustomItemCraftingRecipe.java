@@ -1,9 +1,10 @@
 package fr.zazac1.customrecipe;
 
-import net.minecraft.core.HolderLookup;
+import net.minecraft.core.NonNullList;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.crafting.CraftingBookCategory;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
@@ -34,6 +35,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
 
     @Override
     public boolean matches(CraftingInput input, Level level) {
+        if (!delegate.matches(input, level)) return false;
         int[] required = requiredCounts(input);
         return required.length > 0 && required.length == input.size();
     }
@@ -88,36 +90,21 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
     }
 
     private int[] requiredShapedCounts(CraftingInput input, boolean enforceAmounts) {
-        List<String> rows = shrinkPattern(definition.pattern);
-        if (rows.isEmpty()) return new int[0];
-        int patternWidth = rows.getFirst().length();
-        int patternHeight = rows.size();
-        if (patternWidth > input.width() || patternHeight > input.height()) return new int[0];
-        for (int offsetY = 0; offsetY <= input.height() - patternHeight; offsetY++) {
-            for (int offsetX = 0; offsetX <= input.width() - patternWidth; offsetX++) {
-                int[] normal = requiredRowCounts(input, rows, offsetX, offsetY, false, enforceAmounts);
-                if (normal.length > 0) return normal;
-                int[] mirrored = requiredRowCounts(input, rows, offsetX, offsetY, true, enforceAmounts);
-                if (mirrored.length > 0) return mirrored;
-            }
+        List<String> rows = shrink(definition.pattern);
+        if (rows.isEmpty() || input.height() != rows.size() || input.width() != rows.getFirst().length()) {
+            return new int[0];
         }
-        return new int[0];
+        int[] normal = requiredRowCounts(input, rows, false, enforceAmounts);
+        return normal.length > 0 ? normal : requiredRowCounts(input, rows, true, enforceAmounts);
     }
 
-    private int[] requiredRowCounts(CraftingInput input, List<String> rows, int offsetX, int offsetY,
-                                    boolean mirrored,
+    private int[] requiredRowCounts(CraftingInput input, List<String> rows, boolean mirrored,
                                     boolean enforceAmounts) {
-        int patternWidth = rows.getFirst().length();
+        int width = rows.getFirst().length();
         int[] required = new int[input.size()];
-        for (int y = 0; y < input.height(); y++) {
-            for (int x = 0; x < input.width(); x++) {
-                boolean inside = x >= offsetX && x < offsetX + patternWidth
-                        && y >= offsetY && y < offsetY + rows.size();
-                char symbol = ' ';
-                if (inside) {
-                    int patternX = x - offsetX;
-                    symbol = rows.get(y - offsetY).charAt(mirrored ? patternWidth - patternX - 1 : patternX);
-                }
+        for (int y = 0; y < rows.size(); y++) {
+            for (int x = 0; x < width; x++) {
+                char symbol = rows.get(y).charAt(mirrored ? width - x - 1 : x);
                 String token = symbol == ' ' || definition.keys == null ? "" : definition.keys.get(symbol + "");
                 ItemStack actual = input.getItem(x, y);
                 if (token == null || token.isBlank()) {
@@ -125,7 +112,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
                 } else {
                     int count = definition.keyCount(symbol + "");
                     if (!matchesToken(token, actual, count, enforceAmounts)) return new int[0];
-                    required[y * input.width() + x] = count;
+                    required[y * width + x] = count;
                 }
             }
         }
@@ -140,7 +127,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         return id != null && !actual.isEmpty() && BuiltInRegistries.ITEM.getKey(actual.getItem()).equals(id);
     }
 
-    public static List<String> shrinkPattern(List<String> pattern) {
+    private static List<String> shrink(List<String> pattern) {
         if (pattern == null || pattern.isEmpty()) return List.of();
         int top = 0, bottom = pattern.size() - 1;
         while (top <= bottom && pattern.get(top).isBlank()) top++;
@@ -165,15 +152,14 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         return result;
     }
 
-    @Override public ItemStack assemble(CraftingInput input, HolderLookup.Provider registries) {
-        return delegate.assemble(input, registries);
-    }
-    @Override public net.minecraft.core.NonNullList<ItemStack> getRemainingItems(CraftingInput input) {
-        return delegate.getRemainingItems(input);
-    }
+    @Override public ItemStack assemble(CraftingInput input) { return delegate.assemble(input); }
+    @Override public NonNullList<ItemStack> getRemainingItems(CraftingInput input) { return delegate.getRemainingItems(input); }
     @Override public RecipeSerializer<? extends CraftingRecipe> getSerializer() { return delegate.getSerializer(); }
     @Override public CraftingBookCategory category() { return delegate.category(); }
     @Override public PlacementInfo placementInfo() { return delegate.placementInfo(); }
+    @Override public boolean isSpecial() { return true; }
+    @Override public String group() { return delegate.group(); }
+    @Override public boolean showNotification() { return delegate.showNotification(); }
     @Override
     public List<RecipeDisplay> display() {
         return delegate.display().stream().map(this::withIngredientCounts).toList();
@@ -181,7 +167,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
 
     private RecipeDisplay withIngredientCounts(RecipeDisplay display) {
         if (display instanceof ShapedCraftingRecipeDisplay shaped) {
-            List<String> rows = shrinkPattern(definition.pattern);
+            List<String> rows = shrink(definition.pattern);
             if (rows.size() != shaped.height() || rows.isEmpty() || rows.getFirst().length() != shaped.width()) {
                 return display;
             }
@@ -212,11 +198,54 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
                 ? customStacks.get(token).copy()
                 : new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.tryParse(token)));
         stack.setCount(Math.max(1, Math.min(count, stack.getMaxStackSize())));
-        return new SlotDisplay.ItemStackSlotDisplay(stack);
+        return new SlotDisplay.ItemStackSlotDisplay(ItemStackTemplate.fromNonEmptyStack(stack));
     }
-    @Override public String group() { return delegate.group(); }
-    @Override public boolean showNotification() { return delegate.showNotification(); }
+
+    /** Exact stacks and grid positions used by the server-side recipe-book placer. */
+    public List<BookIngredient> bookIngredients(int gridWidth, int gridHeight) {
+        List<BookIngredient> result = new ArrayList<>();
+        if ("shaped".equalsIgnoreCase(definition.type)) {
+            List<String> rows = shrink(definition.pattern);
+            if (rows.isEmpty() || rows.size() > gridHeight || rows.getFirst().length() > gridWidth) return List.of();
+            int width = rows.getFirst().length();
+            int left = width < gridWidth / 2.0F ? (int) Math.floor(gridWidth / 2.0F - width / 2.0F) : 0;
+            int top = rows.size() < gridHeight / 2.0F
+                    ? (int) Math.floor(gridHeight / 2.0F - rows.size() / 2.0F) : 0;
+            for (int y = 0; y < rows.size(); y++) {
+                for (int x = 0; x < width; x++) {
+                    String symbol = rows.get(y).charAt(x) + "";
+                    String token = rows.get(y).charAt(x) == ' ' || definition.keys == null
+                            ? "" : definition.keys.get(symbol);
+                    if (token == null || token.isBlank()) continue;
+                    ItemStack stack = ingredientStack(token, definition.keyCount(symbol));
+                    if (stack.isEmpty()) return List.of();
+                    result.add(new BookIngredient((top + y) * gridWidth + left + x, stack));
+                }
+            }
+        } else if (definition.ingredients != null) {
+            int slot = 0;
+            for (int i = 0; i < definition.ingredients.size(); i++) {
+                String token = definition.ingredients.get(i);
+                if (token == null || token.isBlank()) continue;
+                if (slot >= gridWidth * gridHeight) return List.of();
+                ItemStack stack = ingredientStack(token, definition.ingredientCount(i));
+                if (stack.isEmpty()) return List.of();
+                result.add(new BookIngredient(slot++, stack));
+            }
+        }
+        return result;
+    }
+
+    private ItemStack ingredientStack(String token, int count) {
+        ItemStack stack = customStacks.containsKey(token)
+                ? customStacks.get(token).copy()
+                : new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.tryParse(token)));
+        if (stack.isEmpty()) return ItemStack.EMPTY;
+        stack.setCount(Math.max(1, Math.min(count, stack.getMaxStackSize())));
+        return stack;
+    }
 
     private record Expected(String token, int count) {}
     private record Actual(int inputIndex, ItemStack stack) {}
+    public record BookIngredient(int gridSlot, ItemStack stack) {}
 }

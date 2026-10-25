@@ -1,74 +1,72 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
+import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.CustomItemLibrary;
-import fr.zazac1.customrecipe.CustomRecipeMod;
+import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
-import fr.zazac1.customrecipe.ModNetworking;
+import fr.zazac1.customrecipe.ServerConfigPayload;
+import fr.zazac1.customrecipe.ServerConfigSaveResultPayload;
 import fr.zazac1.customrecipe.VanillaRecipePage;
+import fr.zazac1.customrecipe.VanillaRecipePagePayload;
 import fr.zazac1.customrecipe.VanillaRecipeDetails;
+import fr.zazac1.customrecipe.VanillaRecipeDetailsPayload;
+import fr.zazac1.customrecipe.ValidatedServerConfigPayload;
 import com.google.gson.Gson;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
-import net.minecraft.network.chat.Component;
-import net.minecraft.ChatFormatting;
 import net.minecraft.world.level.storage.LevelResource;
-import net.minecraft.server.permissions.Permissions;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.ModContainer;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
-import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
-import net.neoforged.neoforge.common.NeoForge;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 
 import static net.minecraft.commands.Commands.literal;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 
 public final class ClientInit {
     private static String activeClientWorldId = "";
-    /** Exact GUI-scale option value (including Auto = 0) before entering the editor flow. */
+    /** Exact GUI-scale option (including Auto = 0) from before the editor flow. */
     private static Integer guiScaleBeforeCustomRecipe;
     private static final Gson GSON = new Gson();
 
     public static void initialize(IEventBus modBus, ModContainer container) {
         container.registerExtensionPoint(IConfigScreenFactory.class,
-                // This extension is opened by the NeoForge/Cloth configuration
-                // flow, not by the in-game pause-menu button. Keep the global
-                // editor target selectable here.
                 (IConfigScreenFactory) (mod, parent) -> ConfigScreen.fromModMenu(parent));
-        NeoForge.EVENT_BUS.addListener(ClientInit::registerClientCommands);
-        NeoForge.EVENT_BUS.addListener(ClientInit::onClientTick);
-    }
-
-    private static void registerClientCommands(RegisterClientCommandsEvent event) {
         // Used only by the clickable local-world tip; it never reaches a server.
-        event.getDispatcher().register(
+        NeoForge.EVENT_BUS.addListener((RegisterClientCommandsEvent event) -> event.getDispatcher().register(
                 literal("customrecipe_solo")
+                        // Do not merely reject the command after parsing: keep it out of
+                        // the client dispatcher entirely while connected to multiplayer.
                         .requires(source -> Minecraft.getInstance().getSingleplayerServer() != null)
                         .executes(context -> {
                     Minecraft client = Minecraft.getInstance();
                     // This client-only helper is for the clickable new-world tip.
-                    // Never expose the local editor while connected to a remote server.
+                    // The requirement above hides it remotely; retain this guard for a
+                    // disconnect occurring between parsing and execution.
                     if (client.getSingleplayerServer() == null) return 0;
-                    client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true))));
+                    client.execute(() -> client.gui.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true))));
                     return 1;
                 })
-        );
-    }
-
-    private static void onClientTick(ClientTickEvent.Post event) {
+        ));
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> {
             Minecraft client = Minecraft.getInstance();
-            updateGuiScaleForScreen(client, client.screen);
+            updateGuiScaleForScreen(client, client.gui.screen());
+            if (ConfigLoader.get().preload_recipes_on_startup) VanillaRecipesScreen.preloadAtStartup(client);
             if (client.getSingleplayerServer() == null) {
                 activeClientWorldId = "";
                 return;
@@ -80,7 +78,7 @@ public final class ClientInit {
             // Minecraft starts a freshly created save on day 0. Existing saves
             // are never candidates, even if they have no tip flag yet.
             String levelName = client.getSingleplayerServer().getWorldData().getLevelName();
-            long day = client.getSingleplayerServer().overworld().getDayTime() / 24000L;
+            long day = client.getSingleplayerServer().overworld().getOverworldClockTime() / 24000L;
             String worldInstanceId = currentLocalWorldInstanceId(client);
             WorldRecipeConfig savedWorldConfig = ConfigLoader.get().findWorldConfig(worldId);
             boolean alreadyShown = savedWorldConfig != null && savedWorldConfig.shown_editor_tip
@@ -96,84 +94,97 @@ public final class ClientInit {
                 return;
             }
             Component editorLink = Component.translatable("customrecipe.chat.world_tip.link")
-                    .setStyle(Style.EMPTY.withColor(ChatFormatting.AQUA).withUnderlined(true)
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.AQUA).withUnderlined(true)
                             .withClickEvent(new ClickEvent.RunCommand("/customrecipe_solo"))
                             .withHoverEvent(new HoverEvent.ShowText(Component.translatable("customrecipe.chat.world_tip.hover"))));
-            client.player.displayClientMessage(Component.translatable("customrecipe.chat.world_tip", editorLink), false);
+            client.player.sendSystemMessage(Component.translatable("customrecipe.chat.world_tip", editorLink));
             CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent to chat.");
+        });
     }
 
-    public static void receiveServerConfig(String json) {
-            Minecraft client = Minecraft.getInstance();
-            if (client.player == null
-                    || !client.player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)) return;
-            var config = ConfigLoader.fromJson(json);
+    public static void receiveServerConfig(ServerConfigPayload payload) {
+            // A server-management payload is ignored completely unless the
+            // connected player is currently an administrator. In particular,
+            // no validation or local data is ever sent back by a non-admin.
+            if (!ClientServerConfigNetworking.canManageServer()) return;
+            var config = ConfigLoader.fromJson(payload.json());
             if (config == null) {
-                if (client.player != null) client.player.displayClientMessage(Component.translatable("customrecipe.chat.invalid_server_config"), false);
+                Minecraft.getInstance().player.sendSystemMessage(Component.translatable("customrecipe.chat.invalid_server_config"));
                 return;
             }
             LocalMergeResult imported = mergeLocalContent(config);
             if (imported.recipes() > 0 || imported.customItems() > 0) {
-                client.player.displayClientMessage(Component.translatable(
-                        "customrecipe.chat.local_content_ready", imported.recipes(), imported.customItems()), false);
+                Minecraft.getInstance().player.sendSystemMessage(Component.translatable(
+                        "customrecipe.chat.local_content_ready", imported.recipes(), imported.customItems()));
             }
             ClientServerConfigNetworking.validate(config);
     }
 
-    public static void receiveValidatedServerConfig(String json) {
-            Minecraft client = Minecraft.getInstance();
-            if (client.player == null
-                    || !client.player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)) return;
-            var config = ConfigLoader.fromJson(json);
+    public static void receiveValidatedServerConfig(ValidatedServerConfigPayload payload) {
+            if (!ClientServerConfigNetworking.canManageServer()) return;
+            var config = ConfigLoader.fromJson(payload.json());
             if (config == null) {
-                if (client.player != null) client.player.displayClientMessage(Component.translatable("customrecipe.chat.invalid_server_validation"), false);
+                Minecraft.getInstance().player.sendSystemMessage(Component.translatable("customrecipe.chat.invalid_server_validation"));
                 return;
             }
-            // `/customrecipe` is an authoritative server command. Its payload
-            // carries the active save ID, so it must not fall back to the
-            // client's Mod Menu default target (often Global Library).
-            client.setScreen(ConfigScreen.fromServerCommand(client.screen, config,
-                    ClientServerConfigNetworking::save));
+            Minecraft.getInstance().gui.setScreen(new ConfigScreen(Minecraft.getInstance().gui.screen(), config,
+                    "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
     }
 
-    public static void receiveVanillaRecipePage(String json) {
-            VanillaRecipePage page = GSON.fromJson(json, VanillaRecipePage.class);
-            if (page != null && Minecraft.getInstance().screen instanceof VanillaRecipesScreen screen) {
+    public static void receiveSaveResult(ServerConfigSaveResultPayload payload) {
+            try {
+                SaveResult result = GSON.fromJson(payload.json(), SaveResult.class);
+                if (result == null) {
+                    ClientServerConfigNetworking.completeSave(false, "The server returned an invalid save response.");
+                } else {
+                    ClientServerConfigNetworking.completeSave(result.saved(), result.message());
+                }
+            } catch (RuntimeException error) {
+                ClientServerConfigNetworking.completeSave(false, "The server returned an invalid save response.");
+            }
+    }
+
+    public static void receiveVanillaRecipePage(VanillaRecipePagePayload payload) {
+            VanillaRecipePage page = GSON.fromJson(payload.json(), VanillaRecipePage.class);
+            if (page != null && Minecraft.getInstance().gui.screen() instanceof VanillaRecipesScreen screen) {
                 screen.applyResult(page);
             }
     }
 
-    public static void receiveVanillaRecipeDetails(String json) {
-            VanillaRecipeDetails details = GSON.fromJson(json, VanillaRecipeDetails.class);
-            if (details != null && Minecraft.getInstance().screen instanceof VanillaRecipesScreen screen) {
+    public static void receiveVanillaRecipeDetails(VanillaRecipeDetailsPayload payload) {
+            VanillaRecipeDetails details = GSON.fromJson(payload.json(), VanillaRecipeDetails.class);
+            if (details == null) return;
+            if (Minecraft.getInstance().gui.screen() instanceof VanillaRecipesScreen screen) {
                 screen.applyDetails(details);
-            } else if (details != null && Minecraft.getInstance().screen instanceof VanillaRecipeDetailsScreen screen) {
+            } else if (Minecraft.getInstance().gui.screen() instanceof VanillaRecipeDetailsScreen screen) {
                 screen.applyDetails(details);
             }
     }
 
-    /** Applies scale 3 only while a Custom Recipe screen is open and restores the saved value on exit. */
+    private record SaveResult(boolean saved, String code, String message) {}
+
+    /** Keeps the editor readable while preserving the player's exact original scale. */
     private static void updateGuiScaleForScreen(Minecraft client, Screen screen) {
-        boolean editorScreen = screen != null && screen.getClass().getPackageName().startsWith("fr.zazac1.customrecipe.client");
-        if (editorScreen && ConfigLoader.get().automatic_gui_scale) {
+        if (screen != null && screen.getClass().getPackageName().startsWith("fr.zazac1.customrecipe.client")) {
+            if (!ConfigLoader.get().automatic_gui_scale) { restoreGuiScale(client); return; }
             if (guiScaleBeforeCustomRecipe == null) guiScaleBeforeCustomRecipe = client.options.guiScale().get();
             setGuiScale(client, 3);
-        } else {
-            restoreGuiScale(client);
+            return;
         }
+        restoreGuiScale(client);
     }
 
     private static void restoreGuiScale(Minecraft client) {
         if (guiScaleBeforeCustomRecipe == null) return;
-        int scale = guiScaleBeforeCustomRecipe;
+        int originalScale = guiScaleBeforeCustomRecipe;
         guiScaleBeforeCustomRecipe = null;
-        setGuiScale(client, scale);
+        setGuiScale(client, originalScale);
     }
 
     private static void setGuiScale(Minecraft client, int scale) {
         if (client.options.guiScale().get() == scale) return;
         client.options.guiScale().set(scale);
-        client.resizeDisplay();
+        client.resizeGui();
     }
 
     /**
@@ -181,8 +192,7 @@ public final class ClientInit {
      * directory through the client save list so two different solo worlds never
      * share the same first-entry message state.
      */
-    /** Stable save-folder ID shared by the local-world picker and pause-menu editor. */
-    static String currentLocalWorldId(Minecraft client) {
+    private static String currentLocalWorldId(Minecraft client) {
         return WorldRecipeAssignments.worldId(currentLocalWorldDirectory(client));
     }
 
@@ -207,14 +217,10 @@ public final class ClientInit {
         return client.getSingleplayerServer().getWorldPath(LevelResource.ROOT);
     }
 
-    /**
-     * Stages local recipes in the server editor without writing to the server
-     * until the OP explicitly presses Save.  Schema 2 stores reusable recipes
-     * in global_library, not in the retained legacy custom_recipes field.
-     */
     private record LocalMergeResult(int recipes, int customItems) {}
 
-    private static LocalMergeResult mergeLocalContent(fr.zazac1.customrecipe.ModConfig serverConfig) {
+    /** Stages the admin's local recipes and full-stack items in the server editor. */
+    private static LocalMergeResult mergeLocalContent(ModConfig serverConfig) {
         ModConfig localConfig = ConfigLoader.get();
         java.util.Map<String, String> referenceRemap = new java.util.LinkedHashMap<>();
         int addedItems = 0;
@@ -226,6 +232,7 @@ public final class ClientInit {
                 referenceRemap.put(oldReference, CustomItemLibrary.reference(serverItem.id));
                 continue;
             }
+
             String importedId = serverItem == null ? localItem.id
                     : CustomItemLibrary.uniqueId(serverConfig.custom_items, localItem.id + "_local");
             CustomItemEntry copy = copyLocalCustomItem(localItem, importedId);
@@ -234,28 +241,24 @@ public final class ClientInit {
             addedItems++;
         }
 
-        int added = mergeDraftRecipes(localConfig.global_library.custom_recipes,
+        int addedRecipes = mergeDraftRecipes(localConfig.global_library.custom_recipes,
                 serverConfig.global_library.custom_recipes, referenceRemap);
-
-        // Retain migration support for pre-target configurations.  These old
-        // root entries are drafts for the active server world, never entries
-        // in the server's global template library.
         if (localConfig.custom_recipes != null && !localConfig.custom_recipes.isEmpty()) {
-            var activeTarget = serverConfig.getOrCreateWorldConfig(
+            WorldRecipeConfig activeTarget = serverConfig.getOrCreateWorldConfig(
                     serverConfig.editor_world_id, serverConfig.editor_world_name);
-            added += mergeDraftRecipes(localConfig.custom_recipes, activeTarget.custom_recipes, referenceRemap);
+            addedRecipes += mergeDraftRecipes(localConfig.custom_recipes, activeTarget.custom_recipes, referenceRemap);
         }
-        return new LocalMergeResult(added, addedItems);
+        return new LocalMergeResult(addedRecipes, addedItems);
     }
 
-    private static int mergeDraftRecipes(java.util.List<fr.zazac1.customrecipe.CustomRecipeEntry> source,
-                                         java.util.List<fr.zazac1.customrecipe.CustomRecipeEntry> destination,
+    private static int mergeDraftRecipes(java.util.List<CustomRecipeEntry> source,
+                                         java.util.List<CustomRecipeEntry> destination,
                                          java.util.Map<String, String> referenceRemap) {
         if (source == null || destination == null) return 0;
         int added = 0;
-        for (var localRecipe : source) {
+        for (CustomRecipeEntry localRecipe : source) {
             if (localRecipe == null) continue;
-            var draft = copyLocalRecipeAsDraft(localRecipe, referenceRemap);
+            CustomRecipeEntry draft = copyLocalRecipeAsDraft(localRecipe, referenceRemap);
             if (destination.stream().anyMatch(serverRecipe -> ConfigLoader.sameRecipe(draft, serverRecipe))) continue;
             destination.add(draft);
             added++;
@@ -272,10 +275,9 @@ public final class ClientInit {
         return copy;
     }
 
-    private static fr.zazac1.customrecipe.CustomRecipeEntry copyLocalRecipeAsDraft(
-            fr.zazac1.customrecipe.CustomRecipeEntry source,
-            java.util.Map<String, String> referenceRemap) {
-        var copy = new fr.zazac1.customrecipe.CustomRecipeEntry();
+    private static CustomRecipeEntry copyLocalRecipeAsDraft(
+            CustomRecipeEntry source, java.util.Map<String, String> referenceRemap) {
+        var copy = new CustomRecipeEntry();
         copy.id = source.id;
         copy.type = source.type;
         copy.ingredients = source.ingredients == null ? new java.util.ArrayList<>()
@@ -283,8 +285,7 @@ public final class ClientInit {
                 .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
         copy.ingredient_counts = source.ingredient_counts == null ? new java.util.ArrayList<>()
                 : new java.util.ArrayList<>(source.ingredient_counts);
-        copy.pattern = source.pattern == null ? new java.util.ArrayList<>()
-                : new java.util.ArrayList<>(source.pattern);
+        copy.pattern = source.pattern == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(source.pattern);
         copy.keys = new java.util.LinkedHashMap<>();
         if (source.keys != null) source.keys.forEach((key, value) -> copy.keys.put(key, remap(value, referenceRemap)));
         copy.key_counts = source.key_counts == null ? new java.util.LinkedHashMap<>()
@@ -302,19 +303,4 @@ public final class ClientInit {
     private static String remap(String value, java.util.Map<String, String> referenceRemap) {
         return value == null ? null : referenceRemap.getOrDefault(value, value);
     }
-
-    public static void receiveSaveResult(String json) {
-        try {
-            SaveResult result = GSON.fromJson(json, SaveResult.class);
-            if (result == null) {
-                ClientServerConfigNetworking.completeSave(false, "The server returned an invalid save response.");
-            } else {
-                ClientServerConfigNetworking.completeSave(result.saved(), result.message());
-            }
-        } catch (RuntimeException error) {
-            ClientServerConfigNetworking.completeSave(false, "The server returned an invalid save response.");
-        }
-    }
-
-    private record SaveResult(boolean saved, String code, String message) {}
 }

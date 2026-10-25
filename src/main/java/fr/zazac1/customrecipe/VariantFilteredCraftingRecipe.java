@@ -1,17 +1,15 @@
 package fr.zazac1.customrecipe;
 
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.CraftingRecipe;
-import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraft.world.item.crafting.CraftingBookCategory;
 import net.minecraft.world.item.crafting.CraftingInput;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.PlacementInfo;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.item.crafting.display.RecipeDisplay;
 import net.minecraft.world.level.Level;
 
-import net.minecraft.world.item.crafting.PlacementInfo;
-import net.minecraft.world.item.crafting.display.RecipeDisplay;
 import java.util.List;
 import java.util.Set;
 
@@ -27,33 +25,31 @@ public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
 
     public CraftingRecipe delegate() { return delegate; }
 
+    /** Returns whether this filtered recipe rejects a concrete custom-recipe input. */
+    public boolean blocksAny(java.util.Collection<String> materialIds) {
+        return materialIds.stream().anyMatch(blockedMaterials::contains);
+    }
+
     @Override
     public boolean matches(CraftingInput input, Level world) {
         if (!delegate.matches(input, world)) return false;
-        for (int slot = 0; slot < input.size(); slot++) {
-            ItemStack stack = input.getItem(slot);
-            if (!stack.isEmpty() && blockedMaterials.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())) {
-                return false;
-            }
-        }
-        return true;
+        return input.items().stream()
+                .filter(stack -> !stack.isEmpty())
+                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
+                .noneMatch(blockedMaterials::contains);
     }
 
-    @Override public ItemStack assemble(CraftingInput input, HolderLookup.Provider registries) { return delegate.assemble(input, registries); }
+    @Override public ItemStack assemble(CraftingInput input) { return delegate.assemble(input); }
     @Override public RecipeSerializer<? extends CraftingRecipe> getSerializer() { return delegate.getSerializer(); }
     @Override public CraftingBookCategory category() { return delegate.category(); }
+    @Override public PlacementInfo placementInfo() { return delegate.placementInfo(); }
     /**
      * The vanilla recipe book cannot express "this recipe except birch planks".
      * Hiding it avoids its auto-fill selecting a blocked material and leaving a
      * broken crafting grid behind.
      */
-    @Override public PlacementInfo placementInfo() { return delegate.placementInfo(); }
-    /**
-     * A material-specific disable is not representable by the recipe-book or
-     * REI display protocols. Hide that display entirely so neither UI offers
-     * an entry that can fail with the blocked material variant.
-     */
-    @Override public List<RecipeDisplay> display() { return List.of(); }
+    @Override public boolean isSpecial() { return true; }
     @Override public String group() { return delegate.group(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }
+    @Override public List<RecipeDisplay> display() { return delegate.display(); }
 }

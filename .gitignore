@@ -16,6 +16,8 @@ dev-mods/
 *.iws
 hs_err_pid*.log
 replay_pid*.log
+*.log
+logs/
 
 # Loom generated files
 remappedSrc/

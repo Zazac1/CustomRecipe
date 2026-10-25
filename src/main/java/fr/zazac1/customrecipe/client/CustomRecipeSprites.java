@@ -1,7 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomRecipeMod;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
 
@@ -15,6 +15,7 @@ final class CustomRecipeSprites {
     static final Identifier ACCEPT = sprite("accept");
     static final Identifier REJECT = sprite("reject");
     static final Identifier ADD = sprite("add");
+    static final Identifier EYE = sprite("eye");
     static final Identifier SAVE = sprite("save");
     static final Identifier RESET = sprite("reset");
     static final Identifier LOCKED_INFO = sprite("locked_info");
@@ -44,7 +45,7 @@ final class CustomRecipeSprites {
         return Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "textures/" + path + ".png");
     }
 
-    static void draw(GuiGraphics context, Identifier sprite, int x, int y, int width, int height) {
+    static void draw(GuiGraphicsExtractor context, Identifier sprite, int x, int y, int width, int height) {
         context.blit(RenderPipelines.GUI_TEXTURED, sprite, x, y, 0, 0, width, height, width, height);
     }
 

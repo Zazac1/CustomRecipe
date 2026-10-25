@@ -12,14 +12,14 @@ public final class WorldRecipeConfig {
     public List<CustomRecipeEntry> custom_recipes = new ArrayList<>();
     public List<String> disabled_builtin = new ArrayList<>();
     public List<String> known_by_default_builtin = new ArrayList<>();
-
-    /**
-     * Built-in templates are opt-in. False means this target has never
-     * selected any of the bundled data-pack recipes, so none is loaded.
-     */
-    public boolean builtin_recipes_initialized = false;
     public List<String> disabled_recipes = new ArrayList<>();
     public List<RecipeVariantRule> disabled_recipe_variants = new ArrayList<>();
+
+    /** Per-world overrides for recipes disabled by the global default policy. */
+    public List<String> enabled_recipes = new ArrayList<>();
+
+    /** Per-world overrides for recipe/material pairs disabled globally. */
+    public List<RecipeVariantRule> enabled_recipe_variants = new ArrayList<>();
 
     /** Built-in Quick Add entries hidden for this target. */
     public List<String> hidden_quick_add_builtin = new ArrayList<>();

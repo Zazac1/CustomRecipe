@@ -1,9 +1,9 @@
 package fr.zazac1.customrecipe;
 
 import net.neoforged.fml.ModList;
-import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

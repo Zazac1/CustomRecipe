@@ -2,24 +2,39 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.ModConfig;
-import fr.zazac1.customrecipe.ModNetworking;
+import fr.zazac1.customrecipe.SaveServerConfigPayload;
+import fr.zazac1.customrecipe.ValidateServerConfigPayload;
+import fr.zazac1.customrecipe.VanillaRecipeQueryPayload;
+import fr.zazac1.customrecipe.VanillaRecipeDetailsQueryPayload;
 import com.google.gson.Gson;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
+import net.minecraft.client.Minecraft;
+import net.minecraft.server.permissions.Permissions;
 
 import java.util.List;
 import java.util.function.BiConsumer;
-import net.minecraft.server.permissions.Permissions;
 
 /** Client-only sender for the OP server editor. */
 public final class ClientServerConfigNetworking {
     private static final int MAX_CONFIG_CHARS = 1_000_000;
     private static final Gson GSON = new Gson();
     private static BiConsumer<Boolean, String> pendingSave;
+
+    /** Never uploads server-management data from a non-administrator client. */
+    public static boolean canManageServer() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null || client.getConnection() == null) return false;
+        if (client.getSingleplayerServer() != null) return true;
+        return client.player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
+    }
+
     public static void save(ModConfig config) {
-        ModNetworking.save(ConfigLoader.toJson(config));
+        if (!canManageServer() || !Minecraft.getInstance().getConnection().hasChannel(SaveServerConfigPayload.ID)) return;
+        ClientPacketDistributor.sendToServer(new SaveServerConfigPayload(ConfigLoader.toJson(config)));
     }
 
     public static boolean save(ModConfig config, BiConsumer<Boolean, String> completion) {
-        if (!canManageServer()) {
+        if (!canManageServer() || !Minecraft.getInstance().getConnection().hasChannel(SaveServerConfigPayload.ID)) {
             completion.accept(false, "The server editor is not available for this connection.");
             return false;
         }
@@ -33,7 +48,7 @@ public final class ClientServerConfigNetworking {
             return false;
         }
         pendingSave = completion;
-        ModNetworking.save(json);
+        ClientPacketDistributor.sendToServer(new SaveServerConfigPayload(json));
         return true;
     }
 
@@ -45,22 +60,21 @@ public final class ClientServerConfigNetworking {
 
     /** Requests a server-only integrity and conflict check without saving anything. */
     public static void validate(ModConfig config) {
-        ModNetworking.validate(ConfigLoader.toJson(config));
+        if (!canManageServer() || !Minecraft.getInstance().getConnection().hasChannel(ValidateServerConfigPayload.ID)) return;
+        ClientPacketDistributor.sendToServer(new ValidateServerConfigPayload(ConfigLoader.toJson(config)));
     }
 
     public static void searchVanilla(String query, boolean matchIngredients, boolean matchOutput,
                                      String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {
-        ModNetworking.queryVanilla(GSON.toJson(new RecipeQuery(query, matchIngredients, matchOutput,
-                statusFilter, sourceFilter, disabledRecipeIds, page)));
+        if (!canManageServer() || !Minecraft.getInstance().getConnection().hasChannel(VanillaRecipeQueryPayload.ID)) return;
+        ClientPacketDistributor.sendToServer(new VanillaRecipeQueryPayload(
+                GSON.toJson(new RecipeQuery(query, matchIngredients, matchOutput,
+                        statusFilter, sourceFilter, disabledRecipeIds, page))));
     }
 
     public static void requestVanillaDetails(String recipeId) {
-        ModNetworking.queryVanillaDetails(recipeId);
-    }
-
-    public static boolean canManageServer() {
-        var player = net.minecraft.client.Minecraft.getInstance().player;
-        return player != null && player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
+        if (!canManageServer() || !Minecraft.getInstance().getConnection().hasChannel(VanillaRecipeDetailsQueryPayload.ID)) return;
+        ClientPacketDistributor.sendToServer(new VanillaRecipeDetailsQueryPayload(recipeId));
     }
 
     private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,

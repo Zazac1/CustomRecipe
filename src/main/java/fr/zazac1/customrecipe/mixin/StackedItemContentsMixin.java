@@ -13,16 +13,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Keeps component-rich stacks that vanilla excludes from recipe-book availability checks. */
-@Mixin(value = StackedItemContents.class, remap = false)
+@Mixin(StackedItemContents.class)
 public abstract class StackedItemContentsMixin implements ExactStackedItemContentsAccess {
     @Unique private final List<ItemStack> customrecipe$exactStacks = new ArrayList<>();
 
-    @Inject(method = "accountSimpleStack", at = @At("HEAD"), remap = false)
+    @Inject(method = "accountSimpleStack", at = @At("HEAD"))
     private void customrecipe$captureExactStack(ItemStack stack, CallbackInfo ci) {
         if (stack != null && !stack.isEmpty()) customrecipe$exactStacks.add(stack.copy());
     }
 
-    @Inject(method = "clear", at = @At("HEAD"), remap = false)
+    @Inject(method = "clear", at = @At("HEAD"))
     private void customrecipe$clearExactStacks(CallbackInfo ci) {
         customrecipe$exactStacks.clear();
     }

@@ -4,24 +4,24 @@ import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.RecipeIntegrity;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.MultiLineTextWidget;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.gui.components.MultiLineTextWidget;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.resources.Identifier;
-import com.mojang.math.Axis;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 import java.util.*;
 
 public class RecipeBuilderScreen extends Screen {
-    private static final int SCROLLBAR_TRACK_COLOR = 0xFF5A5A5A;
 
     private static final int PAD   = 20;
     private static final int SLOT  = 18;
@@ -31,11 +31,15 @@ public class RecipeBuilderScreen extends Screen {
     private static final int SUGG_H = 16; // suggestion row height
     private static final int SEARCH_H = 18;
     private static final int SEARCH_TEXT_Y_OFFSET = 6;
+    /** Neutral grey, deliberately a shade darker than the standard button face. */
+    private static final int SCROLLBAR_TRACK_COLOR = 0xFF5A5A5A;
     private static final int SHAPELESS_ROW_H = 26;
     private static final int MAX_SHAPELESS_INGREDIENTS = 9;
     private static final int VISIBLE_SHAPELESS_ROWS = 5;
-    private static final int LEFT_MOUSE_BUTTON = 0;
-    private static final int RIGHT_MOUSE_BUTTON = 1;
+    // MouseButtonInfo is one-based in Minecraft 26.3 (left=1, middle=2,
+    // right=3), unlike the zero-based GLFW values used by older releases.
+    private static final int LEFT_MOUSE_BUTTON = 1;
+    private static final int RIGHT_MOUSE_BUTTON = 3;
 
     private final ConfigScreen parent;
     /** Exact screen that opened this editor, retained for Cancel, Escape and Save. */
@@ -70,7 +74,7 @@ public class RecipeBuilderScreen extends Screen {
     private String heldItemId;
 
     // text field state
-    private String         itemFieldComponent = "";
+    private String         itemFieldText = "";
     /** Matching item IDs; stacks are only created for rows currently visible. */
     private List<String> itemMatches      = new ArrayList<>();
     private int            suggestionScroll;
@@ -162,6 +166,7 @@ public class RecipeBuilderScreen extends Screen {
     }
     private int settingsX() { return shaped ? craftingTableX() + 34 : shapelessListX() + 34; }
     private int shapelessListW() { return 176; }
+    // Reserve space at the left for the same 12 px scrollbar used by the item picker.
     private int shapelessListX() { return rightX() + 16; }
     private int shapelessHeaderY() { return panelY() + 62; }
     private int shapelessListY() { return panelY() + 86; }
@@ -203,11 +208,14 @@ public class RecipeBuilderScreen extends Screen {
     private int visibleSuggestions() { return Math.min(VISIBLE_S, Math.max(0, loadedSuggestions() - suggestionScroll)); }
     private int clearSearchX() { return leftX() + leftW() - 18; }
     private int suggestionScrollbarX() { return leftX() + leftW() - 12; }
-    /** The scrollbar owns its rail before rows, tooltips, or drag selection see the mouse. */
+    /** Content is inset so neither item icons nor the thumb paint over the list border. */
+    private int suggestionRowsTop() { return suggY() + 1; }
+    private int suggestionRowsH() { return visibleSuggestions() * SUGG_H; }
+    /** The scrollbar is an independent control, never an item-row hit area. */
     private boolean isOverSuggestionScrollbar(double mouseX, double mouseY) {
         return itemMatches.size() > visibleSuggestions()
                 && mouseX >= suggestionScrollbarX() && mouseX < leftX() + leftW()
-                && mouseY >= suggY() && mouseY < suggY() + visibleSuggestions() * SUGG_H + 1;
+                && mouseY >= suggestionRowsTop() && mouseY < suggestionRowsTop() + suggestionRowsH();
     }
     private int paletteColumns() { return Math.max(8, Math.min(16, (rightW() - 16) / 24)); }
     private int paletteRows() { return Math.max(1, (usedItems().size() + 1 + paletteColumns() - 1) / paletteColumns()); }
@@ -219,9 +227,10 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     protected void init() {
-        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, parent.target(), parent.targetLabel()));
+        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, parent.target(),
+                parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
         shapelessScroll = Math.max(0, Math.min(maxShapelessScroll(), shapelessScroll));
-        if (itemFieldComponent.isBlank() && itemMatches.isEmpty()) itemMatches = findItemMatches("");
+        if (itemFieldText.isBlank() && itemMatches.isEmpty()) itemMatches = findItemMatches("");
 
         // Background fills + grid + result slot drawn via addDrawable
         addRenderableOnly((ctx, mx, my, d) -> renderFills(ctx, mx, my));
@@ -239,35 +248,41 @@ public class RecipeBuilderScreen extends Screen {
             case -1 -> "Result item:";
             default -> "Slot " + (selectedSlot + 1) + ":";
         };
-        addRenderableWidget(makeLabel(leftX() + 8, slotLabelY(), slotLabel, 0xCCCCCC));
+        // Align this label with the search field's visible text, not its outer frame.
+        addRenderableWidget(makeLabel(leftX() + 4, slotLabelY(), slotLabel, 0xCCCCCC));
 
         // Item search field
         itemField = addRenderableWidget(new EditBox(
                 font, leftX() + 4, fieldY() + SEARCH_TEXT_Y_OFFSET,
                 leftW() - 22, SEARCH_H, Component.literal("item")));
         // The whole search-and-clear control already has one shared outline in render().
-        // Do not render a second ComponentField border beside the × button.
+        // Do not render a second TextField border beside the × button.
         itemField.setBordered(false);
         itemField.setHint(Component.translatable("customrecipe.builder.search_item"));
         itemField.setMaxLength(100);
-        itemField.setValue(itemFieldComponent);
+        itemField.setValue(itemFieldText);
         itemField.setResponder(s -> {
-            itemFieldComponent = s;
+            itemFieldText = s;
             if (!suppressItemFieldChange) {
                 restoreFocus = 1;
                 onItemTyped(s);
             }
         });
-        int clearSearchX = clearSearchX();
-        addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
-                CustomRecipeSprites.REJECT, clearSearchX, fieldY(), 18, 18));
+        addRenderableOnly((ctx, mx, my, d) -> {
+            int clearX = clearSearchX();
+            boolean hovered = mx >= clearX && mx < clearX + 18
+                    && my >= fieldY() && my < fieldY() + SEARCH_H;
+            if (hovered) {
+                ctx.fill(clearX, fieldY(), clearX + 18, fieldY() + 18, 0x443355BB);
+            }
+            CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, clearX, fieldY(), 18, 18);
+        });
 
         // Autocomplete suggestions (label widgets)
         for (int i = suggestionScroll; i < suggestionScroll + visibleSuggestions(); i++) {
             String id = itemMatches.get(i);
-            int ry = suggY() + 1 + (i - suggestionScroll) * SUGG_H;
+            int ry = suggestionRowsTop() + (i - suggestionScroll) * SUGG_H;
             MultiLineTextWidget suggestionLabel = makeLabel(leftX() + 22, ry + 4, id, 0xCCCCCC);
-            // Leave five characters of safety before the scrollbar instead of clipping the ellipsis.
             suggestionLabel.setMaxWidth(leftW() - 30);
             addRenderableWidget(suggestionLabel);
         }
@@ -306,7 +321,7 @@ public class RecipeBuilderScreen extends Screen {
         int modeX = rightX() + 8;
         int modeY = panelY() + 28;
         addRenderableWidget(Button.builder(Component.empty(),
-                b -> { toggleShapeMode(); clearWidgets(); init(); }
+                b -> { toggleShapeMode(); rebuildWidgets(); }
         ).bounds(modeX, modeY, 20, 20).build());
         addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                 shaped ? CustomRecipeSprites.LOCKED_BUTTON : CustomRecipeSprites.UNLOCKED_BUTTON,
@@ -317,7 +332,7 @@ public class RecipeBuilderScreen extends Screen {
         int knownX = modeX + 32 + font.width("Shapeless");
         int knownY = modeY;
         addRenderableWidget(Button.builder(Component.empty(),
-                b -> { knownByDefault = !knownByDefault; clearWidgets(); init(); }
+                b -> { knownByDefault = !knownByDefault; rebuildWidgets(); }
         ).bounds(knownX, knownY, 20, 20).build());
         addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                 knownByDefault ? CustomRecipeSprites.KNOWN_BY_DEFAULT : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT,
@@ -331,13 +346,13 @@ public class RecipeBuilderScreen extends Screen {
         if (parent.target().isWorld()) {
             addRenderableWidget(Button.builder(
                     Component.translatable("customrecipe.builder.also_library", Component.translatable(alsoSaveToLibrary ? "customrecipe.recipe.on" : "customrecipe.recipe.off")),
-                    b -> { alsoSaveToLibrary = !alsoSaveToLibrary; clearWidgets(); init(); }
+                    b -> { alsoSaveToLibrary = !alsoSaveToLibrary; rebuildWidgets(); }
             ).bounds(width / 2 - 110, height - 46, 220, 18).build());
         }
 
         // ── Bottom buttons ────────────────────────────────────────────────
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.cancel"),
-                b -> minecraft.setScreen(returnTo)
+                b -> minecraft.gui.setScreen(returnTo)
         ).bounds(width / 2 - 102, height - 22, 98, 18).build());
 
         addRenderableWidget(Button.builder(Component.translatable(editingIndex >= 0
@@ -364,7 +379,8 @@ public class RecipeBuilderScreen extends Screen {
                                      java.util.function.IntConsumer setter) {
         int[] current = {Math.max(1, Math.min(maxValue, value))};
         field.setMaxLength(3);
-        field.setFilter(text -> text.isEmpty() || text.matches("\\d{1,3}"));
+        field.addFormatter((text, cursor) -> FormattedCharSequence.forward(text.isEmpty() || text.matches("\\d{1,3}")
+                ? text : "", Style.EMPTY));
         field.setValue(String.valueOf(current[0]));
         field.setResponder(text -> {
             if (text.isEmpty()) return;
@@ -385,12 +401,12 @@ public class RecipeBuilderScreen extends Screen {
         itemMatches = findItemMatches(q);
         suggestionScroll = 0;
         loadedSuggestionLimit = ITEM_BATCH_SIZE;
-        clearWidgets(); init();
+        rebuildWidgets();
     }
 
     /** Clears immediately on the first click, without selecting the old query. */
     private void clearItemSearch() {
-        itemFieldComponent = "";
+        itemFieldText = "";
         itemMatches = findItemMatches("");
         suggestionScroll = 0;
         loadedSuggestionLimit = ITEM_BATCH_SIZE;
@@ -399,7 +415,7 @@ public class RecipeBuilderScreen extends Screen {
         itemField.setValue("");
         suppressItemFieldChange = false;
         setFocused(null);
-        clearWidgets(); init();
+        rebuildWidgets();
     }
 
     private List<String> findItemMatches(String q) {
@@ -410,11 +426,11 @@ public class RecipeBuilderScreen extends Screen {
             String searchable = custom.id + " " + custom.name + " " + custom.item_id;
             if (searchable.toLowerCase(Locale.ROOT).contains(ql)) matches.add(reference);
         }
-        for (var item : BuiltInRegistries.ITEM) {
-            if (item == Items.AIR) continue;
-            String id = BuiltInRegistries.ITEM.getKey(item).toString();
-            String path = BuiltInRegistries.ITEM.getKey(item).getPath();
-            String displayName = new ItemStack(item).getHoverName().getString().toLowerCase(Locale.ROOT);
+        for (var entry : BuiltInRegistries.ITEM.entrySet()) {
+            if (entry.getValue() == Items.AIR) continue;
+            String id = entry.getKey().identifier().toString();
+            String path = entry.getKey().identifier().getPath();
+            String displayName = ClientItemStacks.fromItem(entry.getValue()).getHoverName().getString().toLowerCase(Locale.ROOT);
             if (id.contains(ql) || path.contains(ql) || displayName.contains(ql)) {
                 matches.add(id);
             }
@@ -425,24 +441,24 @@ public class RecipeBuilderScreen extends Screen {
 
     private void selectItem(String itemId) {
         heldItemId = itemId;
-        itemFieldComponent = shortId(itemId);
+        itemFieldText = shortId(itemId);
         itemMatches   = new ArrayList<>();
         suggestionScroll = 0;
         restoreFocus = 0;
         setFocused(null);
         applyNewHeldItemToSelectedSlot();
-        clearWidgets(); init();
+        rebuildWidgets();
     }
 
     private void selectEmptyItem() {
         heldItemId = "";
-        itemFieldComponent = "";
+        itemFieldText = "";
         itemMatches = new ArrayList<>();
         suggestionScroll = 0;
         restoreFocus = 0;
         setFocused(null);
         applyNewHeldItemToSelectedSlot();
-        clearWidgets(); init();
+        rebuildWidgets();
     }
 
     /**
@@ -534,7 +550,7 @@ public class RecipeBuilderScreen extends Screen {
         selectedShapelessSlot = shapeless ? slot : -1;
         restoreFocus = 0;
         focusIngredientCount = true;
-        clearWidgets(); init();
+        rebuildWidgets();
     }
 
     private void selectSlot(int slot) {
@@ -549,14 +565,14 @@ public class RecipeBuilderScreen extends Screen {
             }
             selectedSlot = -2;
             restoreFocus = 0;
-            clearWidgets(); init();
+            rebuildWidgets();
             return;
         }
         selectedSlot = slot;
         selectedShapelessSlot = -1;
         applyHeldItemToSelectedSlot();
         restoreFocus = 1;
-        clearWidgets(); init();
+        rebuildWidgets();
     }
 
     /** Unique items already present in the draft, ordered result first. */
@@ -582,14 +598,14 @@ public class RecipeBuilderScreen extends Screen {
             shapelessCounts.set(slot, 1);
             selectedShapelessSlot = -1;
             selectedSlot = -2;
-            clearWidgets(); init();
+            rebuildWidgets();
             return;
         }
         selectedSlot = -2;
         selectedShapelessSlot = slot;
         applyHeldItemToSelectedSlot();
         restoreFocus = 1;
-        clearWidgets(); init();
+        rebuildWidgets();
     }
 
     private void addShapelessSlot() {
@@ -598,7 +614,7 @@ public class RecipeBuilderScreen extends Screen {
             shapelessCounts.add(1);
         }
         selectedShapelessSlot = -1;
-        clearWidgets(); init();
+        rebuildWidgets();
     }
 
     private void removeShapelessSlot(int slot) {
@@ -610,14 +626,14 @@ public class RecipeBuilderScreen extends Screen {
             shapelessCounts.set(0, 1);
         }
         selectedShapelessSlot = -1;
-        clearWidgets(); init();
+        rebuildWidgets();
     }
 
     private void clearFirstShapelessSlot() {
         shapelessItems.set(0, "");
         shapelessCounts.set(0, 1);
         selectedShapelessSlot = -1;
-        clearWidgets(); init();
+        rebuildWidgets();
     }
 
     private List<ShapelessRow> shapelessRows() {
@@ -690,10 +706,10 @@ public class RecipeBuilderScreen extends Screen {
 
     // ── rendering ─────────────────────────────────────────────────────────
 
-    private void renderFills(GuiGraphics ctx, int mx, int my) {
+    private void renderFills(GuiGraphicsExtractor ctx, int mx, int my) {
         // Keep the list border flush with the panel border; the old extra six
         // pixels left an empty strip below the final visible item.
-        int suggestionsH = itemMatches.isEmpty() ? 0 : visibleSuggestions() * SUGG_H + 1;
+        int suggestionsH = itemMatches.isEmpty() ? 0 : suggestionRowsH() + 2;
         int leftPanelH = Math.max(70, suggY() + suggestionsH - panelY());
         drawPanel(ctx, leftX(), panelY(), leftW(), leftPanelH, 0xAA141A24, 0xFF40506A);
         drawPanel(ctx, rightX(), panelY(), rightW(), workspaceH(), 0xAA141A24, 0xFF5B5A45);
@@ -713,11 +729,10 @@ public class RecipeBuilderScreen extends Screen {
                     String itemId = slotItems[slot];
                     if (itemId != null && !itemId.isEmpty()) {
                         ItemStack stack = stackFor(itemId);
-                        if (!stack.isEmpty()) {
-                            ctx.renderItem(stack, sx + 1, sy + 1);
-                            ctx.renderItemDecorations(font, stack, sx + 1, sy + 1,
-                                    String.valueOf(slotCounts[slot]));
-                        }
+                        if (!stack.isEmpty()) ctx.item(stack, sx + 1, sy + 1);
+                        String amount = String.valueOf(slotCounts[slot]);
+                        ctx.text(font, amount, sx + SLOT - font.width(amount) - 1, sy + SLOT - 8,
+                                0xFFFFFFFF, true);
                     }
                 }
             }
@@ -736,33 +751,33 @@ public class RecipeBuilderScreen extends Screen {
         }
         if (!resultItemId.isEmpty()) {
             ItemStack stack = stackFor(resultItemId);
-            if (!stack.isEmpty()) {
-                ctx.renderItem(stack, rx + 5, ry + 5);
-                ctx.renderItemDecorations(font, stack, rx + 5, ry + 5,
-                        String.valueOf(resultCount));
-            }
+            if (!stack.isEmpty()) ctx.item(stack, rx + 5, ry + 5);
+            String amount = String.valueOf(resultCount);
+            ctx.text(font, amount, rx + 20 - font.width(amount), ry + 13,
+                    0xFFFFFFFF, true);
         }
 
         // Suggestion list background + icons
         if (!itemMatches.isEmpty()) {
             // One bottom padding pixel keeps the final 16×16 item icon above the border.
-            int sy = suggY(), sh = visibleSuggestions() * SUGG_H + 2;
+            int sy = suggY(), sh = suggestionRowsH() + 2;
             ctx.fill(leftX(), sy, leftX() + leftW(), sy + sh, 0xFF1A1C28);
             drawBox(ctx, leftX(), sy, leftW(), sh, 0xFF4A5578);
             for (int i = suggestionScroll; i < suggestionScroll + visibleSuggestions(); i++) {
-                int ry2 = sy + 1 + (i - suggestionScroll) * SUGG_H;
+                int ry2 = suggestionRowsTop() + (i - suggestionScroll) * SUGG_H;
                 if (!isOverSuggestionScrollbar(mx, my)
                         && mx >= leftX() && mx < leftX() + leftW() && my >= ry2 && my < ry2 + SUGG_H)
                     ctx.fill(leftX() + 1, ry2, leftX() + leftW() - 1, ry2 + SUGG_H, 0x553355BB);
                 ItemStack stack = stackFor(itemMatches.get(i));
-                if (!stack.isEmpty()) ctx.renderItem(stack, leftX() + 2, ry2);
+                if (!stack.isEmpty()) ctx.item(stack, leftX() + 2, ry2);
             }
             if (itemMatches.size() > visibleSuggestions()) {
                 int scrollbarX = suggestionScrollbarX();
-                ctx.fill(scrollbarX, sy + 1, leftX() + leftW(), sy + sh - 1, SCROLLBAR_TRACK_COLOR);
+                ctx.fill(scrollbarX, suggestionRowsTop(), leftX() + leftW() - 1,
+                        suggestionRowsTop() + suggestionRowsH(), SCROLLBAR_TRACK_COLOR);
                 int thumbH = 15;
                 int maxScroll = Math.max(1, itemMatches.size() - visibleSuggestions());
-                int thumbY = sy + 1 + (sh - thumbH - 2) * suggestionScroll / maxScroll;
+                int thumbY = suggestionRowsTop() + (suggestionRowsH() - thumbH) * suggestionScroll / maxScroll;
                 CustomRecipeSprites.draw(ctx,
                         draggingSuggestionScrollbar ? CustomRecipeSprites.SCROLLER_ACTIVE : CustomRecipeSprites.SCROLLER_IDLE,
                         scrollbarX, thumbY, 12, 15);
@@ -789,20 +804,15 @@ public class RecipeBuilderScreen extends Screen {
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, x + 1, y + 1, 18, 18);
             } else {
                 ItemStack stack = stackFor(used.get(i - 1));
-                if (!stack.isEmpty()) ctx.renderItem(stack, x + 2, y + 2);
+                if (!stack.isEmpty()) ctx.item(stack, x + 2, y + 2);
             }
         }
     }
 
     @Override
-    public void renderBackground(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        super.renderBackground(ctx, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
-    }
-
-    @Override
-    public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        super.render(ctx, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
         if (itemField != null)
             drawBox(ctx, leftX(), fieldY(), leftW(), SEARCH_H,
                     itemField.isFocused() ? 0xFF5577DD : 0xFF404050);
@@ -818,8 +828,8 @@ public class RecipeBuilderScreen extends Screen {
             } else {
                 ItemStack heldItem = stackFor(heldItemId);
                 if (!heldItem.isEmpty()) {
-                ctx.renderItem(heldItem, ghostX, ghostY);
-                // This GUI item pipeline has no alpha overload. Its
+                ctx.item(heldItem, ghostX, ghostY);
+                // The 1.21.11 GUI item pipeline has no alpha overload. Its
                 // translucent veil keeps the cursor item at 80% visual weight.
                 ctx.fill(ghostX, ghostY, ghostX + 16, ghostY + 16, 0x33000000);
                 }
@@ -828,14 +838,13 @@ public class RecipeBuilderScreen extends Screen {
 
         // Tooltip de l'ID complet au survol d'une suggestion
         if (!itemMatches.isEmpty()) {
-            int sy = suggY() + 1;
+            int sy = suggestionRowsTop();
             for (int i = suggestionScroll; i < suggestionScroll + visibleSuggestions(); i++) {
                 int ry = sy + (i - suggestionScroll) * SUGG_H;
                 if (!isOverSuggestionScrollbar(mouseX, mouseY)
                         && mouseX >= leftX() && mouseX < leftX() + leftW()
                         && mouseY >= ry && mouseY < ry + SUGG_H) {
-                    ctx.setTooltipForNextFrame(font,
-                            List.of(Component.literal(itemMatches.get(i)).getVisualOrderText()),
+                    ctx.setTooltipForNextFrame(font, List.of(Component.literal(itemMatches.get(i)).getVisualOrderText()),
                             mouseX, mouseY);
                     break;
                 }
@@ -849,8 +858,7 @@ public class RecipeBuilderScreen extends Screen {
             int x = paletteX + 8 + (i % paletteColumns()) * 24;
             int y = paletteY + 6 + (i / paletteColumns()) * 24;
             if (mouseX >= x && mouseX < x + 20 && mouseY >= y && mouseY < y + 20) {
-                ctx.setTooltipForNextFrame(font,
-                        List.of(i == 0 ? Component.translatable("customrecipe.builder.empty_remove").getVisualOrderText() : Component.literal(used.get(i - 1)).getVisualOrderText()), mouseX, mouseY);
+                ctx.setTooltipForNextFrame(font, List.of((i == 0 ? Component.translatable("customrecipe.builder.empty_remove") : Component.literal(used.get(i - 1))).getVisualOrderText()), mouseX, mouseY);
                 break;
             }
         }
@@ -862,25 +870,30 @@ public class RecipeBuilderScreen extends Screen {
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
         double mx = click.x(), my = click.y();
-        int button = click.button();
         // Keep Cancel/Save clickable even if the reusable-item palette reaches
         // the bottom action bar at a large GUI scale.
-        if (button == LEFT_MOUSE_BUTTON && mx >= width / 2.0 - 110 && mx < width / 2.0 + 110
+        if (click.button() == LEFT_MOUSE_BUTTON && mx >= width / 2.0 - 110 && mx < width / 2.0 + 110
                 && my >= height - 48) {
             return super.mouseClicked(click, focused);
         }
         // Right-clicking the preview area cancels the item currently carried
         // by the cursor; it never edits a recipe slot.
-        if (button == RIGHT_MOUSE_BUTTON
+        if (click.button() == RIGHT_MOUSE_BUTTON
                 && mx >= rightX() && mx < rightX() + rightW()
                 && my >= panelY() && my < panelY() + workspaceH()) {
             heldItemId = null;
             selectedSlot = -2;
             selectedShapelessSlot = -1;
-            clearWidgets(); init();
+            rebuildWidgets();
             return true;
         }
-        if (button != LEFT_MOUSE_BUTTON) return super.mouseClicked(click, focused);
+        // Let vanilla widgets deal with every non-left click. In particular,
+        // this keeps the custom hit areas from swallowing a click intended for
+        // a control in the recipe panel.
+        if (click.button() != LEFT_MOUSE_BUTTON) {
+            return super.mouseClicked(click, focused);
+        }
+
         int gx = gridX(), gy = gridY();
 
         // Click on a grid slot (shaped recipes only).
@@ -938,16 +951,13 @@ public class RecipeBuilderScreen extends Screen {
             return true;
         }
 
-        // The custom icon is not a vanilla Button: otherwise its default hover
-        // chrome leaks past the reject sprite.
-        if (button == LEFT_MOUSE_BUTTON && mx >= clearSearchX() && mx < clearSearchX() + 18
+        // Click on text field — laisser super.mouseClicked gérer
+        // pour que la sélection par drag fonctionne nativement
+        if (mx >= clearSearchX() && mx < clearSearchX() + 18
                 && my >= fieldY() && my < fieldY() + SEARCH_H) {
             clearItemSearch();
             return true;
         }
-
-        // Click on text field — laisser super.mouseClicked gérer
-        // pour que la sélection par drag fonctionne nativement
         if (itemField != null
                 && mx >= leftX() && mx < leftX() + leftW() - 18
                 && my >= fieldY() && my < fieldY() + SEARCH_H) {
@@ -956,25 +966,25 @@ public class RecipeBuilderScreen extends Screen {
             setFocused(itemField);
             if (itemMatches.isEmpty()) {
                 restoreFocus = 1;
-                onItemTyped(itemFieldComponent);
+                onItemTyped(itemFieldText);
                 return true;
             }
             // Dispatch directly: Screen's child traversal could miss this first
             // click after the search field was rebuilt.
-            itemField.mouseClicked(click, focused);
+            itemField.onClick(click, focused);
             return true;
         }
 
         // Click on a suggestion
         if (!itemMatches.isEmpty()) {
-            int sy = suggY(), sw = leftW();
+            int sy = suggestionRowsTop(), sw = leftW();
             if (isOverSuggestionScrollbar(mx, my)) {
                 draggingSuggestionScrollbar = true;
                 updateSuggestionScrollbar(my);
                 return true;
             }
             if (mx >= leftX() && mx < leftX() + sw
-                    && my >= sy && my < sy + visibleSuggestions() * SUGG_H) {
+                    && my >= sy && my < sy + suggestionRowsH()) {
                 int idx = suggestionScroll + (int)(my - sy) / SUGG_H;
                 if (idx >= 0 && idx < loadedSuggestions()) {
                     selectItem(itemMatches.get(idx));
@@ -1010,14 +1020,14 @@ public class RecipeBuilderScreen extends Screen {
             int next = Math.max(0, Math.min(maxShapelessScroll(), shapelessScroll + direction));
             if (next != shapelessScroll) {
                 shapelessScroll = next;
-                clearWidgets(); init();
+                rebuildWidgets();
             }
             return true;
         }
-        int sy = suggY();
+        int sy = suggestionRowsTop();
         if (itemMatches.size() > visibleSuggestions()
                 && mx >= leftX() && mx < leftX() + leftW()
-                && my >= sy && my < sy + visibleSuggestions() * SUGG_H) {
+                && my >= sy && my < sy + suggestionRowsH()) {
             int direction = -(int) Math.signum(verticalAmount);
             if (direction > 0 && suggestionScroll + visibleSuggestions() >= loadedSuggestions()
                     && loadedSuggestions() < itemMatches.size()) {
@@ -1028,7 +1038,7 @@ public class RecipeBuilderScreen extends Screen {
             if (next != suggestionScroll) {
                 suggestionScroll = next;
                 restoreFocus = 1;
-                clearWidgets(); init();
+                rebuildWidgets();
             }
             return true;
         }
@@ -1064,7 +1074,7 @@ public class RecipeBuilderScreen extends Screen {
         int next = (int) Math.round(progress * maxScroll);
         if (next != shapelessScroll) {
             shapelessScroll = next;
-            clearWidgets(); init();
+            rebuildWidgets();
         }
     }
 
@@ -1072,7 +1082,7 @@ public class RecipeBuilderScreen extends Screen {
         int visible = visibleSuggestions();
         int maxScroll = itemMatches.size() - visible;
         if (maxScroll <= 0) return;
-        int sy = suggY();
+        int sy = suggestionRowsTop();
         int sh = visible * SUGG_H;
         double progress = Math.max(0.0, Math.min(1.0, (mouseY - sy) / Math.max(1, sh - 1)));
         int next = (int) Math.round(progress * maxScroll);
@@ -1084,17 +1094,17 @@ public class RecipeBuilderScreen extends Screen {
         if (next != suggestionScroll) {
             suggestionScroll = next;
             restoreFocus = 1;
-            clearWidgets(); init();
+            rebuildWidgets();
         }
     }
 
     @Override
-    public boolean keyPressed(KeyEvent keyEvent) {
-        if (keyEvent.isEscape()) {
+    public boolean keyPressed(KeyEvent key) {
+        if (key.key() == 256) { // Escape
             onClose();
             return true;
         }
-        return super.keyPressed(keyEvent);
+        return super.keyPressed(key);
     }
 
     // ── save ──────────────────────────────────────────────────────────────
@@ -1118,12 +1128,17 @@ public class RecipeBuilderScreen extends Screen {
         entry.server_enabled = editingEntry == null ? null : editingEntry.server_enabled;
         entry.enabled = editingEntry == null ? null : editingEntry.enabled;
         entry.quick_add = editingEntry == null ? null : editingEntry.quick_add;
+        entry.global_auto_add = editingEntry == null || parent.target().isWorld()
+                ? null : editingEntry.global_auto_add;
+        // Editing an automatically added world copy makes it an independent local recipe.
+        entry.global_library_source_id = null;
         entry.known_by_default = knownByDefault;
         entry.result = resultItemId;
         entry.count  = Math.max(1, resultCount);
 
         if (shaped) {
             entry.type = "shaped";
+            // A repeated item may intentionally require a different amount in each slot.
             Map<IngredientKey, Character> itemToChar = new LinkedHashMap<>();
             char next = 'A';
             String[] rows = new String[3];
@@ -1164,12 +1179,12 @@ public class RecipeBuilderScreen extends Screen {
         if (editingIndex >= 0) parent.recipes.set(editingIndex, entry);
         else parent.recipes.add(entry);
         if (alsoSaveToLibrary && editingIndex < 0) parent.alsoSaveToLibrary(entry);
-        minecraft.setScreen(returnTo);
+        minecraft.gui.setScreen(returnTo);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────
 
-    private String itemIdToFieldComponent(String id) {
+    private String itemIdToFieldText(String id) {
         if (id == null || id.isEmpty()) return "";
         return toDisplayName(id).toLowerCase(Locale.ROOT).replace(' ', '_');
     }
@@ -1207,9 +1222,9 @@ public class RecipeBuilderScreen extends Screen {
     @Override
     public void onClose() {
         if (!draftFingerprint().equals(initialDraft)) {
-            minecraft.setScreen(new SaveChangesScreen(this, this::confirm, () -> minecraft.setScreen(returnTo)));
+            minecraft.gui.setScreen(new SaveChangesScreen(this, this::confirm, () -> minecraft.gui.setScreen(returnTo)));
         } else {
-            minecraft.setScreen(returnTo);
+            minecraft.gui.setScreen(returnTo);
         }
     }
 
@@ -1219,11 +1234,11 @@ public class RecipeBuilderScreen extends Screen {
                 + "|" + String.join("\\u001F", shapelessItems) + "|" + shapelessCounts;
     }
 
-    private void renderShapelessIngredientList(GuiGraphics ctx, int mouseX, int mouseY) {
+    private void renderShapelessIngredientList(GuiGraphicsExtractor ctx, int mouseX, int mouseY) {
         int x = shapelessListX();
         int y = shapelessListY();
         int w = shapelessListW();
-        ctx.drawString(font, Component.translatable("customrecipe.builder.shapeless_ingredients", shapelessIngredientCount()), x, shapelessHeaderY(), 0xFF8FC7E8, false);
+        ctx.text(font, Component.translatable("customrecipe.builder.shapeless_ingredients", shapelessIngredientCount()), x, shapelessHeaderY(), 0xFF8FC7E8, false);
         int removeX = x + w - 22;
         int countX = removeX - 38;
         List<ShapelessRow> rows = shapelessRows();
@@ -1238,13 +1253,13 @@ public class RecipeBuilderScreen extends Screen {
                             && mouseY >= rowY + 4 && mouseY < rowY + 4 + SLOT)
                             ? CustomRecipeSprites.SLOT_SELECTED : CustomRecipeSprites.SLOT,
                     x + 4, rowY + 4, SLOT, SLOT);
-            ctx.drawString(font, (i + 1) + ")", x + 26, rowY + 8, 0xFF3F3F3F, false);
+            ctx.text(font, (i + 1) + ")", x + 26, rowY + 8, 0xFF3F3F3F, false);
             if (itemId != null && !itemId.isEmpty()) {
                 ItemStack stack = stackFor(itemId);
-                if (!stack.isEmpty()) ctx.renderItem(stack, x + 5, rowY + 5);
+                if (!stack.isEmpty()) ctx.item(stack, x + 5, rowY + 5);
                 String name = font.plainSubstrByWidth(toDisplayName(itemId), Math.max(20, countX - x - 46));
-                ctx.drawString(font, name, x + 42, rowY + 8, 0xFFDDDDDD, false);
-                ctx.drawString(font, "×" + row.count(), countX, rowY + 7,
+                ctx.text(font, name, x + 42, rowY + 8, 0xFFDDDDDD, false);
+                ctx.text(font, "×" + row.count(), countX, rowY + 7,
                         selectedShapelessSlot == row.slotIndex() ? 0xFFFFFFFF : 0xFFEECC77, false);
             }
         }
@@ -1262,7 +1277,7 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     /** Closed lock: fixed shaped layout. Open lock: free shapeless ingredient order. */
-    private void drawShapeLockIcon(GuiGraphics ctx, int x, int y, boolean locked) {
+    private void drawShapeLockIcon(GuiGraphicsExtractor ctx, int x, int y, boolean locked) {
         int metal = locked ? 0xFFD6D6D6 : 0xFFAAAAAA;
         int shadow = 0xFF303030;
         ctx.fill(x + 1, y + 4, x + 11, y + 12, shadow);
@@ -1290,14 +1305,14 @@ public class RecipeBuilderScreen extends Screen {
         return w;
     }
 
-    private void drawBox(GuiGraphics ctx, int x, int y, int w, int h, int c) {
-        ctx.hLine(x, x + w - 1, y, c);
-        ctx.hLine(x, x + w - 1, y + h - 1, c);
-        ctx.vLine(x, y, y + h - 1, c);
-        ctx.vLine(x + w - 1, y, y + h - 1, c);
+    private void drawBox(GuiGraphicsExtractor ctx, int x, int y, int w, int h, int c) {
+        ctx.horizontalLine(x, x + w - 1, y, c);
+        ctx.horizontalLine(x, x + w - 1, y + h - 1, c);
+        ctx.verticalLine(x, y, y + h - 1, c);
+        ctx.verticalLine(x + w - 1, y, y + h - 1, c);
     }
 
-    private void drawPanel(GuiGraphics ctx, int x, int y, int w, int h, int fill, int border) {
+    private void drawPanel(GuiGraphicsExtractor ctx, int x, int y, int w, int h, int fill, int border) {
         ctx.fill(x, y, x + w, y + h, fill);
         drawBox(ctx, x, y, w, h, border);
     }

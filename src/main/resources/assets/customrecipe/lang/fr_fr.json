@@ -6,7 +6,9 @@
   "customrecipe.home.library": "Bibliothèque",
   "customrecipe.home.create": "Créer des recettes",
   "customrecipe.home.vanilla": "Recettes par défaut",
-  "customrecipe.home.vanilla.tooltip": "Sélectionnez un monde pour accéder à ses recettes par défaut.",
+  "customrecipe.home.vanilla.tooltip": "Configurez les recettes par défaut globalement ou pour le monde sélectionné.",
+  "customrecipe.home.vanilla.global_tooltip": "Désactive les recettes par défaut dans tous les mondes. Un monde peut les réactiver explicitement.",
+  "customrecipe.home.vanilla.world_tooltip": "Configure uniquement ce monde. Les recettes désactivées globalement peuvent être réactivées ici.",
   "customrecipe.home.current_world_locked": "Le monde actuel est verrouillé lorsque l’éditeur est ouvert depuis le menu pause.",
   "customrecipe.button.back": "Retour",
   "customrecipe.button.cancel": "Annuler",
@@ -37,6 +39,7 @@
   "customrecipe.state.enabled": "Activée",
   "customrecipe.state.disabled": "Désactivée",
   "customrecipe.state.library": "Bibliothèque",
+  "customrecipe.state.all_worlds": "Tous les mondes",
   "customrecipe.state.corrupted": "Corrompue",
   "customrecipe.screen.my_recipes": "Mes recettes",
   "customrecipe.screen.global_library": "Bibliothèque globale",
@@ -122,7 +125,7 @@
   ,"customrecipe.builder.result_count": "Résultat × :"
   ,"customrecipe.builder.ingredient_count": "Ingrédient × :"
   ,"customrecipe.builder.save": "Sauvegarder"
-  ,"customrecipe.chat.world_tip": "Vous pouvez modifier les recettes personnalisées de ce monde via le menu pause (Échap), en cliquant sur %s, ou via les paramètres de Custom Recipe dans le menu Mods."
+  ,"customrecipe.chat.world_tip": "Vous pouvez modifier les recettes personnalisées de ce monde via le menu pause (Échap), en cliquant sur %s, ou via la liste des mods NeoForge."
   ,"customrecipe.chat.world_tip.link": "Custom Recipe"
   ,"customrecipe.chat.world_tip.hover": "Ouvrir l’éditeur Custom Recipe"
   ,"customrecipe.screen.built_in": "Recettes intégrées"

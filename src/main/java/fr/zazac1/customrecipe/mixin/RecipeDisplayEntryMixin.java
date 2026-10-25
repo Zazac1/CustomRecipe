@@ -18,25 +18,28 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Uses counted ingredient displays and exact custom stacks for recipe-book availability. */
-@Mixin(value = RecipeDisplayEntry.class, remap = false)
+/** Makes the recipe book account for the amount encoded in counted ingredient displays. */
+@Mixin(RecipeDisplayEntry.class)
 public abstract class RecipeDisplayEntryMixin {
-    @Shadow(remap = false) public abstract RecipeDisplay display();
+    @Shadow public abstract RecipeDisplay display();
 
-    @Inject(method = "canCraft", at = @At("HEAD"), cancellable = true, remap = false)
-    private void customrecipe$canCraft(StackedItemContents contents, CallbackInfoReturnable<Boolean> cir) {
+    @Inject(method = "canCraft", at = @At("HEAD"), cancellable = true)
+    private void customrecipe$canCraftCountedDisplay(StackedItemContents contents,
+                                                      CallbackInfoReturnable<Boolean> cir) {
         List<SlotDisplay> slots = switch (display()) {
             case ShapedCraftingRecipeDisplay shaped -> shaped.ingredients();
             case ShapelessCraftingRecipeDisplay shapeless -> shapeless.ingredients();
             default -> null;
         };
-        if (slots == null || !(contents instanceof ExactStackedItemContentsAccess exactContents)) return;
+        if (slots == null) return;
+
+        if (!(contents instanceof ExactStackedItemContentsAccess exactContents)) return;
 
         List<ItemStack> requirements = new ArrayList<>();
         for (SlotDisplay slot : slots) {
             if (slot instanceof SlotDisplay.Empty) continue;
             if (!(slot instanceof SlotDisplay.ItemStackSlotDisplay itemStack)) return;
-            requirements.add(itemStack.stack().copy());
+            requirements.add(itemStack.stack().create());
         }
 
         if (!requirements.isEmpty()) {

@@ -1,6 +1,6 @@
 plugins {
     id 'java-library'
-    id 'net.neoforged.gradle.userdev' version '7.1.38'
+    id 'net.neoforged.gradle.userdev' version '7.1.39'
     id 'maven-publish'
 }
 
@@ -10,10 +10,16 @@ base { archivesName = project.mod_id }
 
 repositories { mavenCentral() }
 
+// Opt-in checks run inside a real Minecraft server. They are excluded from
+// every distributable JAR, including when this development flag is enabled.
+if (project.hasProperty('basicValidation')) {
+    sourceSets.main.java.srcDir 'validation/src/main/java'
+}
+
 runs {
     configureEach {
         systemProperty 'forge.logging.markers', 'REGISTRIES'
-        systemProperty 'forge.logging.console.level', 'debug'
+        systemProperty 'forge.logging.console.level', 'info'
         workingDirectory project.layout.projectDirectory.dir('run').dir(name)
         modSource project.sourceSets.main
     }
@@ -25,12 +31,13 @@ configurations { runtimeClasspath.extendsFrom localRuntime }
 
 dependencies {
     implementation "net.neoforged:neoforge:${project.neo_version}"
-    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
-
 }
 
 processResources {
-    inputs.property 'version', project.version
+    inputs.properties(version: project.version,
+            minecraft_version_range: project.minecraft_version_range,
+            neo_version: project.neo_version,
+            loader_version_range: project.loader_version_range)
     filesMatching('META-INF/neoforge.mods.toml') {
         expand 'version': project.version,
                 'minecraft_version_range': project.minecraft_version_range,
@@ -40,22 +47,26 @@ processResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-    options.release = 21
+    options.release = 25
     options.encoding = 'UTF-8'
 }
 
 // NeoGradle otherwise starts the dedicated server with Gradle's closed input
 // stream. Keep the visible run-local-test terminal interactive so commands
-// such as `stop` and `/customrecipe` reach the Minecraft server console.
+// such as `stop` reach the Minecraft server console.
 tasks.withType(JavaExec).configureEach {
     if (name == 'runServer') {
         standardInput = System.in
     }
+    if (name == 'runClient') {
+        jvmArgs '-Xmx4G', '-XX:StackShadowPages=32'
+    }
 }
 
-java { toolchain.languageVersion = JavaLanguageVersion.of(21) }
+java { toolchain.languageVersion = JavaLanguageVersion.of(25) }
 
 jar {
+    exclude 'fr/zazac1/customrecipe/validation/**'
     manifest { attributes(['MixinConfigs': 'customrecipe.mixins.json']) }
     from('LICENSE') { rename { "${it}_${project.mod_id}" } }
 }

@@ -12,16 +12,17 @@ import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
 import fr.zazac1.customrecipe.WorldRecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.MultiLineTextWidget;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,33 +49,25 @@ public class ConfigScreen extends Screen {
     final List<String> knownByDefaultBuiltin;
     final List<String> disabledRecipes;
     final List<RecipeVariantRule> disabledRecipeVariants;
+    final List<String> enabledRecipes;
+    final List<RecipeVariantRule> enabledRecipeVariants;
     final List<String> hiddenQuickAddBuiltin;
     final List<CustomRecipeEntry> quickAddRecipes;
     final List<CustomItemEntry> customItems;
-    private boolean builtinRecipesInitialized;
 
     public ConfigScreen(Screen parent) {
         this(parent, ConfigLoader.get(), "Custom Recipe", false, ConfigLoader::saveAndInvalidate, null, false);
     }
 
     public static ConfigScreen fromModMenu(Screen parent) {
-        return new ConfigScreen(parent);
+        ModConfig config = ConfigLoader.get();
+        if ("global".equals(config.default_editor_target_id)) return new ConfigScreen(parent);
+        return new ConfigScreen(parent, config, "Custom Recipe", false, ConfigLoader::saveAndInvalidate,
+                new WorldRecipeTarget(config.default_editor_target_id, config.default_editor_target_name), false);
     }
 
     public static ConfigScreen fromPauseMenu(Screen parent) {
-        ModConfig config = ConfigLoader.get();
-        Minecraft client = Minecraft.getInstance();
-        if (client.getSingleplayerServer() != null) {
-            // The pause-menu entry must always edit the save currently loaded,
-            // independently of the global Mod Menu default target.
-            String worldName = client.getSingleplayerServer().getWorldData().getLevelName();
-            RecipeTarget currentWorld = new WorldRecipeTarget(
-                    ClientInit.currentLocalWorldId(client),
-                    worldName == null || worldName.isBlank() ? "Current world" : worldName);
-            return new ConfigScreen(parent, config, "Custom Recipe", false,
-                    ConfigLoader::saveAndInvalidate, currentWorld, true);
-        }
-        return new ConfigScreen(parent, config, "Custom Recipe", false,
+        return new ConfigScreen(parent, ConfigLoader.get(), "Custom Recipe", false,
                 ConfigLoader::saveAndInvalidate, null, true);
     }
 
@@ -82,30 +75,6 @@ public class ConfigScreen extends Screen {
     public ConfigScreen(Screen parent, ModConfig config, String screenTitle,
                         boolean serverManaged, Consumer<ModConfig> saveAction) {
         this(parent, config, screenTitle, serverManaged, saveAction, null, false);
-    }
-
-    /**
-     * Opens the authoritative server editor.  A server command always applies
-     * to the save currently loaded by that server, never to the player's local
-     * Global Library preference.
-     */
-    public static ConfigScreen fromServerCommand(Screen parent, ModConfig config,
-                                                 Consumer<ModConfig> saveAction) {
-        String worldId = config.editor_world_id == null ? "" : config.editor_world_id;
-        String worldName = config.editor_world_name == null || config.editor_world_name.isBlank()
-                ? "Current server world" : config.editor_world_name;
-        RecipeTarget target = worldId.isBlank()
-                ? GlobalRecipeTarget.INSTANCE
-                : new WorldRecipeTarget(worldId, worldName);
-        return new ConfigScreen(parent, config, "Server Recipes (OP)", true,
-                saveAction, target, !worldId.isBlank());
-    }
-
-    /** User-facing target label; server commands edit the server-owned config. */
-    public String targetLabel() {
-        if (serverManaged) return "Server";
-        return target.isWorld() ? target.displayName()
-                : Component.translatable("customrecipe.home.global").getString();
     }
 
     private ConfigScreen(Screen parent, ModConfig config, String screenTitle,
@@ -128,21 +97,19 @@ public class ConfigScreen extends Screen {
         this.recipes  = new ArrayList<>(targetConfig.custom_recipes);
         this.disabled = new ArrayList<>(targetConfig.disabled_builtin);
         this.knownByDefaultBuiltin = new ArrayList<>(targetConfig.known_by_default_builtin);
-        this.disabledRecipes = new ArrayList<>(targetConfig.disabled_recipes);
-        this.disabledRecipeVariants = new ArrayList<>(targetConfig.disabled_recipe_variants);
+        this.disabledRecipes = new ArrayList<>(target.isWorld()
+                ? targetConfig.disabled_recipes : config.global_disabled_recipes);
+        this.disabledRecipeVariants = new ArrayList<>(target.isWorld()
+                ? targetConfig.disabled_recipe_variants : config.global_disabled_recipe_variants);
+        this.enabledRecipes = new ArrayList<>(targetConfig.enabled_recipes);
+        this.enabledRecipeVariants = new ArrayList<>(targetConfig.enabled_recipe_variants);
         this.hiddenQuickAddBuiltin = new ArrayList<>(targetConfig.hidden_quick_add_builtin);
         this.quickAddRecipes = new ArrayList<>(targetConfig.quick_add_recipes);
-        this.builtinRecipesInitialized = targetConfig.builtin_recipes_initialized;
-        this.customItems = new ArrayList<>(baseConfig.custom_items);
+        this.customItems = new ArrayList<>(config.custom_items);
         this.initialConfigJson = ConfigLoader.toJson(baseConfig);
     }
 
     private RecipeTarget defaultTarget() {
-        if ("global".equals(baseConfig.default_editor_target_id)) return GlobalRecipeTarget.INSTANCE;
-        if (baseConfig.default_editor_target_id != null && !baseConfig.default_editor_target_id.isBlank()
-                && baseConfig.findWorldConfig(baseConfig.default_editor_target_id) != null) {
-            return new WorldRecipeTarget(baseConfig.default_editor_target_id, baseConfig.default_editor_target_name);
-        }
         if (!editorWorldId.isBlank()) return new WorldRecipeTarget(editorWorldId,
                 "Current " + editorWorldName);
         return GlobalRecipeTarget.INSTANCE;
@@ -159,56 +126,55 @@ public class ConfigScreen extends Screen {
         boolean hasWorldTarget = target.isWorld();
 
         addRenderableOnly((ctx, mouseX, mouseY, delta) ->
-                ctx.drawCenteredString(font, Component.translatable("customrecipe.home.title"), width / 2, top - 27, 0xFFFFFFFF));
+                ctx.centeredText(font, Component.translatable("customrecipe.home.title"), width / 2, top - 27, 0xFFFFFFFF));
 
-        addRenderableWidget(Button.builder(Component.empty(), b -> minecraft.setScreen(new ModSettingsScreen(this)))
+        addRenderableWidget(Button.builder(Component.empty(), b -> minecraft.gui.setScreen(new ModSettingsScreen(this)))
                 .bounds(width - 28, height - 28, 20, 20).build());
         addRenderableOnly((ctx, mouseX, mouseY, delta) -> CustomRecipeSprites.draw(ctx,
                 Identifier.fromNamespaceAndPath(CustomRecipeMod.MOD_ID, "textures/gui/icons/settings.png"), width - 26, height - 26, 16, 16));
 
         Button selectWorld = Button.builder(Component.empty(),
-                b -> minecraft.setScreen(new RecipeTargetSelectScreen(this)))
+                b -> minecraft.gui.setScreen(new RecipeTargetSelectScreen(this)))
                 .bounds(x, top, buttonWidth, buttonHeight).build();
         selectWorld.active = !serverManaged && !targetLocked;
-        if (targetLocked) selectWorld.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+        if (targetLocked) selectWorld.setTooltip(Tooltip.create(
                 Component.translatable("customrecipe.home.current_world_locked")));
         addRenderableWidget(selectWorld);
-        addHomeButton(top, buttonWidth, serverManaged ? "Server" : Component.translatable("customrecipe.home.select_world").getString(),
-                serverManaged ? "(Server)" : (hasWorldTarget ? "(" + target.displayName() + ")" : Component.translatable("customrecipe.home.global").getString()),
-                Items.MAP, selectWorld.active);
+        addHomeButton(top, buttonWidth, Component.translatable("customrecipe.home.select_world").getString(),
+                hasWorldTarget ? "(" + target.displayName() + ")" : Component.translatable("customrecipe.home.global").getString(), Items.MAP, selectWorld.active);
 
         int libraryY = top + buttonHeight + gap;
         addRenderableWidget(Button.builder(Component.empty(),
                 // The library button always opens the recipes for the selected target.
                 // On a dedicated server that target is the current server world.
-                b -> minecraft.setScreen(new CustomRecipesScreen(this)))
+                b -> minecraft.gui.setScreen(new CustomRecipesScreen(this)))
                 .bounds(x, libraryY, buttonWidth, buttonHeight).build());
         addHomeButton(libraryY, buttonWidth, Component.translatable("customrecipe.home.library").getString(), null, Items.BOOKSHELF, true);
 
         int customItemsY = libraryY + buttonHeight + gap;
         addRenderableWidget(Button.builder(Component.empty(),
-                b -> minecraft.setScreen(new CustomItemsScreen(this)))
+                b -> minecraft.gui.setScreen(new CustomItemsScreen(this)))
                 .bounds(x, customItemsY, buttonWidth, buttonHeight).build());
-        addHomeButton(customItemsY, buttonWidth,
-                Component.translatable("customrecipe.home.custom_items").getString(),
-                Integer.toString(customItems.size()), Items.FISHING_ROD, true);
+        addHomeButton(customItemsY, buttonWidth, Component.translatable("customrecipe.home.custom_items").getString(),
+                customItems.size() + "", Items.FISHING_ROD, true);
 
         int createY = customItemsY + buttonHeight + gap;
         addRenderableWidget(Button.builder(Component.empty(),
-                b -> minecraft.setScreen(new RecipeBuilderScreen(this)))
+                b -> minecraft.gui.setScreen(new RecipeBuilderScreen(this)))
                 .bounds(x, createY, buttonWidth, buttonHeight).build());
         addHomeButton(createY, buttonWidth, Component.translatable("customrecipe.home.create").getString(), null, Items.CRAFTING_TABLE, true);
 
         int vanillaY = createY + buttonHeight + gap;
         Button vanilla = Button.builder(Component.empty(),
-                b -> minecraft.setScreen(new VanillaRecipesScreen(this, !serverManaged)))
+                b -> minecraft.gui.setScreen(new VanillaRecipesScreen(this, !serverManaged)))
                 .bounds(x, vanillaY, buttonWidth, buttonHeight).build();
-        vanilla.active = hasWorldTarget || serverManaged;
-        if (!vanilla.active) vanilla.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
-                Component.translatable("customrecipe.home.vanilla.tooltip")));
+        vanilla.active = true;
+        vanilla.setTooltip(Tooltip.create(Component.translatable(
+                hasWorldTarget || serverManaged
+                        ? "customrecipe.home.vanilla.world_tooltip"
+                        : "customrecipe.home.vanilla.global_tooltip")));
         addRenderableWidget(vanilla);
         addHomeButton(vanillaY, buttonWidth, Component.translatable("customrecipe.home.vanilla").getString(), null, Items.GRASS_BLOCK, vanilla.active);
-
 
         int saveY = vanillaY + buttonHeight + gap;
         addRenderableWidget(Button.builder(Component.empty(), b -> save())
@@ -218,18 +184,18 @@ public class ConfigScreen extends Screen {
         addRenderableWidget(Button.builder(Component.literal("Import"), b -> importAll()).bounds(width / 2 + 4, saveY + 32, 100, 20).build());
     }
 
-    /** Draws the large home entries while the normal Button keeps hover/click behavior. */
+    /** Draws the large home entries while the normal ButtonWidget keeps hover/click behavior. */
     private void addHomeButton(int y, int buttonWidth, String label, String subtitle,
-                               net.minecraft.world.item.Item icon, boolean active) {
+                               Item icon, boolean active) {
         int x = width / 2 - buttonWidth / 2;
         addRenderableOnly((ctx, mouseX, mouseY, delta) -> {
-            // Component drawing uses the top of its 9 px glyph box, not its baseline.
+            // Text drawing uses the top of its 9 px glyph box, not its baseline.
             // Keep both one-line and two-line entries centered inside the 28 px button.
             int mainY = subtitle == null ? y + 10 : y + 4;
             int color = active ? 0xFFFFFFFF : 0xFF777777;
-            ctx.drawCenteredString(font, label, width / 2, mainY, color);
+            ctx.centeredText(font, label, width / 2, mainY, color);
             if (subtitle != null) {
-                ctx.drawCenteredString(font, subtitle, width / 2, y + 15,
+                ctx.centeredText(font, subtitle, width / 2, y + 15,
                         active ? 0xFFB8B8B8 : 0xFF666666);
             }
 
@@ -240,7 +206,7 @@ public class ConfigScreen extends Screen {
                 ctx.blit(RenderPipelines.GUI_TEXTURED, globe, iconX + 1, y + 6,
                         0, 0, 16, 16, 16, 16);
             } else {
-                ctx.renderItem(new ItemStack(icon), iconX + 2, iconY);
+                ctx.item(ClientItemStacks.fromItem(icon), iconX + 2, iconY);
             }
         });
     }
@@ -251,7 +217,7 @@ public class ConfigScreen extends Screen {
         String label = Component.translatable("customrecipe.button.save").getString();
         addRenderableOnly((ctx, mouseX, mouseY, delta) -> {
             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, x + 12, y + 6, 16, 16);
-            ctx.drawCenteredString(font, label, width / 2, y + 10, 0xFFFFFFFF);
+            ctx.centeredText(font, label, width / 2, y + 10, 0xFFFFFFFF);
         });
     }
 
@@ -262,7 +228,8 @@ public class ConfigScreen extends Screen {
         int cx = width / 2 - btnW / 2;
         int cy = height / 2 - 20;
 
-        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, target, targetLabel()));
+        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, target,
+                target.isWorld() ? target.displayName() : "Global Library"));
 
         // Title
         int titleX = Math.max(8, (width - font.width(title.getString())) / 2);
@@ -270,9 +237,9 @@ public class ConfigScreen extends Screen {
 
         boolean canChooseTarget = !serverManaged;
         Button targetButton = Button.builder(
-                Component.literal("Target: " + targetLabel() + " ▼"),
+                Component.literal("Target: " + target.displayName() + " ▼"),
                 b -> {
-                    if (canChooseTarget) minecraft.setScreen(new RecipeTargetSelectScreen(this));
+                    if (canChooseTarget) minecraft.gui.setScreen(new RecipeTargetSelectScreen(this));
                 }
         ).bounds(cx, cy - 26, btnW, btnH).build();
         targetButton.active = canChooseTarget;
@@ -280,34 +247,34 @@ public class ConfigScreen extends Screen {
 
         addRenderableWidget(Button.builder(
                 Component.literal("My Recipes"),
-                b -> minecraft.setScreen(new CustomRecipesScreen(this))
+                b -> minecraft.gui.setScreen(new CustomRecipesScreen(this))
         ).bounds(cx, cy, btnW, btnH).build());
 
         addRenderableWidget(Button.builder(
                 Component.literal("Create a Recipe"),
-                b -> minecraft.setScreen(new RecipeBuilderScreen(this))
+                b -> minecraft.gui.setScreen(new RecipeBuilderScreen(this))
         ).bounds(cx, cy + 24, btnW, btnH).build());
 
         if (serverManaged) {
             addRenderableWidget(Button.builder(
                     Component.literal("Default Recipes"),
                     // This editor changes server recipes, so it only browses the server catalog.
-                    b -> minecraft.setScreen(new VanillaRecipesScreen(this))
+                    b -> minecraft.gui.setScreen(new VanillaRecipesScreen(this))
             ).bounds(cx, cy + 48, btnW, btnH).build());
 
             addRenderableWidget(Button.builder(
                     Component.literal("Manual Edit"),
-                    b -> minecraft.setScreen(new ServerJsonScreen(this, currentConfig()))
+                    b -> minecraft.gui.setScreen(new ServerJsonScreen(this, currentConfig()))
             ).bounds(cx, cy + 72, btnW, btnH).build());
         } else {
             boolean hasWorldTarget = target.isWorld();
             Button vanillaButton = Button.builder(
                     Component.literal(hasWorldTarget ? "Default Recipes" : "Select a world for Default Recipes")
                             .withColor(hasWorldTarget ? 0xFFFFFF : 0x777777),
-                    b -> minecraft.setScreen(new VanillaRecipesScreen(this, true))
+                    b -> minecraft.gui.setScreen(new VanillaRecipesScreen(this, true))
             ).bounds(cx, cy + 48, btnW, btnH).build();
             vanillaButton.active = hasWorldTarget;
-            if (!hasWorldTarget) vanillaButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+            if (!hasWorldTarget) vanillaButton.setTooltip(Tooltip.create(
                     Component.literal("Select a world to access its vanilla recipes.")));
             addRenderableWidget(vanillaButton);
         }
@@ -320,8 +287,12 @@ public class ConfigScreen extends Screen {
 
     private void exportAll() {
         WindowsFileDialogs.saveJson(exportFileName(), path -> {
-            try { ConfigLoader.exportTo(currentConfig(), path); } catch (java.io.IOException ignored) {}
-        }, error -> {});
+            try {
+                ConfigLoader.exportTo(currentConfig(), path);
+            } catch (java.io.IOException error) {
+                reportFileError("exporter", error);
+            }
+        }, this::reportFileDialogError);
     }
 
     private String exportFileName() {
@@ -341,20 +312,46 @@ public class ConfigScreen extends Screen {
                         + importedTarget.disabled_recipe_variants.size()
                         + importedTarget.known_by_default_builtin.size()
                         + importedTarget.hidden_quick_add_builtin.size();
-                minecraft.setScreen(new ImportConfigurationScreen(this, imported, recipeCount, vanillaCount));
-            } catch (java.io.IOException ignored) {}
-        }, error -> {});
+                minecraft.gui.setScreen(new ImportConfigurationScreen(this, imported, recipeCount, vanillaCount));
+            } catch (java.io.IOException error) {
+                reportFileError("importer", error);
+            }
+        }, this::reportFileDialogError);
+    }
+
+    private void reportFileDialogError(String detail) {
+        CustomRecipeMod.LOGGER.error("[Custom Recipe] File chooser error: {}", detail);
+        if (minecraft.player != null) {
+            minecraft.player.sendSystemMessage(Component.literal("[Custom Recipe] " + detail));
+        }
+    }
+
+    private void reportFileError(String action, Throwable error) {
+        String detail = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+        reportFileError(action, detail, error);
+    }
+
+    private void reportFileError(String action, String detail, Throwable error) {
+        if (error == null) {
+            CustomRecipeMod.LOGGER.error("[Custom Recipe] Impossible d'{} une configuration : {}", action, detail);
+        } else {
+            CustomRecipeMod.LOGGER.error("[Custom Recipe] Impossible d'{} une configuration.", action, error);
+        }
+        if (minecraft.player != null) {
+            minecraft.player.sendSystemMessage(Component.literal(
+                    "[Custom Recipe] Impossible d'" + action + " une configuration : " + detail));
+        }
     }
 
     void confirmImportedConfiguration(ModConfig imported) {
-        minecraft.setScreen(new ConfigScreen(parent, imported, title.getString(), serverManaged, saveAction, target, targetLocked));
+        minecraft.gui.setScreen(new ConfigScreen(parent, imported, title.getString(), serverManaged, saveAction, target, targetLocked));
     }
     void save() {
         if (serverManaged) {
             saveServerAndReturn();
             return;
         }
-        saveAndReturn(parent, true);
+        saveAndReturn(parent);
     }
 
     private void saveServerAndReturn() {
@@ -364,47 +361,48 @@ public class ConfigScreen extends Screen {
             serverSavePending = false;
             if (saved) {
                 initialConfigJson = ConfigLoader.toJson(currentConfig());
-                if (minecraft.player != null) minecraft.player.displayClientMessage(Component.literal("[Custom Recipe] " + message), false);
-                minecraft.setScreen(parent);
+                if (minecraft.player != null) minecraft.player.sendSystemMessage(Component.literal("[Custom Recipe] " + message));
+                minecraft.gui.setScreen(parent);
             } else {
-                if (minecraft.player != null) minecraft.player.displayClientMessage(Component.literal("[Custom Recipe] Save failed: " + message), false);
-                minecraft.setScreen(this);
+                if (minecraft.player != null) minecraft.player.sendSystemMessage(Component.literal("[Custom Recipe] Save failed: " + message));
+                minecraft.gui.setScreen(this);
             }
         });
         if (!queued) serverSavePending = false;
     }
 
     /** Saves without skipping the screen that opened a sub-menu. */
-    private void saveAndReturn(Screen returnTo, boolean announceSave) {
+    void saveAndReturn(Screen returnTo) {
         ModConfig configToSave = currentConfig();
         saveAction.accept(configToSave);
         initialConfigJson = ConfigLoader.toJson(configToSave);
         if (!serverManaged && minecraft.getSingleplayerServer() != null) {
-            if (announceSave && minecraft.player != null) {
-                minecraft.player.displayClientMessage(Component.translatable("customrecipe.chat.applying"), false);
+            if (minecraft.player != null) {
+                minecraft.player.sendSystemMessage(Component.translatable("customrecipe.chat.applying"));
             }
             minecraft.getSingleplayerServer().execute(() -> minecraft.getSingleplayerServer().getCommands()
                     .performPrefixedCommand(minecraft.getSingleplayerServer().createCommandSourceStack().withSuppressedOutput(), "reload"));
         }
-        minecraft.setScreen(returnTo);
+        minecraft.gui.setScreen(returnTo);
     }
 
-    /** Dedicated servers receive staged changes only from the main Save action. */
+    /** Local sub-menu saves persist immediately; server edits remain staged
+     * until the authoritative server Save receives an acknowledgement. */
     void saveFromSubmenu() {
         if (serverManaged) {
             currentConfig();
-            minecraft.setScreen(this);
+            minecraft.gui.setScreen(this);
             return;
         }
-        saveAndReturn(this, false);
+        saveAndReturn(this);
     }
 
     @Override
     public void onClose() {
         if (hasUnsavedChanges()) {
-            minecraft.setScreen(new SaveChangesScreen(this, this::save, this::discardAndClose));
+            minecraft.gui.setScreen(new SaveChangesScreen(this, this::save, this::discardAndClose));
         } else {
-            minecraft.setScreen(parent);
+            minecraft.gui.setScreen(parent);
         }
     }
 
@@ -415,22 +413,24 @@ public class ConfigScreen extends Screen {
     private void discardAndClose() {
         ModConfig original = ConfigLoader.fromJson(initialConfigJson);
         if (original != null) restoreConfig(original);
-        minecraft.setScreen(parent);
+        minecraft.gui.setScreen(parent);
     }
 
     private void restoreConfig(ModConfig original) {
         baseConfig.recipe_target_version = original.recipe_target_version;
         baseConfig.global_library = original.global_library;
+        baseConfig.custom_items = original.custom_items;
         baseConfig.world_configs = original.world_configs;
         baseConfig.world_names = original.world_names;
         baseConfig.editor_world_id = original.editor_world_id;
         baseConfig.editor_world_name = original.editor_world_name;
+        baseConfig.global_disabled_recipes = original.global_disabled_recipes;
+        baseConfig.global_disabled_recipe_variants = original.global_disabled_recipe_variants;
         baseConfig.disabled_builtin = original.disabled_builtin;
         baseConfig.known_by_default_builtin = original.known_by_default_builtin;
         baseConfig.disabled_recipes = original.disabled_recipes;
         baseConfig.disabled_recipe_variants = original.disabled_recipe_variants;
         baseConfig.custom_recipes = original.custom_recipes;
-        baseConfig.custom_items = original.custom_items;
         baseConfig.shown_world_editor_tips = original.shown_world_editor_tips;
     }
 
@@ -472,16 +472,22 @@ public class ConfigScreen extends Screen {
     }
 
     RecipeTarget target() { return target; }
+    ModConfig rootConfig() { currentConfig(); return baseConfig; }
 
     void addFromLibrary(CustomRecipeEntry source) {
         if (!target.isWorld() || source == null) return;
         CustomRecipeEntry copy = ConfigLoader.copyRecipe(source);
-        // A library entry is a reusable template, never a disabled server copy.
         if (copy != null) {
+            // The library is a reusable template catalog. Its legacy state
+            // must not disable the independent copy created for this world.
             copy.enabled = null;
             copy.server_enabled = null;
+            copy.global_auto_add = null;
+            copy.global_library_source_id = null;
         }
-        if (copy != null && recipes.stream().noneMatch(existing -> ConfigLoader.sameRecipe(existing, copy))) recipes.add(copy);
+        if (copy != null && recipes.stream().noneMatch(existing -> ConfigLoader.sameRecipe(existing, copy))) {
+            recipes.add(copy);
+        }
     }
 
     int globalLibraryImportableCount() {
@@ -502,7 +508,11 @@ public class ConfigScreen extends Screen {
     void alsoSaveToLibrary(CustomRecipeEntry source) {
         if (!target.isWorld() || source == null) return;
         CustomRecipeEntry copy = ConfigLoader.copyRecipe(source);
-        if (copy != null) baseConfig.global_library.custom_recipes.add(copy);
+        if (copy != null) {
+            copy.global_auto_add = null;
+            copy.global_library_source_id = null;
+            baseConfig.global_library.custom_recipes.add(copy);
+        }
     }
 
     ConfigScreen createTargetScreen(RecipeTarget nextTarget) {
@@ -522,7 +532,11 @@ public class ConfigScreen extends Screen {
     }
     void selectTarget(RecipeTarget nextTarget) {
         if (targetLocked) return;
-        minecraft.setScreen(createTargetScreen(nextTarget));
+        currentConfig();
+        ConfigScreen next = new ConfigScreen(parent, baseConfig, title.getString(), serverManaged, saveAction,
+                nextTarget, targetLocked);
+        next.initialConfigJson = initialConfigJson;
+        minecraft.gui.setScreen(next);
     }
 
     boolean canUseCustomItemId(CustomItemEntry entry, String requestedId) {
@@ -583,23 +597,25 @@ public class ConfigScreen extends Screen {
     }
 
     ModConfig currentConfig() {
-        baseConfig.custom_items = new ArrayList<>(customItems);
         targetConfig.custom_recipes = new ArrayList<>(recipes);
         targetConfig.disabled_builtin = new ArrayList<>(disabled);
         targetConfig.known_by_default_builtin = new ArrayList<>(knownByDefaultBuiltin);
-        targetConfig.builtin_recipes_initialized = builtinRecipesInitialized;
-        targetConfig.disabled_recipes = new ArrayList<>(disabledRecipes);
-        targetConfig.disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
+        if (target.isWorld()) {
+            targetConfig.disabled_recipes = new ArrayList<>(disabledRecipes);
+            targetConfig.disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
+            targetConfig.enabled_recipes = new ArrayList<>(enabledRecipes);
+            targetConfig.enabled_recipe_variants = new ArrayList<>(enabledRecipeVariants);
+        } else {
+            baseConfig.global_disabled_recipes = new ArrayList<>(disabledRecipes);
+            baseConfig.global_disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
+        }
         targetConfig.hidden_quick_add_builtin = new ArrayList<>(hiddenQuickAddBuiltin);
         targetConfig.quick_add_recipes = new ArrayList<>(quickAddRecipes);
+        baseConfig.custom_items = new ArrayList<>(customItems);
         return baseConfig;
     }
 
-    ModConfig rootConfig() { return currentConfig(); }
-
     void replaceConfig(ModConfig config) {
-        customItems.clear();
-        customItems.addAll(config.custom_items);
         recipes.clear();
         WorldRecipeConfig replacement = target.resolve(config);
         recipes.addAll(replacement.custom_recipes);
@@ -607,26 +623,96 @@ public class ConfigScreen extends Screen {
         disabled.addAll(replacement.disabled_builtin);
         knownByDefaultBuiltin.clear();
         knownByDefaultBuiltin.addAll(replacement.known_by_default_builtin);
-        builtinRecipesInitialized = replacement.builtin_recipes_initialized;
         disabledRecipes.clear();
-        disabledRecipes.addAll(replacement.disabled_recipes);
+        disabledRecipes.addAll(target.isWorld() ? replacement.disabled_recipes : config.global_disabled_recipes);
         disabledRecipeVariants.clear();
-        disabledRecipeVariants.addAll(replacement.disabled_recipe_variants);
+        disabledRecipeVariants.addAll(target.isWorld()
+                ? replacement.disabled_recipe_variants : config.global_disabled_recipe_variants);
+        enabledRecipes.clear();
+        enabledRecipes.addAll(replacement.enabled_recipes);
+        enabledRecipeVariants.clear();
+        enabledRecipeVariants.addAll(replacement.enabled_recipe_variants);
         hiddenQuickAddBuiltin.clear();
         hiddenQuickAddBuiltin.addAll(replacement.hidden_quick_add_builtin);
         quickAddRecipes.clear();
         quickAddRecipes.addAll(replacement.quick_add_recipes);
+        customItems.clear();
+        customItems.addAll(config.custom_items);
     }
 
+    List<String> effectiveDisabledRecipes() {
+        if (!target.isWorld()) return new ArrayList<>(disabledRecipes);
+        java.util.LinkedHashSet<String> effective = new java.util.LinkedHashSet<>(baseConfig.global_disabled_recipes);
+        effective.removeAll(enabledRecipes);
+        effective.addAll(disabledRecipes);
+        return new ArrayList<>(effective);
+    }
+
+    boolean isDefaultRecipeDisabled(String recipeId) {
+        return effectiveDisabledRecipes().contains(recipeId);
+    }
+
+    void toggleDefaultRecipe(String recipeId) {
+        if (!target.isWorld()) {
+            if (!disabledRecipes.remove(recipeId)) disabledRecipes.add(recipeId);
+            return;
+        }
+        boolean globallyDisabled = baseConfig.global_disabled_recipes.contains(recipeId);
+        if (isDefaultRecipeDisabled(recipeId)) {
+            disabledRecipes.remove(recipeId);
+            if (globallyDisabled && !enabledRecipes.contains(recipeId)) enabledRecipes.add(recipeId);
+            else if (!globallyDisabled) enabledRecipes.remove(recipeId);
+        } else {
+            enabledRecipes.remove(recipeId);
+            if (!globallyDisabled && !disabledRecipes.contains(recipeId)) disabledRecipes.add(recipeId);
+        }
+    }
+
+    boolean isDefaultRecipeVariantDisabled(String recipeId, String materialId) {
+        if (hasVariant(disabledRecipeVariants, recipeId, materialId)) return true;
+        if (!target.isWorld()) return false;
+        return hasVariant(baseConfig.global_disabled_recipe_variants, recipeId, materialId)
+                && !hasVariant(enabledRecipeVariants, recipeId, materialId);
+    }
+
+    void toggleDefaultRecipeVariant(String recipeId, String materialId) {
+        if (!target.isWorld()) {
+            if (!removeVariant(disabledRecipeVariants, recipeId, materialId)) {
+                disabledRecipeVariants.add(new RecipeVariantRule(recipeId, materialId));
+            }
+            return;
+        }
+        boolean globallyDisabled = hasVariant(baseConfig.global_disabled_recipe_variants, recipeId, materialId);
+        if (isDefaultRecipeVariantDisabled(recipeId, materialId)) {
+            removeVariant(disabledRecipeVariants, recipeId, materialId);
+            if (globallyDisabled && !hasVariant(enabledRecipeVariants, recipeId, materialId)) {
+                enabledRecipeVariants.add(new RecipeVariantRule(recipeId, materialId));
+            } else if (!globallyDisabled) {
+                removeVariant(enabledRecipeVariants, recipeId, materialId);
+            }
+        } else {
+            removeVariant(enabledRecipeVariants, recipeId, materialId);
+            if (!globallyDisabled && !hasVariant(disabledRecipeVariants, recipeId, materialId)) {
+                disabledRecipeVariants.add(new RecipeVariantRule(recipeId, materialId));
+            }
+        }
+    }
+
+    private static boolean hasVariant(List<RecipeVariantRule> rules, String recipeId, String materialId) {
+        return rules.stream().anyMatch(rule -> rule != null
+                && recipeId.equals(rule.recipe_id) && materialId.equals(rule.material_id));
+    }
+
+    private static boolean removeVariant(List<RecipeVariantRule> rules, String recipeId, String materialId) {
+        return rules.removeIf(rule -> rule != null
+                && recipeId.equals(rule.recipe_id) && materialId.equals(rule.material_id));
+    }
+
+
     @Override
-    public void renderBackground(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        super.renderBackground(ctx, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
         ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
-    }
-
-    @Override
-    public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        super.render(ctx, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
     }
 
     @Override

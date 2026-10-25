@@ -2,10 +2,14 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.MultiLineTextWidget;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.storage.LevelSummary;
+
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -14,21 +18,20 @@ import java.util.List;
 final class WorldRecipesScreen extends Screen {
     private final ConfigScreen config;
     private final RecipeWorldsScreen parent;
-    private final String worldId;
-    private final String worldName;
+    private final LevelSummary world;
+    private String worldId;
     private int scroll;
 
-    WorldRecipesScreen(ConfigScreen config, RecipeWorldsScreen parent, String worldId, String worldName) {
-        super(Component.translatable("customrecipe.world.recipes_in", worldName == null || worldName.isBlank()
-                ? Component.translatable("customrecipe.world.default_name") : worldName));
+    WorldRecipesScreen(ConfigScreen config, RecipeWorldsScreen parent, LevelSummary world) {
+        super(Component.translatable("customrecipe.world.recipes_in", world == null ? Component.translatable("customrecipe.world.default_name") : world.getLevelName()));
         this.config = config;
         this.parent = parent;
-        this.worldId = worldId;
-        this.worldName = worldName;
+        this.world = world;
     }
 
     @Override
     protected void init() {
+        worldId = worldId(world);
         int x = width / 2 - 170;
         int y = 40;
         List<CustomRecipeEntry> recipes = orderedRecipes();
@@ -41,13 +44,13 @@ final class WorldRecipesScreen extends Screen {
             CustomRecipeEntry recipe = recipes.get(i);
             boolean enabled = isEnabled(recipe);
             if (enabled && !wroteEnabledHeader) {
-                addRenderableWidget(new net.minecraft.client.gui.components.MultiLineTextWidget(x, y,
+                addRenderableWidget(new MultiLineTextWidget(x, y,
                         Component.translatable("customrecipe.world.enabled_recipes").withColor(0x55FF55), font));
                 y += 16;
                 wroteEnabledHeader = true;
             }
             if (!enabled && !wroteDisabledHeader) {
-                addRenderableWidget(new net.minecraft.client.gui.components.MultiLineTextWidget(x, y,
+                addRenderableWidget(new MultiLineTextWidget(x, y,
                         Component.translatable("customrecipe.world.available_recipes").withColor(0xAAAAAA), font));
                 y += 16;
                 wroteDisabledHeader = true;
@@ -56,7 +59,7 @@ final class WorldRecipesScreen extends Screen {
             final int rowY = y;
             addRenderableWidget(Button.builder(Component.literal(recipeName(recipe)), b -> {
                 toggle(target);
-                clearWidgets(); init();
+                rebuildWidgets();
             }).bounds(x + 24, rowY, 316, 18).build());
             addRenderableOnly((ctx, mouseX, mouseY, delta) -> CustomRecipeSprites.draw(ctx,
                     isEnabled(target) ? CustomRecipeSprites.ACCEPT : CustomRecipeSprites.REJECT,
@@ -64,7 +67,7 @@ final class WorldRecipesScreen extends Screen {
             y += 22;
         }
 
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.gui.setScreen(parent))
                 .bounds(width / 2 - 55, height - 28, 110, 20).build());
     }
 
@@ -83,8 +86,18 @@ final class WorldRecipesScreen extends Screen {
 
     private void toggle(CustomRecipeEntry recipe) {
         if (worldId == null) return;
-        config.setWorldAssigned(recipe, worldId, worldName, !isEnabled(recipe));
+        config.setWorldAssigned(recipe, worldId, world.getLevelName(), !isEnabled(recipe));
         config.persistLocalWorldAssignments();
+    }
+
+    private String worldId(LevelSummary summary) {
+        if (summary == null || summary.getLevelId() == null || summary.getLevelId().isBlank()) return null;
+        try {
+            Path saves = minecraft == null ? null : minecraft.getLevelSource().getBaseDir();
+            return saves == null ? null : WorldRecipeAssignments.worldId(saves.resolve(summary.getLevelId()));
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 
     private String recipeName(CustomRecipeEntry recipe) {
@@ -104,26 +117,21 @@ final class WorldRecipesScreen extends Screen {
         int next = Math.max(0, Math.min(max, scroll - (int) verticalAmount));
         if (next != scroll) {
             scroll = next;
-            clearWidgets(); init();
+            rebuildWidgets();
         }
         return true;
     }
 
     @Override
-    public void renderBackground(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        super.renderBackground(context, mouseX, mouseY, delta);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         context.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
-    }
-
-    @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
-        context.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
+        context.centeredText(font, title, width / 2, 12, 0xFFFFFF);
+        super.extractRenderState(context, mouseX, mouseY, delta);
     }
 
     @Override
     public boolean isPauseScreen() { return true; }
 
     @Override
-    public void onClose() { minecraft.setScreen(parent); }
+    public void onClose() { minecraft.gui.setScreen(parent); }
 }
