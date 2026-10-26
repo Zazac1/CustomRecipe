@@ -9,12 +9,9 @@ import fr.zazac1.customrecipe.RecipeVariantRule;
 import fr.zazac1.customrecipe.VariantFilteredCraftingRecipe;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
 import net.minecraft.core.component.DataComponentPatch;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.core.Holder;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.core.HolderOwner;
-import net.minecraft.core.HolderSet;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.ItemStackTemplate;
@@ -22,12 +19,9 @@ import net.minecraft.world.item.crafting.*;
 import net.minecraft.world.item.crafting.CraftingBookCategory;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Final;
-import org.spongepowered.asm.mixin.Mutable;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 // In Minecraft 1.21.8 the shaped-recipe pattern class is RawShapedRecipe (not ShapedRecipePattern)
 
@@ -41,19 +35,16 @@ import java.util.HashSet;
 
 @Mixin(RecipeManager.class)
 public abstract class ServerRecipeManagerMixin {
-    @Unique private HolderLookup.Provider customrecipe$registries;
+    @Shadow @Final private HolderLookup.Provider registries;
 
-    @Shadow @Final @Mutable private RecipeMap recipes;
-
-    /**
-     * Since 26.3 RecipeManager receives recipes through its registry-provider
-     * constructor; the old apply(RecipeMap, ResourceManager, ProfilerFiller)
-     * reload hook no longer exists.
-     */
-    @Inject(method = "<init>", at = @At("TAIL"))
-    private void customrecipe$applyConfig(net.minecraft.core.HolderLookup.Provider registries, CallbackInfo ci) {
-        this.customrecipe$registries = registries;
-        this.recipes = customrecipe$configureRecipes(this.recipes);
+    /** 26.2 supplies its decoded recipes to the resource-reload hook. */
+    @ModifyVariable(
+            method = "apply(Lnet/minecraft/world/item/crafting/RecipeMap;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)V",
+            at = @At("HEAD"),
+            argsOnly = true
+    )
+    private RecipeMap customrecipe$applyConfig(RecipeMap original) {
+        return customrecipe$configureRecipes(original);
     }
 
     private RecipeMap customrecipe$configureRecipes(RecipeMap original) {
@@ -152,32 +143,7 @@ public abstract class ServerRecipeManagerMixin {
         // Other custom recipes retain the established conflict behaviour.
         recipes.addAll(customRecipes);
 
-        return RecipeMap.create(recipeLookup(recipes));
-    }
-
-    /** RecipeMap 26.3 consumes registry holders rather than recipe records. */
-    private static HolderLookup<Recipe<?>> recipeLookup(List<RecipeHolder<?>> recipes) {
-        HolderOwner<Recipe<?>> owner = new HolderOwner<>() {};
-        java.util.Map<ResourceKey<Recipe<?>>, Holder.Reference<Recipe<?>>> holders = new java.util.LinkedHashMap<>();
-        for (RecipeHolder<?> recipe : recipes) {
-            Holder.Reference<Recipe<?>> holder = Holder.Reference.createStandAlone(owner, recipe.id());
-            ((HolderReferenceInvoker<Recipe<?>>) (Object) holder).customrecipe$bindValue(recipe.value());
-            holders.put(recipe.id(), holder);
-        }
-        return new HolderLookup<>() {
-            @Override public java.util.Optional<Holder.Reference<Recipe<?>>> get(ResourceKey<Recipe<?>> key) {
-                return java.util.Optional.ofNullable(holders.get(key));
-            }
-            @Override public java.util.Optional<HolderSet.Named<Recipe<?>>> get(net.minecraft.tags.TagKey<Recipe<?>> tag) {
-                return java.util.Optional.empty();
-            }
-            @Override public java.util.stream.Stream<Holder.Reference<Recipe<?>>> listElements() {
-                return holders.values().stream();
-            }
-            @Override public java.util.stream.Stream<HolderSet.Named<Recipe<?>>> listTags() {
-                return java.util.stream.Stream.empty();
-            }
-        };
+        return RecipeMap.create(recipes);
     }
 
     private boolean usesExactOrCountedIngredient(CustomRecipeEntry entry) {
@@ -218,7 +184,7 @@ public abstract class ServerRecipeManagerMixin {
                                                             List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
         if (fr.zazac1.customrecipe.CustomItemLibrary.isReference(value)) {
             return fr.zazac1.customrecipe.CustomItemLibrary.decode(
-                    fr.zazac1.customrecipe.CustomItemLibrary.find(customItems, value), customrecipe$registries);
+                    fr.zazac1.customrecipe.CustomItemLibrary.find(customItems, value), registries);
         }
         Identifier id = Identifier.tryParse(value);
         return id != null && BuiltInRegistries.ITEM.containsKey(id)

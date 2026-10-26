@@ -1,5 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
@@ -182,6 +184,7 @@ final class RecipeTargetSelectScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
+        if (click.button() != InputConstants.MOUSE_BUTTON_LEFT) return super.mouseClicked(click, focused);
         if (hasScrollBar() && click.x() >= scrollBarX() - 2 && click.x() <= scrollBarX() + 8
                 && click.y() >= rowsTop() && click.y() < rowsBottom()) {
             setScrollFromMouse(click.y());

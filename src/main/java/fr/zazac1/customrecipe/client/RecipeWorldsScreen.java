@@ -1,5 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -119,6 +121,7 @@ public final class RecipeWorldsScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
+        if (click.button() != InputConstants.MOUSE_BUTTON_LEFT) return super.mouseClicked(click, focused);
         if (worldList != null) {
             double mouseX = click.x();
             double mouseY = click.y();

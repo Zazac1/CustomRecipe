@@ -1,5 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.CustomItemLibrary;
@@ -36,10 +38,6 @@ public class RecipeBuilderScreen extends Screen {
     private static final int SHAPELESS_ROW_H = 26;
     private static final int MAX_SHAPELESS_INGREDIENTS = 9;
     private static final int VISIBLE_SHAPELESS_ROWS = 5;
-    // MouseButtonInfo is one-based in Minecraft 26.3 (left=1, middle=2,
-    // right=3), unlike the zero-based GLFW values used by older releases.
-    private static final int LEFT_MOUSE_BUTTON = 1;
-    private static final int RIGHT_MOUSE_BUTTON = 3;
 
     private final ConfigScreen parent;
     /** Exact screen that opened this editor, retained for Cancel, Escape and Save. */
@@ -872,13 +870,13 @@ public class RecipeBuilderScreen extends Screen {
         double mx = click.x(), my = click.y();
         // Keep Cancel/Save clickable even if the reusable-item palette reaches
         // the bottom action bar at a large GUI scale.
-        if (click.button() == LEFT_MOUSE_BUTTON && mx >= width / 2.0 - 110 && mx < width / 2.0 + 110
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && mx >= width / 2.0 - 110 && mx < width / 2.0 + 110
                 && my >= height - 48) {
             return super.mouseClicked(click, focused);
         }
         // Right-clicking the preview area cancels the item currently carried
         // by the cursor; it never edits a recipe slot.
-        if (click.button() == RIGHT_MOUSE_BUTTON
+        if (click.button() == InputConstants.MOUSE_BUTTON_RIGHT
                 && mx >= rightX() && mx < rightX() + rightW()
                 && my >= panelY() && my < panelY() + workspaceH()) {
             heldItemId = null;
@@ -890,7 +888,7 @@ public class RecipeBuilderScreen extends Screen {
         // Let vanilla widgets deal with every non-left click. In particular,
         // this keeps the custom hit areas from swallowing a click intended for
         // a control in the recipe panel.
-        if (click.button() != LEFT_MOUSE_BUTTON) {
+        if (click.button() != InputConstants.MOUSE_BUTTON_LEFT) {
             return super.mouseClicked(click, focused);
         }
 
@@ -1048,11 +1046,11 @@ public class RecipeBuilderScreen extends Screen {
     @Override
     public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
         double my = click.y();
-        if (draggingShapelessScrollbar) {
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && draggingShapelessScrollbar) {
             updateShapelessScrollbar(my);
             return true;
         }
-        if (draggingSuggestionScrollbar) {
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && draggingSuggestionScrollbar) {
             updateSuggestionScrollbar(my);
             return true;
         }
@@ -1061,8 +1059,10 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent click) {
-        draggingShapelessScrollbar = false;
-        draggingSuggestionScrollbar = false;
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT) {
+            draggingShapelessScrollbar = false;
+            draggingSuggestionScrollbar = false;
+        }
         return super.mouseReleased(click);
     }
 

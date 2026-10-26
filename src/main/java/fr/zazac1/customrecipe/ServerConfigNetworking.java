@@ -305,7 +305,7 @@ public final class ServerConfigNetworking {
             return 0;
         }
         ServerPlayer player = source.getPlayerOrException();
-        if (!player.addItem(stack.copy())) player.drop(stack.copy(), false, net.minecraft.util.Prediction.SERVER_ONLY);
+        if (!player.addItem(stack.copy())) player.drop(stack.copy(), false);
         source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.given", entry.name), false);
         return Command.SINGLE_SUCCESS;
     }

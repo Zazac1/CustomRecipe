@@ -1,5 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomItemEntry;
@@ -918,8 +920,9 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
+        if (click.button() != InputConstants.MOUSE_BUTTON_LEFT) return super.mouseClicked(click, focused);
         double mx = click.x(), my = click.y();
-        if (quickAddEditMode && click.button() == 1) {
+        if (quickAddEditMode) {
             quickAddEditMode = false;
             clearAndInit();
             return true;
@@ -978,7 +981,7 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
-        if (draggingRecipeScrollbar) {
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && draggingRecipeScrollbar) {
             updateRecipeScrollbar(click.y());
             return true;
         }
@@ -987,7 +990,7 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent click) {
-        draggingRecipeScrollbar = false;
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT) draggingRecipeScrollbar = false;
         return super.mouseReleased(click);
     }
 
