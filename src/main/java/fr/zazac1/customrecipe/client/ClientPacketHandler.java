@@ -15,10 +15,10 @@ public final class ClientPacketHandler {
         Minecraft client = Minecraft.getInstance();
         if (!ClientServerConfigNetworking.canManageServer()) return;
         ModConfig config = ConfigLoader.fromJson(json);
-        if (config == null) { if (client.player != null) client.player.sendSystemMessage(Component.translatable("customrecipe.chat.invalid_server_config")); return; }
+        if (config == null) { if (client.player != null) fr.zazac1.customrecipe.Texts.send(client.player, fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.invalid_server_config")); return; }
         ClientInit.LocalMergeResult imported = ClientInit.mergeLocalContent(config);
         if ((imported.recipes() > 0 || imported.customItems() > 0) && client.player != null) {
-            client.player.sendSystemMessage(Component.translatable("customrecipe.chat.local_content_ready",
+            fr.zazac1.customrecipe.Texts.send(client.player, fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.local_content_ready",
                     imported.recipes(), imported.customItems()));
         }
         ClientServerConfigNetworking.validate(config);
@@ -27,7 +27,7 @@ public final class ClientPacketHandler {
         Minecraft client = Minecraft.getInstance();
         if (!ClientServerConfigNetworking.canManageServer()) return;
         ModConfig config = ConfigLoader.fromJson(json);
-        if (config == null) { if (client.player != null) client.player.sendSystemMessage(Component.translatable("customrecipe.chat.invalid_server_validation")); return; }
+        if (config == null) { if (client.player != null) fr.zazac1.customrecipe.Texts.send(client.player, fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.invalid_server_validation")); return; }
         client.setScreen(new ConfigScreen(client.screen, config, "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
     }
     public static void saveResult(boolean saved, String reason) { ClientServerConfigNetworking.completeSave(saved, reason); }

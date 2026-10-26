@@ -2,15 +2,15 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.ModConfig;
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.MultiLineTextWidget;
-import net.minecraft.client.gui.components.EditBox;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.MultiLineTextWidget;
+import fr.zazac1.customrecipe.client.compat.EditBox;
 import net.minecraft.network.chat.Component;
 
 /** Advanced raw server JSON editor. */
-public class ServerJsonScreen extends Screen {
+public class ServerJsonScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
    private static final int MAX_JSON_CHARS = 1_000_000;
 
     private final ConfigScreen parent;
@@ -19,7 +19,7 @@ public class ServerJsonScreen extends Screen {
     private String error = "";
 
     public ServerJsonScreen(ConfigScreen parent, ModConfig config) {
-        super(Component.literal("Manual Edit"));
+        super(fr.zazac1.customrecipe.Texts.literal("Manual Edit"));
         this.parent = parent;
         this.initialJson = ConfigLoader.toJson(config).replaceAll("\\s+", " ");
     }
@@ -28,18 +28,18 @@ public class ServerJsonScreen extends Screen {
     protected void init() {
         int margin = 14;
         addRenderableWidget(new MultiLineTextWidget(margin, 12,
-                Component.literal("WARNING: Advanced editor. Invalid or incompatible JSON can erase recipe settings. Use Save only after checking it."),
+                fr.zazac1.customrecipe.Texts.literal("WARNING: Advanced editor. Invalid or incompatible JSON can erase recipe settings. Use Save only after checking it."),
                 font));
 
         jsonField = addRenderableWidget(new EditBox(font, margin, 40,
-                width - margin * 2, 20, Component.literal("Server config JSON")));
+                width - margin * 2, 20, fr.zazac1.customrecipe.Texts.literal("Server config JSON")));
         jsonField.setMaxLength(MAX_JSON_CHARS);
         jsonField.setValue(initialJson);
         setFocused(jsonField);
 
-        addRenderableWidget(Button.builder(Component.literal("Apply JSON"), b -> apply())
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.literal("Apply JSON"), b -> apply())
                 .bounds(width / 2 - 102, height - 28, 98, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Cancel"), b -> minecraft.setScreen(parent))
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.literal("Cancel"), b -> minecraft.setScreen(parent))
                 .bounds(width / 2 + 4, height - 28, 98, 20).build());
     }
 

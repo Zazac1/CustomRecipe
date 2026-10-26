@@ -1,15 +1,17 @@
 package fr.zazac1.customrecipe.client;
 
+import org.lwjgl.glfw.GLFW;
+
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.RecipeIntegrity;
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.MultiLineTextWidget;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.MultiLineTextWidget;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.network.chat.Component;
 
@@ -20,7 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class CustomRecipesScreen extends Screen {
+public class CustomRecipesScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
 
     private static final int PAD      = 8;
     private static final int ROW      = 22;
@@ -55,7 +57,7 @@ public class CustomRecipesScreen extends Screen {
     }
 
     CustomRecipesScreen(ConfigScreen parent, boolean libraryPicker) {
-        super(Component.translatable(libraryPicker ? "customrecipe.screen.global_library" : "customrecipe.screen.my_recipes"));
+        super(fr.zazac1.customrecipe.Texts.translatable(libraryPicker ? "customrecipe.screen.global_library" : "customrecipe.screen.my_recipes"));
         this.parent  = parent;
         this.libraryPicker = libraryPicker;
         this.recipes = libraryPicker ? parent.currentConfig().global_library.custom_recipes : parent.recipes;
@@ -183,7 +185,7 @@ public class CustomRecipesScreen extends Screen {
             LocalRecipeConflictDetector.refreshVanillaCraftingOutputs(minecraft);
         }
         // ── Fills ────────────────────────────────────────────────────────
-        addRenderableOnly((ctx, mx, my, d) -> {
+        addLegacyRenderable((ctx, mx, my, d) -> {
             ctx.fill(PAD, listTop(), tableRight(), listTop() + listH(), 0x88101010);
             drawBox(ctx, PAD, listTop(), tableWidth(), listH(), 0xFF505050);
             // Spreadsheet-style column header: every icon has a named, fixed column.
@@ -193,11 +195,11 @@ public class CustomRecipesScreen extends Screen {
             for (int column : columns)
                 ctx.fill(column, listTop() + 1, column + 1, listTop() + listH() - 1, 0xFF39433F);
             int headerColor = 0xFFB8C7C1;
-            ctx.drawString(font, Component.translatable("customrecipe.table.output"), PAD + 4, listTop() + 4, headerColor, false);
-            ctx.drawString(font, Component.translatable("customrecipe.table.status"), PAD + 48, listTop() + 4, headerColor, false);
-            ctx.drawString(font, Component.translatable("customrecipe.table.type"), PAD + 101, listTop() + 4, headerColor, false);
-            ctx.drawString(font, Component.translatable("customrecipe.table.recipe"), recipeX(), listTop() + 4, headerColor, false);
-            ctx.drawString(font, Component.translatable(libraryPicker ? "customrecipe.table.add" : "customrecipe.table.state"), statusX() + 28, listTop() + 4, headerColor, false);
+            ctx.drawString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.table.output"), PAD + 4, listTop() + 4, headerColor, false);
+            ctx.drawString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.table.status"), PAD + 48, listTop() + 4, headerColor, false);
+            ctx.drawString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.table.type"), PAD + 101, listTop() + 4, headerColor, false);
+            ctx.drawString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.table.recipe"), recipeX(), listTop() + 4, headerColor, false);
+            ctx.drawString(font, fr.zazac1.customrecipe.Texts.translatable(libraryPicker ? "customrecipe.table.add" : "customrecipe.table.state"), statusX() + 28, listTop() + 4, headerColor, false);
             if (hasRecipeScrollbar()) {
                 int trackX = recipeScrollTrackX();
                 int trackY = recipeScrollTrackY();
@@ -241,7 +243,7 @@ public class CustomRecipesScreen extends Screen {
         // ── Titre ─────────────────────────────────────────────────────────
         if (libraryPicker) {
             String libraryLabel = "Global Library";
-            addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft,
+            addLegacyRenderable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft,
                     GlobalRecipeTarget.INSTANCE, libraryLabel));
             boolean hasWorldTarget = parent.target().isWorld();
             int importable = hasWorldTarget ? parent.globalLibraryImportableCount() : 0;
@@ -250,8 +252,8 @@ public class CustomRecipesScreen extends Screen {
             int libraryActionsX = width - PAD - libraryActionW * 2 - 4;
             int importButtonW = Math.max(1, Math.min(200, libraryActionsX - 8 - importButtonX));
             Component importLabel = hasWorldTarget
-                    ? Component.translatable("customrecipe.button.add_all_from_library")
-                    : Component.translatable("customrecipe.button.select_world_to_import");
+                    ? fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.add_all_from_library")
+                    : fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.select_world_to_import");
             Button addAll = Button.builder(importLabel, b -> {
                 if (hasWorldTarget) {
                     minecraft.setScreen(new ImportGlobalLibraryScreen(parent, this, importable));
@@ -261,15 +263,15 @@ public class CustomRecipesScreen extends Screen {
                 }
             }).bounds(importButtonX, 4, importButtonW, 20).build();
             addAll.active = !hasWorldTarget || importable > 0;
-            if (hasWorldTarget && !addAll.active) addAll.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
-                    Component.translatable("customrecipe.import.nothing_to_add")));
+            if (hasWorldTarget && !addAll.active) addAll.setTooltip(fr.zazac1.customrecipe.client.compat.Tooltip.create(
+                    fr.zazac1.customrecipe.Texts.translatable("customrecipe.import.nothing_to_add")));
             addRenderableWidget(addAll);
         } else if (parent.target().isWorld()) {
             String worldLabel = "Recipes from " + parent.target().displayName();
-            addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft,
+            addLegacyRenderable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft,
                     parent.target(), worldLabel));
         } else {
-            addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft,
+            addLegacyRenderable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft,
                     parent.target(), "Global Library"));
             int libraryActionW = 118;
         }
@@ -284,7 +286,7 @@ public class CustomRecipesScreen extends Screen {
 
             MultiLineTextWidget lbl = new MultiLineTextWidget(
                     recipeX(), y + (ROW - 8) / 2,
-                    Component.literal(formatEntry(recipes.get(i)))
+                    fr.zazac1.customrecipe.Texts.literal(formatEntry(recipes.get(i)))
                             .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(sel ? 0xFFEE88 : 0xDDDDDD)),
                     font);
             lbl.setMaxWidth(statusX() - recipeX() - 8);
@@ -295,12 +297,15 @@ public class CustomRecipesScreen extends Screen {
             boolean corrupted = isCorrupted(entry);
             boolean active = isActiveForThisScreen(entry);
             addRenderableWidget(Button.builder(
-                    corrupted ? Component.translatable("customrecipe.state.corrupted").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF5555))
-                    : libraryPicker ? Component.translatable("customrecipe.button.add").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x55FF55))
+                    corrupted ? fr.zazac1.customrecipe.Texts.translatable("customrecipe.state.corrupted").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF5555))
+                    : libraryPicker ? fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.add").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x55FF55))
                     : parent.target().isWorld()
-                            ? Component.translatable(active ? "customrecipe.state.enabled" : "customrecipe.state.disabled")
+                            ? fr.zazac1.customrecipe.Texts.translatable(active ? "customrecipe.state.enabled" : "customrecipe.state.disabled")
                                     .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(active ? 0x55FF55 : 0xFF5555))
-                            : Component.translatable("customrecipe.state.library").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x77BBFF)),
+                            : fr.zazac1.customrecipe.Texts.translatable(Boolean.TRUE.equals(entry.global_auto_add)
+                                    ? "customrecipe.state.all_worlds" : "customrecipe.state.library")
+                                    .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(
+                                            Boolean.TRUE.equals(entry.global_auto_add) ? 0x55FF55 : 0x77BBFF)),
                     b -> {
                         if (isCorrupted(recipes.get(idx))) return;
                         if (libraryPicker) {
@@ -316,16 +321,22 @@ public class CustomRecipesScreen extends Screen {
                             // must not keep a locally re-enabled recipe disabled.
                             if (!active) recipe.server_enabled = null;
                             rebuildWidgets();
+                        } else {
+                            CustomRecipeEntry recipe = recipes.get(idx);
+                            recipe.global_auto_add = !Boolean.TRUE.equals(recipe.global_auto_add);
+                            rebuildWidgets();
                         }
                     }
             ).bounds(statusX(), y + 2, 88, ROW - 4).build());
 
-            if (!libraryPicker) addRenderableWidget(Button.builder(Component.empty(),
+            if (!libraryPicker) addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(),
                     b -> {
                         if (quickAddEditMode) {
                             CustomRecipeEntry snapshot = ConfigLoader.copyRecipe(recipes.get(idx));
                             if (snapshot != null) {
                                 snapshot.quick_add = null;
+                                snapshot.global_auto_add = null;
+                                snapshot.global_library_source_id = null;
                                 parent.quickAddRecipes.add(snapshot);
                             }
                             // Adding one shortcut completes this one-shot mode.
@@ -339,7 +350,7 @@ public class CustomRecipesScreen extends Screen {
                         rebuildWidgets();
                     }
             ).bounds(deleteX(), y + 1, 18, 18).build());
-            if (!libraryPicker) addRenderableOnly((ctx, mx, my, d) -> {
+            if (!libraryPicker) addLegacyRenderable((ctx, mx, my, d) -> {
                 if (quickAddEditMode) {
                     if (parent.target().isWorld()) drawBox(ctx, deleteX(), y + 1, 18, 18, 0xFFFFD447);
                     CustomRecipeSprites.draw(ctx, CustomRecipeSprites.ADD, deleteX() + 1, y + 2, 16, 16);
@@ -350,12 +361,12 @@ public class CustomRecipesScreen extends Screen {
         }
 
         if (hasQuickAdd()) {
-            addRenderableWidget(Button.builder(Component.empty(), b -> {
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(), b -> {
                 quickAddEditMode = !quickAddEditMode;
                 selectedQuickAdd = -1;
                 rebuildWidgets();
             }).bounds(quickAddX() + 2, listTop() + 3, 20, 20).build());
-            addRenderableOnly((ctx, mx, my, d) -> {
+            addLegacyRenderable((ctx, mx, my, d) -> {
                 if (quickAddEditMode) {
                     ctx.fill(quickAddX() + 3, listTop() + 4, quickAddX() + 21, listTop() + 22, 0xFF303030);
                 }
@@ -363,14 +374,14 @@ public class CustomRecipesScreen extends Screen {
             });
             for (int i = quickAddScroll; i < Math.min(quickAddCount(), quickAddScroll + quickAddVisible()); i++) {
                 final int quickIndex = i;
-                addRenderableWidget(Button.builder(Component.empty(), b -> {
+                addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(), b -> {
                     // A Quick Add always owns the detail panel, including snapshots from the library.
                     selectedRecipe = -1;
                     selectedQuickAdd = quickIndex;
                     rebuildWidgets();
                 }).bounds(quickAddX() + 2, quickAddY(i), 20, 20).build());
                 final int iconY = quickAddY(i);
-                addRenderableOnly((ctx, mx, my, d) -> drawQuickAddIcon(ctx, quickIndex, quickAddX() + 4, iconY + 2));
+                addLegacyRenderable((ctx, mx, my, d) -> drawQuickAddIcon(ctx, quickIndex, quickAddX() + 4, iconY + 2));
             }
         }
 
@@ -379,7 +390,7 @@ public class CustomRecipesScreen extends Screen {
             int emptyX = recipeX();
             MultiLineTextWidget empty = new MultiLineTextWidget(
                     emptyX, rowsTop() + Math.max(4, (listH() - HEADER_H - 8) / 2),
-                    Component.translatable(libraryPicker ? "customrecipe.empty.library" : "customrecipe.empty.recipes")
+                    fr.zazac1.customrecipe.Texts.translatable(libraryPicker ? "customrecipe.empty.library" : "customrecipe.empty.recipes")
                             .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x999999)),
                     font);
             empty.setMaxWidth(Math.max(20, statusX() - emptyX - 8));
@@ -393,23 +404,25 @@ public class CustomRecipesScreen extends Screen {
             CustomRecipeEntry e = quickAddRecipe(selectedQuickAdd);
             if (e == null) return;
             MultiLineTextWidget name = new MultiLineTextWidget(PAD + 46, detailY() + 4,
-                    Component.translatable("customrecipe.quick.preview", quickAddName(selectedQuickAdd))
+                    fr.zazac1.customrecipe.Texts.translatable("customrecipe.quick.preview", quickAddName(selectedQuickAdd))
                             .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFFEECC77)), font);
             name.setMaxWidth(detailWidth() - 170);
             name.setMaxRows(1);
             addRenderableWidget(name);
             int quickIndex = selectedQuickAdd;
-            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.add_recipe"), b -> {
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.add_recipe"), b -> {
                 CustomRecipeEntry added = ConfigLoader.copyRecipe(quickAddRecipe(quickIndex));
                 if (added == null) return;
                 added.id = java.util.UUID.randomUUID().toString();
                 added.quick_add = null;
+                added.global_auto_add = null;
+                added.global_library_source_id = null;
                 recipes.add(added);
                 selectedQuickAdd = -1;
                 selectedRecipe = recipes.size() - 1;
                 rebuildWidgets();
             }).bounds(detailRight() - 128, detailY() + 4, 102, 18).build());
-            addRenderableWidget(Button.builder(Component.empty(), b -> {
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(), b -> {
                 if (quickAddIsBuiltin(quickIndex)) {
                     String builtinId = fr.zazac1.customrecipe.BuiltinRecipeTemplates.id(quickAddBuiltinIndex(quickIndex));
                     if (!parent.hiddenQuickAddBuiltin.contains(builtinId)) parent.hiddenQuickAddBuiltin.add(builtinId);
@@ -421,7 +434,7 @@ public class CustomRecipesScreen extends Screen {
                 quickAddScroll = Math.min(quickAddScroll, quickAddMaxScroll());
                 rebuildWidgets();
             }).bounds(detailRight() - 22, detailY() + 4, 18, 18).build());
-            addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+            addLegacyRenderable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                     CustomRecipeSprites.REJECT, detailRight() - 22, detailY() + 4, 18, 18));
         } else if (selectedRecipe >= 0 && selectedRecipe < recipes.size()) {
             CustomRecipeEntry e = recipes.get(selectedRecipe);
@@ -429,7 +442,7 @@ public class CustomRecipesScreen extends Screen {
             String label = (corrupted ? "Corrupted: " : "") + toName(e.result) + (e.count > 1 ? " ×" + e.count : "");
             MultiLineTextWidget nameW = new MultiLineTextWidget(
                     PAD + 46, detailY() + 4,
-                    Component.literal(label).setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(corrupted ? 0xFF7777 : 0xFFEE77)), font);
+                    fr.zazac1.customrecipe.Texts.literal(label).setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(corrupted ? 0xFF7777 : 0xFFEE77)), font);
             nameW.setMaxWidth(detailWidth() - 220);
             nameW.setMaxRows(1);
             addRenderableWidget(nameW);
@@ -441,14 +454,14 @@ public class CustomRecipesScreen extends Screen {
                     : detailShapelessResultY(e);
             MultiLineTextWidget arrow = new MultiLineTextWidget(
                     previewResultX - 11, previewResultY + (MINI - 8) / 2,
-                    Component.literal("→"), font);
+                    fr.zazac1.customrecipe.Texts.literal("→"), font);
             arrow.setMaxWidth(12);
             arrow.setMaxRows(1);
             addRenderableWidget(arrow);
 
             final int selected = selectedRecipe;
             if (libraryPicker) {
-                addRenderableWidget(Button.builder(Component.translatable("customrecipe.recipe.add_to", parent.target().displayName()), b -> {
+                addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.recipe.add_to", parent.target().displayName()), b -> {
                     if (isCorrupted(recipes.get(selected))) return;
                     parent.addFromLibrary(recipes.get(selected));
                     minecraft.setScreen(new CustomRecipesScreen(parent));
@@ -456,61 +469,61 @@ public class CustomRecipesScreen extends Screen {
             } else if (corrupted) {
                 String mods = String.join(", ", RecipeIntegrity.requiredModIds(e));
                 MultiLineTextWidget warning = new MultiLineTextWidget(PAD + 4, detailY() + 76,
-                        Component.translatable("customrecipe.recipe.missing", String.join(", ", missingItems(e))
+                        fr.zazac1.customrecipe.Texts.translatable("customrecipe.recipe.missing", String.join(", ", missingItems(e))
                                 + " — reinstall " + (mods.isBlank() ? "the required mod" : mods) + " or delete this recipe.")
                                 .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF7777)), font);
                 warning.setMaxWidth(detailWidth() - 8);
                 warning.setMaxRows(1);
                 addRenderableWidget(warning);
-                addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.delete_corrupted").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF7777)), b -> {
+                addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.delete_corrupted").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF7777)), b -> {
                     recipes.remove(selected);
                     selectedRecipe = -1;
                     rebuildWidgets();
                 }).bounds(detailRight() - 142, detailY() + 30, 138, 18).build());
             } else {
-                addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.duplicate"),
+                addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.duplicate"),
                         b -> minecraft.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), -1)))
                         .bounds(detailRight() - 204, detailY() + 4, 96, 18).build());
-                addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.edit"),
+                addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.edit"),
                         b -> minecraft.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), selected)))
                         .bounds(detailRight() - 102, detailY() + 4, 96, 18).build());
                 int typeX = detailActionX();
                 int knownX = detailKnownX();
                 boolean shaped = "shaped".equalsIgnoreCase(e.type);
-                addRenderableWidget(Button.builder(Component.empty(), b -> {
+                addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(), b -> {
                     toggleRecipeType(recipes.get(selected));
                     rebuildWidgets();
                 }).bounds(typeX, detailActionY(), 20, 20).build());
-                addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+                addLegacyRenderable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                         shaped ? CustomRecipeSprites.LOCKED_BUTTON : CustomRecipeSprites.UNLOCKED_BUTTON,
                         typeX, detailActionY(), 20, 20));
                 boolean known = Boolean.TRUE.equals(e.known_by_default);
-                addRenderableWidget(Button.builder(Component.empty(),
+                addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(),
                         b -> {
                             CustomRecipeEntry recipe = recipes.get(selected);
                             recipe.known_by_default = !Boolean.TRUE.equals(recipe.known_by_default);
                             rebuildWidgets();
                         }
                 ).bounds(knownX, detailActionY(), 20, 20).build());
-                addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+                addLegacyRenderable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                         known ? CustomRecipeSprites.KNOWN_BY_DEFAULT : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT,
                         knownX, detailActionY(), 20, 20));
                 String conflict = firstEnabledConflict(e);
                 if (conflict != null) {
                     MultiLineTextWidget warning = new MultiLineTextWidget(PAD + 4, detailMessageY(),
-                            Component.translatable("customrecipe.recipe.conflict", shortRecipeId(conflict))
+                            fr.zazac1.customrecipe.Texts.translatable("customrecipe.recipe.conflict", shortRecipeId(conflict))
                                     .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFFCC55)), font);
                     warning.setMaxWidth(detailWidth() - 8);
                     warning.setMaxRows(1);
                     addRenderableWidget(warning);
-                    addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.disable_conflict").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFFCC55)), b -> {
+                    addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.disable_conflict").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFFCC55)), b -> {
                         if (!parent.disabledRecipes.contains(conflict)) parent.disabledRecipes.add(conflict);
                         rebuildWidgets();
                     }).bounds(detailRight() - 204, detailY() + 26, 198, 18).build());
                 } else if (!known) {
                     if (LocalRecipeConflictDetector.hasVanillaCraftingOutput(e.result)) {
                         MultiLineTextWidget advice = new MultiLineTextWidget(PAD + 4, detailMessageY(),
-                                Component.translatable("customrecipe.recipe.vanilla_conflict")
+                                fr.zazac1.customrecipe.Texts.translatable("customrecipe.recipe.vanilla_conflict")
                                         .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x77BBFF)), font);
                         advice.setMaxWidth(detailWidth() - 8);
                         advice.setMaxRows(1);
@@ -519,12 +532,12 @@ public class CustomRecipesScreen extends Screen {
                         String alternative = firstEnabledSameShapeRecipe(e);
                         if (alternative != null) {
                         MultiLineTextWidget advice = new MultiLineTextWidget(PAD + 4, detailMessageY(),
-                                Component.translatable("customrecipe.recipe.same_inputs", alternative)
+                                fr.zazac1.customrecipe.Texts.translatable("customrecipe.recipe.same_inputs", alternative)
                                         .setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x77BBFF)), font);
                         advice.setMaxWidth(detailWidth() - 8);
                         advice.setMaxRows(2);
                         addRenderableWidget(advice);
-                        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.set_known").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x77BBFF)), b -> {
+                        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.set_known").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x77BBFF)), b -> {
                             recipes.get(selected).known_by_default = Boolean.TRUE;
                             rebuildWidgets();
                         }).bounds(detailRight() - 142, detailY() + 52, 138, 18).build());
@@ -536,35 +549,35 @@ public class CustomRecipesScreen extends Screen {
 
         // ── Boutons du bas ────────────────────────────────────────────────
         if (!libraryPicker && parent.target().isWorld()) {
-            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.enable_all"), b -> {
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.enable_all"), b -> {
                 setAllRecipeStates(true);
                 rebuildWidgets();
             }).bounds(bulkActionX(), 4, 98, OUTER_BUTTON_H).build());
-            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.disable_all"), b -> {
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.disable_all"), b -> {
                 setAllRecipeStates(false);
                 rebuildWidgets();
             }).bounds(bulkActionX() + 102, 4, 98, OUTER_BUTTON_H).build());
-            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.add_from_library"),
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.add_from_library"),
                     b -> minecraft.setScreen(new CustomRecipesScreen(parent, true))
             ).bounds(outerButtonX(), addFromLibraryButtonY(), OUTER_BUTTON_W, OUTER_BUTTON_H).build());
         }
 
         if (!libraryPicker) {
-            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.add_recipe_new"),
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.add_recipe_new"),
                     b -> minecraft.setScreen(new RecipeBuilderScreen(parent, this, null, -1))
             ).bounds(outerButtonX(), addRecipeButtonY(), OUTER_BUTTON_W, OUTER_BUTTON_H).build());
         }
 
         if (libraryPicker) {
-            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back_to_recipes"),
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.back_to_recipes"),
                     b -> minecraft.setScreen(new CustomRecipesScreen(parent))
             ).bounds(width / 2 - 75, height - 22, 150, 18).build());
         } else {
-            String saveLabel = Component.translatable("customrecipe.button.save").getString();
+            String saveLabel = fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.save").getString();
             int saveY = saveButtonY();
-            addRenderableWidget(Button.builder(Component.empty(), b -> parent.saveFromSubmenu())
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(), b -> parent.saveFromSubmenu())
                     .bounds(outerButtonX(), saveY, OUTER_BUTTON_W, SAVE_BUTTON_H).build());
-            addRenderableOnly((ctx, mouseX, mouseY, delta) -> {
+            addLegacyRenderable((ctx, mouseX, mouseY, delta) -> {
                 int iconX = width / 2 - font.width(saveLabel) / 2 - 20;
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.SAVE, iconX, saveY + 3, 16, 16);
                 ctx.drawCenteredString(font, saveLabel, width / 2, saveY + 7, 0xFFFFFFFF);
@@ -612,11 +625,11 @@ public class CustomRecipesScreen extends Screen {
             drawRecipeStatusIcon(ctx, PAD + 24, dy + 2, isCorrupted(e), firstEnabledConflict(e) != null);
         }
         boolean known = Boolean.TRUE.equals(e.known_by_default);
-        ctx.drawString(font, Component.translatable(shapedDetail ? "customrecipe.recipe.shaped" : "customrecipe.recipe.shapeless"), detailActionX() + 24, detailActionY() + 6,
+        ctx.drawString(font, fr.zazac1.customrecipe.Texts.translatable(shapedDetail ? "customrecipe.recipe.shaped" : "customrecipe.recipe.shapeless"), detailActionX() + 24, detailActionY() + 6,
                 shapedDetail ? 0xFFFFD700 : 0xFF88FFFF, false);
-        ctx.drawString(font, Component.translatable("customrecipe.recipe.known", Component.translatable(known ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), detailKnownX() + 24,
+        ctx.drawString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.recipe.known", fr.zazac1.customrecipe.Texts.translatable(known ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), detailKnownX() + 24,
                 detailActionY() + 6, known ? 0xFF55FF55 : 0xFFFF7777, false);
-        ctx.drawString(font, Component.translatable(shapedDetail
+        ctx.drawString(font, fr.zazac1.customrecipe.Texts.translatable(shapedDetail
                 ? "customrecipe.recipe.shaped_ingredients" : "customrecipe.recipe.shapeless_ingredients",
                 detailIngredientCount(e)), PAD + 4, dy + 50, 0xFF8FC7E8, false);
 
@@ -884,7 +897,8 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
-        if (quickAddEditMode && button == 1) {
+        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) return super.mouseClicked(mx, my, button);
+        if (quickAddEditMode) {
             quickAddEditMode = false;
             rebuildWidgets();
             return true;
@@ -943,7 +957,7 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        if (draggingRecipeScrollbar) {
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && draggingRecipeScrollbar) {
             updateRecipeScrollbar(mouseY);
             return true;
         }
@@ -952,7 +966,7 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        draggingRecipeScrollbar = false;
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) draggingRecipeScrollbar = false;
         return super.mouseReleased(mouseX, mouseY, button);
     }
 

@@ -68,15 +68,15 @@ final class LocalRecipeConflictDetector {
     private static List<DefaultRecipe> loadDefaults(Minecraft client) {
         List<DefaultRecipe> recipes = new ArrayList<>();
         Set<String> seenIds = new HashSet<>();
-        Map<ResourceLocation, Resource> resources = client.getResourceManager().listResources("recipe",
+        Map<ResourceLocation, Resource> resources = fr.zazac1.customrecipe.client.compat.LegacyResources.listResources(client.getResourceManager(), "recipes",
                 id -> id.getPath().endsWith(".json"));
         for (Map.Entry<ResourceLocation, Resource> resource : resources.entrySet()) {
             ResourceLocation resourceId = resource.getKey();
             if (resourceId.getNamespace().equals(CustomRecipeMod.MOD_ID)
-                    && resourceId.getPath().startsWith("recipe/custom/")) continue;
-            try (var input = resource.getValue().open()) {
+                    && resourceId.getPath().startsWith("recipes/custom/")) continue;
+            try (var input = resource.getValue().getInputStream()) {
                 String recipeId = resourceId.getNamespace() + ":" + resourceId.getPath()
-                        .substring("recipe/".length(), resourceId.getPath().length() - ".json".length());
+                        .substring("recipes/".length(), resourceId.getPath().length() - ".json".length());
                 DefaultRecipe recipe = parse(recipeId, new String(input.readAllBytes(), StandardCharsets.UTF_8));
                 if (recipe != null && seenIds.add(recipe.id())) recipes.add(recipe);
             } catch (Exception ignored) {

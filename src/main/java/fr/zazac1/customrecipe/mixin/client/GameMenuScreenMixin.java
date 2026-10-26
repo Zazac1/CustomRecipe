@@ -2,10 +2,10 @@ package fr.zazac1.customrecipe.mixin.client;
 
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.client.ConfigScreen;
-import net.minecraft.client.gui.components.Tooltip;
+import fr.zazac1.customrecipe.client.compat.Tooltip;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
+import fr.zazac1.customrecipe.client.compat.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
@@ -29,11 +29,11 @@ public abstract class GameMenuScreenMixin extends Screen {
         if (minecraft == null || minecraft.getSingleplayerServer() == null) return;
         int buttonX = width - 28;
         int buttonY = height - 28;
-        addRenderableWidget(Button.builder(Component.empty(),
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(),
                 button -> minecraft.setScreen(ConfigScreen.fromPauseMenu((Screen) (Object) this)))
-                .tooltip(Tooltip.create(Component.translatable("customrecipe.tooltip.open")))
+                .tooltip(Tooltip.create(fr.zazac1.customrecipe.Texts.translatable("customrecipe.tooltip.open")))
                 .bounds(buttonX, buttonY, 20, 20).build());
-        addRenderableOnly((context, mouseX, mouseY, delta) -> context.blit(
+        addRenderableOnly((context, mouseX, mouseY, delta) -> new fr.zazac1.customrecipe.client.compat.GuiGraphics(context).blit(
                 RECIPE_CREATOR_LOGO,
                 buttonX + 2, buttonY + 2, 0, 0, 16, 16, 16, 16));
     }

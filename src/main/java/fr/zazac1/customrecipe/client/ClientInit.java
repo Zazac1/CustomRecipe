@@ -10,8 +10,8 @@ import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.Tooltip;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.commands.Commands;
@@ -65,21 +65,21 @@ public final class ClientInit {
     }
 
     /** Forge-native pause-menu hook; reliably runs after the 1.20.1 menu is built. */
-    private static void onPauseScreenInit(ScreenEvent.Init.Post event) {
+    private static void onPauseScreenInit(ScreenEvent.InitScreenEvent.Post event) {
         if (!(event.getScreen() instanceof PauseScreen) || Minecraft.getInstance().getSingleplayerServer() == null) return;
         int x = event.getScreen().width - 28;
         int y = event.getScreen().height - 28;
-        event.addListener(Button.builder(Component.empty(), button ->
+        event.addListener(Button.builder(fr.zazac1.customrecipe.Texts.empty(), button ->
                         Minecraft.getInstance().setScreen(ConfigScreen.fromPauseMenu(event.getScreen())))
-                .tooltip(Tooltip.create(Component.translatable("customrecipe.tooltip.open")))
+                .tooltip(Tooltip.create(fr.zazac1.customrecipe.Texts.translatable("customrecipe.tooltip.open")))
                 .bounds(x, y, 20, 20).build());
     }
 
-    private static void onPauseScreenRender(ScreenEvent.Render.Post event) {
+    private static void onPauseScreenRender(ScreenEvent.DrawScreenEvent.Post event) {
         if (!(event.getScreen() instanceof PauseScreen) || Minecraft.getInstance().getSingleplayerServer() == null) return;
         int x = event.getScreen().width - 28;
         int y = event.getScreen().height - 28;
-        event.getGuiGraphics().blit(PAUSE_BUTTON_ICON, x + 2, y + 2, 0, 0, 16, 16, 16, 16);
+        new fr.zazac1.customrecipe.client.compat.GuiGraphics(event.getPoseStack()).blit(PAUSE_BUTTON_ICON, x + 2, y + 2, 0, 0, 16, 16, 16, 16);
     }
 
     /**
@@ -87,8 +87,8 @@ public final class ClientInit {
      * for every Custom Recipe sub-screen, then put the player's exact setting
      * back as soon as they leave the editor.
      */
-    private static void onScreenOpening(ScreenEvent.Opening event) {
-        updateGuiScaleForScreen(Minecraft.getInstance(), event.getNewScreen());
+    private static void onScreenOpening(net.minecraftforge.client.event.ScreenOpenEvent event) {
+        updateGuiScaleForScreen(Minecraft.getInstance(), event.getScreen());
     }
 
     /** Re-check on tick too: some Forge configuration entry points bypass the opening event. */
@@ -99,7 +99,7 @@ public final class ClientInit {
                 return;
             }
             if (guiScaleBeforeCustomRecipe == null) {
-                guiScaleBeforeCustomRecipe = client.options.guiScale().get();
+                guiScaleBeforeCustomRecipe = client.options.guiScale;
             }
             setGuiScale(client, 3);
             return;
@@ -117,8 +117,8 @@ public final class ClientInit {
     }
 
     private static void setGuiScale(Minecraft client, int scale) {
-        if (client.options.guiScale().get() == scale) return;
-        client.options.guiScale().set(scale);
+        if (client.options.guiScale == scale) return;
+        client.options.guiScale = scale;
         // OptionInstance updates the stored value. Resize explicitly so the
         // currently open editor is immediately rebuilt at its new scale.
         client.resizeDisplay();
@@ -155,12 +155,12 @@ public final class ClientInit {
         boolean alreadyShown = config != null && config.shown_editor_tip
                 && worldInstanceId.equals(config.editor_tip_world_instance);
         if (day != 0L || alreadyShown || !WorldRecipeAssignments.markEditorTipShown(worldId, levelName, worldInstanceId)) return;
-        Component link = Component.translatable("customrecipe.chat.world_tip.link").setStyle(
+        Component link = fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.world_tip.link").setStyle(
                 Style.EMPTY.withColor(ChatFormatting.AQUA).withUnderlined(true)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_solo"))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                                Component.translatable("customrecipe.chat.world_tip.hover"))));
-        client.player.sendSystemMessage(Component.translatable("customrecipe.chat.world_tip", link));
+                                fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.world_tip.hover"))));
+        fr.zazac1.customrecipe.Texts.send(client.player, fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.world_tip", link));
         CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent for world '{}'.", levelName);
     }
 

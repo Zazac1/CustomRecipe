@@ -1,18 +1,18 @@
 package fr.zazac1.customrecipe.client;
 
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
+import fr.zazac1.customrecipe.client.compat.Button;
 import net.minecraft.network.chat.Component;
 
 /** Small confirmation shown only when Recipe Creator has unsaved edits. */
-final class SaveChangesScreen extends Screen {
+final class SaveChangesScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final Screen returnTo;
     private final Runnable save;
     private final Runnable discard;
 
     SaveChangesScreen(Screen returnTo, Runnable save, Runnable discard) {
-        super(Component.translatable("customrecipe.save.title"));
+        super(fr.zazac1.customrecipe.Texts.translatable("customrecipe.save.title"));
         this.returnTo = returnTo;
         this.save = save;
         this.discard = discard;
@@ -21,11 +21,11 @@ final class SaveChangesScreen extends Screen {
     @Override
     protected void init() {
         int y = height / 2 + 16;
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.save"), b -> save.run())
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.save"), b -> save.run())
                 .bounds(width / 2 - 102, y, 64, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.discard"), b -> discard.run())
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.discard"), b -> discard.run())
                 .bounds(width / 2 - 32, y, 64, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.cancel"), b -> minecraft.setScreen(returnTo))
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.cancel"), b -> minecraft.setScreen(returnTo))
                 .bounds(width / 2 + 38, y, 64, 20).build());
     }
 
@@ -48,9 +48,9 @@ final class SaveChangesScreen extends Screen {
         super.render(context, mouseX, mouseY, delta);
 
         // Draw copy last so widgets or the underlying screen can never cover it.
-        context.drawCenteredString(font, Component.translatable("customrecipe.save.title"), width / 2, panelY + 12, 0xFFFFFFFF);
-        context.drawCenteredString(font, Component.translatable("customrecipe.save.line1"), width / 2, panelY + 28, 0xFFE0E6E3);
-        context.drawCenteredString(font, Component.translatable("customrecipe.save.line2"), width / 2, panelY + 40, 0xFFB8C7C1);
+        context.drawCenteredString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.save.title"), width / 2, panelY + 12, 0xFFFFFFFF);
+        context.drawCenteredString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.save.line1"), width / 2, panelY + 28, 0xFFE0E6E3);
+        context.drawCenteredString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.save.line2"), width / 2, panelY + 40, 0xFFB8C7C1);
     }
 
     private void drawBorder(GuiGraphics context, int x, int y, int width, int height, int color) {

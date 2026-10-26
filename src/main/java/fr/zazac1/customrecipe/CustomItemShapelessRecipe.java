@@ -12,7 +12,7 @@ public final class CustomItemShapelessRecipe extends ShapelessRecipe implements 
 
     public CustomItemShapelessRecipe(ShapelessRecipe delegate, ItemStack result, CustomRecipeEntry definition,
                                      Map<String, ItemStack> customStacks) {
-        super(delegate.getId(), delegate.getGroup(), delegate.category(), result.copy(), delegate.getIngredients());
+        super(delegate.getId(), delegate.getGroup(), result.copy(), delegate.getIngredients());
         matcher = new CustomItemCraftingRecipe(delegate, definition, customStacks);
     }
 

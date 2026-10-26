@@ -10,7 +10,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.ShapedRecipe;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
@@ -73,7 +73,7 @@ public final class ServerConfigNetworking {
 
         // Keep the server editor out of integrated-server suggestions entirely.
         // The local editor is registered by ClientInit as /customrecipe_solo.
-        if (event.getCommandSelection() != net.minecraft.commands.Commands.CommandSelection.DEDICATED) return;
+        if (event.getEnvironment() != net.minecraft.commands.Commands.CommandSelection.DEDICATED) return;
         event.getDispatcher().register(literal("customrecipe_server").requires(source -> source.hasPermission(2))
                 .executes(context -> openEditor(context.getSource())));
     }
@@ -93,7 +93,7 @@ public final class ServerConfigNetworking {
         var server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) return;
         RecipeConflictChecker.refreshAndSave(server);
-        for (ServerPlayer player : event.getPlayers()) awardDefaultRecipes(player, server);
+        for (ServerPlayer player : event.getPlayerList().getPlayers()) awardDefaultRecipes(player, server);
         ReiCompat.refreshAfterRecipeReload(server);
     }
 
@@ -131,7 +131,7 @@ public final class ServerConfigNetworking {
             return;
         }
         try {
-            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withSuppressedOutput(), "reload");
+            server.getCommands().performCommand(player.createCommandSourceStack().withSuppressedOutput(), "reload");
         } catch (RuntimeException error) {
             CustomRecipeMod.LOGGER.error("Saved the server configuration, but could not reload recipes", error);
             sendSaveResult(player, false, "The configuration was saved, but recipes could not be reloaded.");
@@ -193,11 +193,11 @@ public final class ServerConfigNetworking {
     private static int openEditor(CommandSourceStack source) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
         if (!ModNetworking.canSend(player)) {
-            source.sendFailure(Component.literal("[Custom Recipe] This client needs the Custom Recipe mod to open the editor."));
+            source.sendFailure(fr.zazac1.customrecipe.Texts.literal("[Custom Recipe] This client needs the Custom Recipe mod to open the editor."));
             return 0;
         }
         sendEditor(player);
-        source.sendSuccess(() -> Component.literal("[Custom Recipe] Opening the server recipe editor."), false);
+        source.sendSuccess(fr.zazac1.customrecipe.Texts.literal("[Custom Recipe] Opening the server recipe editor."), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -206,7 +206,7 @@ public final class ServerConfigNetworking {
         ServerPlayer player = source.getPlayerOrException();
         ItemStack held = player.getMainHandItem();
         if (held.isEmpty()) {
-            source.sendFailure(Component.translatable("customrecipe.chat.custom_item.empty_hand"));
+            source.sendFailure(fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.custom_item.empty_hand"));
             return 0;
         }
         ConfigLoader.invalidate();
@@ -217,7 +217,7 @@ public final class ServerConfigNetworking {
                 ? CustomItemLibrary.uniqueId(config.custom_items, name)
                 : CustomItemLibrary.sanitizeId(requestedId);
         if (id.isBlank()) {
-            source.sendFailure(Component.translatable("customrecipe.chat.custom_item.invalid_id"));
+            source.sendFailure(fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.custom_item.invalid_id"));
             return 0;
         }
         CustomItemEntry entry = CustomItemLibrary.find(config.custom_items, id);
@@ -228,17 +228,17 @@ public final class ServerConfigNetworking {
         }
         entry.id = id;
         entry.name = name;
-        entry.item_id = BuiltInRegistries.ITEM.getKey(held.getItem()).toString();
+        entry.item_id = Registry.ITEM.getKey(held.getItem()).toString();
         try {
             entry.stack_data = CustomItemLibrary.encode(held, source.getServer().registryAccess());
         } catch (RuntimeException error) {
-            source.sendFailure(Component.translatable("customrecipe.chat.custom_item.save_failed"));
+            source.sendFailure(fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.custom_item.save_failed"));
             CustomRecipeMod.LOGGER.error("[CustomRecipe] Failed to encode custom item {}", id, error);
             return 0;
         }
         ConfigLoader.saveAndInvalidate(config);
         String savedId = id;
-        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.saved", name, savedId), false);
+        source.sendSuccess(fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.custom_item.saved", name, savedId), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -246,12 +246,12 @@ public final class ServerConfigNetworking {
         CustomItemEntry entry = CustomItemLibrary.find(ConfigLoader.get().custom_items, requestedId);
         ItemStack stack = CustomItemLibrary.decode(entry, source.getServer().registryAccess());
         if (entry == null || stack.isEmpty()) {
-            source.sendFailure(Component.translatable("customrecipe.chat.custom_item.not_found", requestedId));
+            source.sendFailure(fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.custom_item.not_found", requestedId));
             return 0;
         }
         ServerPlayer player = source.getPlayerOrException();
         if (!player.addItem(stack.copy())) player.drop(stack.copy(), false);
-        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.given", entry.name), false);
+        source.sendSuccess(fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.custom_item.given", entry.name), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -259,25 +259,25 @@ public final class ServerConfigNetworking {
         ModConfig config = ConfigLoader.get();
         CustomItemEntry entry = CustomItemLibrary.find(config.custom_items, requestedId);
         if (entry == null) {
-            source.sendFailure(Component.translatable("customrecipe.chat.custom_item.not_found", requestedId));
+            source.sendFailure(fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.custom_item.not_found", requestedId));
             return 0;
         }
         config.custom_items.remove(entry);
         ConfigLoader.saveAndInvalidate(config);
-        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.removed", entry.name), false);
-        source.getServer().getCommands().performPrefixedCommand(source.withSuppressedOutput(), "reload");
+        source.sendSuccess(fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.custom_item.removed", entry.name), false);
+        source.getServer().getCommands().performCommand(source.withSuppressedOutput(), "reload");
         return Command.SINGLE_SUCCESS;
     }
 
     private static int listCustomItems(CommandSourceStack source) {
         List<CustomItemEntry> items = ConfigLoader.get().custom_items;
         if (items.isEmpty()) {
-            source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.list_empty"), false);
+            source.sendSuccess(fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.custom_item.list_empty"), false);
             return Command.SINGLE_SUCCESS;
         }
-        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.list", items.size()), false);
+        source.sendSuccess(fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.custom_item.list", items.size()), false);
         for (CustomItemEntry entry : items) {
-            source.sendSuccess(() -> Component.literal("- " + entry.id + " — " + entry.name), false);
+            source.sendSuccess(fr.zazac1.customrecipe.Texts.literal("- " + entry.id + " — " + entry.name), false);
         }
         return items.size();
     }
@@ -291,7 +291,7 @@ public final class ServerConfigNetworking {
         config.editor_world_name = WorldRecipeAssignments.activeWorldName();
         String json = ConfigLoader.toJson(config);
         if (json.length() > MAX_JSON_CHARS) {
-            player.sendSystemMessage(Component.literal("[Custom Recipe] The server config is too large to send to the editor."));
+            fr.zazac1.customrecipe.Texts.send(player, fr.zazac1.customrecipe.Texts.literal("[Custom Recipe] The server config is too large to send to the editor."));
             return;
         }
         ModNetworking.sendServerConfig(player, json);
@@ -323,12 +323,12 @@ public final class ServerConfigNetworking {
             // Special recipes (for example decorated pots) require a real grid and throw on EMPTY.
             ItemStack result = ItemStack.EMPTY;
             try {
-                result = recipe.getResultItem(server.registryAccess());
+                result = recipe.getResultItem();
             } catch (RuntimeException ignored) {
                 // Their recipe ID remains searchable and they can still be disabled.
             }
             String resultId = result.isEmpty() ? entry.getId().toString()
-                    : BuiltInRegistries.ITEM.getKey(result.getItem()).toString();
+                    : Registry.ITEM.getKey(result.getItem()).toString();
             int gridWidth = 0;
             int gridHeight = 0;
             boolean shapeless = !(recipe instanceof ShapedRecipe);
@@ -381,21 +381,21 @@ public final class ServerConfigNetworking {
 
     private static String firstMatchingId(Ingredient ingredient) {
         return Arrays.stream(ingredient.getItems())
-                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
+                .map(stack -> Registry.ITEM.getKey(stack.getItem()).toString())
                 .findFirst()
                 .orElse("");
     }
 
     private static boolean itemMatchesQuery(String itemId, String query) {
         if (itemId.toLowerCase(Locale.ROOT).contains(query)) return true;
-        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(itemId));
+        var item = Registry.ITEM.get(ResourceLocation.tryParse(itemId));
         return item != null && !item.equals(net.minecraft.world.item.Items.AIR)
                 && new ItemStack(item).getHoverName().getString().toLowerCase(Locale.ROOT).contains(query);
     }
 
     private static boolean ingredientMatchesQuery(Ingredient ingredient, String query) {
         for (ItemStack stack : ingredient.getItems()) {
-            if (itemMatchesQuery(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), query)) return true;
+            if (itemMatchesQuery(Registry.ITEM.getKey(stack.getItem()).toString(), query)) return true;
         }
         return false;
     }
@@ -452,7 +452,7 @@ public final class ServerConfigNetworking {
     private static List<String> ingredientChoices(Ingredient ingredient) {
         if (ingredient == null) return List.of();
         return Arrays.stream(ingredient.getItems())
-                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()).sorted().toList();
+                .map(stack -> Registry.ITEM.getKey(stack.getItem()).toString()).sorted().toList();
     }
 
     /** Always send a final 3x3 layout so no client-side axis interpretation is needed. */
@@ -471,8 +471,24 @@ public final class ServerConfigNetworking {
         return slots;
     }
 
-    private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,
-                               String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {}
+    /** The bundled Gson must populate ordinary fields, not final record components. */
+    private static final class RecipeQuery {
+        private String query;
+        private boolean matchIngredients;
+        private boolean matchOutput;
+        private String statusFilter;
+        private String sourceFilter;
+        private List<String> disabledRecipeIds;
+        private int page;
+
+        public String query() { return query; }
+        public boolean matchIngredients() { return matchIngredients; }
+        public boolean matchOutput() { return matchOutput; }
+        public String statusFilter() { return statusFilter; }
+        public String sourceFilter() { return sourceFilter; }
+        public List<String> disabledRecipeIds() { return disabledRecipeIds; }
+        public int page() { return page; }
+    }
 
     private ServerConfigNetworking() {}
 }

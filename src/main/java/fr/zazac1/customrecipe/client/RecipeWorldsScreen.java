@@ -2,10 +2,10 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.EditBox;
 import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
@@ -16,7 +16,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-public final class RecipeWorldsScreen extends Screen {
+public final class RecipeWorldsScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private static final int ROW_HEIGHT = 22;
     private final ConfigScreen config;
     private final CustomRecipesScreen returnScreen;
@@ -26,7 +26,7 @@ public final class RecipeWorldsScreen extends Screen {
     private int scroll;
 
     RecipeWorldsScreen(ConfigScreen config, CustomRecipesScreen returnScreen, int recipeIndex) {
-        super(Component.translatable("customrecipe.screen.select_target"));
+        super(fr.zazac1.customrecipe.Texts.translatable("customrecipe.screen.select_target"));
         this.config = config;
         this.returnScreen = returnScreen;
         this.recipeIndex = recipeIndex;
@@ -39,7 +39,7 @@ public final class RecipeWorldsScreen extends Screen {
             return;
         }
         if (config.isServerManaged()) {
-            addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.add_current_world"), b -> {
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.add_current_world"), b -> {
                 config.addToCurrentWorld(recipe());
                 minecraft.setScreen(returnScreen);
             }).bounds(width / 2 - 110, height / 2 - 12, 220, 20).build());
@@ -48,8 +48,8 @@ public final class RecipeWorldsScreen extends Screen {
         }
         scanWorlds();
         searchBox = new EditBox(font, width / 2 - 100, 28, 200, 20,
-                Component.translatable("customrecipe.screen.search_worlds"));
-        searchBox.setHint(Component.translatable("customrecipe.screen.search"));
+                fr.zazac1.customrecipe.Texts.translatable("customrecipe.screen.search_worlds"));
+        searchBox.setHint(fr.zazac1.customrecipe.Texts.translatable("customrecipe.screen.search"));
         searchBox.setResponder(value -> {
             scroll = 0;
             rebuildWidgets();
@@ -62,9 +62,9 @@ public final class RecipeWorldsScreen extends Screen {
         for (int i = scroll; i < Math.min(shown.size(), scroll + visible); i++) {
             LocalWorld world = shown.get(i);
             boolean enabled = isEnabled(world);
-            addRenderableWidget(Button.builder(Component.literal(world.name), b -> toggle(world))
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.literal(world.name), b -> toggle(world))
                     .bounds(width / 2 - 160, rowY, 238, 20).build());
-            addRenderableWidget(Button.builder(Component.translatable(enabled
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable(enabled
                             ? "customrecipe.state.enabled" : "customrecipe.state.disabled"), b -> toggle(world))
                     .bounds(width / 2 + 82, rowY, 78, 20).build());
             rowY += ROW_HEIGHT;
@@ -73,7 +73,7 @@ public final class RecipeWorldsScreen extends Screen {
     }
 
     private void addBackButton(int y) {
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.setScreen(returnScreen))
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.back"), b -> minecraft.setScreen(returnScreen))
                 .bounds(width / 2 - 55, y, 110, 20).build());
     }
 

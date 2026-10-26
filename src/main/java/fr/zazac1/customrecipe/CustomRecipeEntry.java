@@ -63,6 +63,12 @@ public class CustomRecipeEntry {
     /** Shows this saved recipe in the Quick Add sidebar. */
     public Boolean quick_add;
 
+    /** Global Library state: automatically keeps this recipe available in every world. */
+    public Boolean global_auto_add;
+
+    /** Source library recipe for an automatically managed world copy. */
+    public String global_library_source_id;
+
     /** Non-vanilla mod IDs and versions present when this recipe was saved. */
     public Map<String, String> required_mods = new LinkedHashMap<>();
 
