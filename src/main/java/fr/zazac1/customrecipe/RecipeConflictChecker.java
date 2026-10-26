@@ -5,7 +5,7 @@ import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.ShapedRecipe;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.resources.ResourceLocation;
 
@@ -98,8 +98,8 @@ public final class RecipeConflictChecker {
         ResourceLocation expected = ResourceLocation.tryParse(entry.result);
         if (expected == null) return false;
         try {
-            ItemStack result = recipe.getResultItem(server.registryAccess());
-            return !result.isEmpty() && expected.equals(BuiltInRegistries.ITEM.getKey(result.getItem()));
+            ItemStack result = recipe.getResultItem();
+            return !result.isEmpty() && expected.equals(Registry.ITEM.getKey(result.getItem()));
         } catch (RuntimeException ignored) { return false; }
     }
 
@@ -113,7 +113,7 @@ public final class RecipeConflictChecker {
 
     private static String ingredientSignature(Ingredient ingredient) {
         return Arrays.stream(ingredient.getItems())
-                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()).sorted()
+                .map(stack -> Registry.ITEM.getKey(stack.getItem()).toString()).sorted()
                 .collect(Collectors.joining(","));
     }
 

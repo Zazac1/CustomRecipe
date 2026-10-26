@@ -2,8 +2,8 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.CustomItemLibrary;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
@@ -11,7 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import java.util.List;
 
 /** Global full-stack item library used by every recipe target. */
-final class CustomItemsScreen extends Screen {
+final class CustomItemsScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private static final int MAX_ROW_WIDTH = 560;
     private final ConfigScreen parent;
     private int page;
@@ -60,7 +60,7 @@ final class CustomItemsScreen extends Screen {
 
     private void give(CustomItemEntry entry) {
         if (minecraft.level != null && minecraft.getConnection() != null && ClientServerConfigNetworking.canManageServer()) {
-            minecraft.getConnection().sendCommand("customrecipe_item give " + entry.id);
+            minecraft.player.commandUnsigned("customrecipe_item give " + entry.id);
         }
     }
 

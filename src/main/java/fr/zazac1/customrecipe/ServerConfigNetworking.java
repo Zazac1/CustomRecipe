@@ -10,7 +10,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.ShapedRecipe;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
@@ -93,7 +93,7 @@ public final class ServerConfigNetworking {
         var server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) return;
         RecipeConflictChecker.refreshAndSave(server);
-        for (ServerPlayer player : event.getPlayers()) awardDefaultRecipes(player, server);
+        for (ServerPlayer player : event.getPlayerList().getPlayers()) awardDefaultRecipes(player, server);
         ReiCompat.refreshAfterRecipeReload(server);
     }
 
@@ -197,7 +197,7 @@ public final class ServerConfigNetworking {
             return 0;
         }
         sendEditor(player);
-        source.sendSuccess(() -> Component.literal("[Custom Recipe] Opening the server recipe editor."), false);
+        source.sendSuccess(Component.literal("[Custom Recipe] Opening the server recipe editor."), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -228,7 +228,7 @@ public final class ServerConfigNetworking {
         }
         entry.id = id;
         entry.name = name;
-        entry.item_id = BuiltInRegistries.ITEM.getKey(held.getItem()).toString();
+        entry.item_id = Registry.ITEM.getKey(held.getItem()).toString();
         try {
             entry.stack_data = CustomItemLibrary.encode(held, source.getServer().registryAccess());
         } catch (RuntimeException error) {
@@ -238,7 +238,7 @@ public final class ServerConfigNetworking {
         }
         ConfigLoader.saveAndInvalidate(config);
         String savedId = id;
-        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.saved", name, savedId), false);
+        source.sendSuccess(Component.translatable("customrecipe.chat.custom_item.saved", name, savedId), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -251,7 +251,7 @@ public final class ServerConfigNetworking {
         }
         ServerPlayer player = source.getPlayerOrException();
         if (!player.addItem(stack.copy())) player.drop(stack.copy(), false);
-        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.given", entry.name), false);
+        source.sendSuccess(Component.translatable("customrecipe.chat.custom_item.given", entry.name), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -264,7 +264,7 @@ public final class ServerConfigNetworking {
         }
         config.custom_items.remove(entry);
         ConfigLoader.saveAndInvalidate(config);
-        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.removed", entry.name), false);
+        source.sendSuccess(Component.translatable("customrecipe.chat.custom_item.removed", entry.name), false);
         source.getServer().getCommands().performPrefixedCommand(source.withSuppressedOutput(), "reload");
         return Command.SINGLE_SUCCESS;
     }
@@ -272,12 +272,12 @@ public final class ServerConfigNetworking {
     private static int listCustomItems(CommandSourceStack source) {
         List<CustomItemEntry> items = ConfigLoader.get().custom_items;
         if (items.isEmpty()) {
-            source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.list_empty"), false);
+            source.sendSuccess(Component.translatable("customrecipe.chat.custom_item.list_empty"), false);
             return Command.SINGLE_SUCCESS;
         }
-        source.sendSuccess(() -> Component.translatable("customrecipe.chat.custom_item.list", items.size()), false);
+        source.sendSuccess(Component.translatable("customrecipe.chat.custom_item.list", items.size()), false);
         for (CustomItemEntry entry : items) {
-            source.sendSuccess(() -> Component.literal("- " + entry.id + " — " + entry.name), false);
+            source.sendSuccess(Component.literal("- " + entry.id + " — " + entry.name), false);
         }
         return items.size();
     }
@@ -323,12 +323,12 @@ public final class ServerConfigNetworking {
             // Special recipes (for example decorated pots) require a real grid and throw on EMPTY.
             ItemStack result = ItemStack.EMPTY;
             try {
-                result = recipe.getResultItem(server.registryAccess());
+                result = recipe.getResultItem();
             } catch (RuntimeException ignored) {
                 // Their recipe ID remains searchable and they can still be disabled.
             }
             String resultId = result.isEmpty() ? entry.getId().toString()
-                    : BuiltInRegistries.ITEM.getKey(result.getItem()).toString();
+                    : Registry.ITEM.getKey(result.getItem()).toString();
             int gridWidth = 0;
             int gridHeight = 0;
             boolean shapeless = !(recipe instanceof ShapedRecipe);
@@ -381,21 +381,21 @@ public final class ServerConfigNetworking {
 
     private static String firstMatchingId(Ingredient ingredient) {
         return Arrays.stream(ingredient.getItems())
-                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
+                .map(stack -> Registry.ITEM.getKey(stack.getItem()).toString())
                 .findFirst()
                 .orElse("");
     }
 
     private static boolean itemMatchesQuery(String itemId, String query) {
         if (itemId.toLowerCase(Locale.ROOT).contains(query)) return true;
-        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(itemId));
+        var item = Registry.ITEM.get(ResourceLocation.tryParse(itemId));
         return item != null && !item.equals(net.minecraft.world.item.Items.AIR)
                 && new ItemStack(item).getHoverName().getString().toLowerCase(Locale.ROOT).contains(query);
     }
 
     private static boolean ingredientMatchesQuery(Ingredient ingredient, String query) {
         for (ItemStack stack : ingredient.getItems()) {
-            if (itemMatchesQuery(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), query)) return true;
+            if (itemMatchesQuery(Registry.ITEM.getKey(stack.getItem()).toString(), query)) return true;
         }
         return false;
     }
@@ -452,7 +452,7 @@ public final class ServerConfigNetworking {
     private static List<String> ingredientChoices(Ingredient ingredient) {
         if (ingredient == null) return List.of();
         return Arrays.stream(ingredient.getItems())
-                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()).sorted().toList();
+                .map(stack -> Registry.ITEM.getKey(stack.getItem()).toString()).sorted().toList();
     }
 
     /** Always send a final 3x3 layout so no client-side axis interpretation is needed. */
@@ -471,8 +471,24 @@ public final class ServerConfigNetworking {
         return slots;
     }
 
-    private record RecipeQuery(String query, boolean matchIngredients, boolean matchOutput,
-                               String statusFilter, String sourceFilter, List<String> disabledRecipeIds, int page) {}
+    /** The bundled Gson must populate ordinary fields, not final record components. */
+    private static final class RecipeQuery {
+        private String query;
+        private boolean matchIngredients;
+        private boolean matchOutput;
+        private String statusFilter;
+        private String sourceFilter;
+        private List<String> disabledRecipeIds;
+        private int page;
+
+        public String query() { return query; }
+        public boolean matchIngredients() { return matchIngredients; }
+        public boolean matchOutput() { return matchOutput; }
+        public String statusFilter() { return statusFilter; }
+        public String sourceFilter() { return sourceFilter; }
+        public List<String> disabledRecipeIds() { return disabledRecipeIds; }
+        public int page() { return page; }
+    }
 
     private ServerConfigNetworking() {}
 }

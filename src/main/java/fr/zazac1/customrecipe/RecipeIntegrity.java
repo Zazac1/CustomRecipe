@@ -2,7 +2,7 @@ package fr.zazac1.customrecipe;
 
 import net.minecraftforge.fml.ModList;
 import net.minecraft.world.item.Items;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
@@ -44,7 +44,7 @@ public final class RecipeIntegrity {
                 continue;
             }
             ResourceLocation id = ResourceLocation.tryParse(rawId);
-            if (id == null || !BuiltInRegistries.ITEM.containsKey(id) || BuiltInRegistries.ITEM.get(id) == Items.AIR) {
+            if (id == null || !Registry.ITEM.containsKey(id) || Registry.ITEM.get(id) == Items.AIR) {
                 missing.add(rawId);
             }
         }

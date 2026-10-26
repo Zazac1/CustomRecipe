@@ -12,7 +12,7 @@ public final class CustomItemShapedRecipe extends ShapedRecipe implements Counte
 
     public CustomItemShapedRecipe(ShapedRecipe delegate, ItemStack result, CustomRecipeEntry definition,
                                   Map<String, ItemStack> customStacks) {
-        super(delegate.getId(), delegate.getGroup(), delegate.category(), delegate.getWidth(),
+        super(delegate.getId(), delegate.getGroup(), delegate.getWidth(),
                 delegate.getHeight(), delegate.getIngredients(), result.copy());
         matcher = new CustomItemCraftingRecipe(delegate, definition, customStacks);
     }

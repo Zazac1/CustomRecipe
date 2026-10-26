@@ -17,20 +17,22 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import net.minecraft.core.NonNullList;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.CraftingBookCategory;
+
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeManager;
+import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.item.crafting.ShapelessRecipe;
 import org.spongepowered.asm.mixin.Mixin;
@@ -41,6 +43,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(RecipeManager.class)
 public abstract class ServerRecipeManagerMixin {
+    @Shadow private Map<RecipeType<?>, Map<ResourceLocation, Recipe<?>>> recipes;
     @Shadow public abstract Collection<Recipe<?>> getRecipes();
     @Shadow public abstract void replaceRecipes(Iterable<Recipe<?>> recipes);
 
@@ -50,11 +53,12 @@ public abstract class ServerRecipeManagerMixin {
         ConfigLoader.invalidate();
         ModConfig rootConfig = ConfigLoader.get();
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
+        List<String> disabledRecipes = ConfigLoader.effectiveDisabledRecipes(rootConfig, config);
         List<Recipe<?>> recipes = new ArrayList<>(getRecipes());
         // Bundled JSON files are templates only; Quick Add creates independent custom copies.
         recipes.removeIf(recipe -> recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID)
                 && BuiltinRecipeTemplates.contains(recipe.getId().getPath()));
-        recipes.removeIf(recipe -> config.disabled_recipes.contains(recipe.getId().toString())
+        recipes.removeIf(recipe -> disabledRecipes.contains(recipe.getId().toString())
                 && !(recipe instanceof CraftingRecipe));
 
         boolean recipeStateChanged = false;
@@ -74,6 +78,13 @@ public abstract class ServerRecipeManagerMixin {
         recipes.addAll(0, exactOrCounted);
         recipes.addAll(ordinary);
         replaceRecipes(recipes);
+        // Vanilla replaceRecipes uses hash maps and discards the priority above.
+        Map<RecipeType<?>, Map<ResourceLocation, Recipe<?>>> orderedRecipes = new LinkedHashMap<>();
+        for (Recipe<?> recipe : recipes) {
+            orderedRecipes.computeIfAbsent(recipe.getType(), type -> new LinkedHashMap<>())
+                    .put(recipe.getId(), recipe);
+        }
+        this.recipes = Collections.unmodifiableMap(orderedRecipes);
     }
 
     private boolean usesExactOrCountedIngredient(CustomRecipeEntry entry) {
@@ -103,7 +114,7 @@ public abstract class ServerRecipeManagerMixin {
             if (list.isEmpty()) return null;
             NonNullList<Ingredient> input = NonNullList.create();
             input.addAll(list);
-            CraftingRecipe recipe = new ShapelessRecipe(id, recipeGroup, CraftingBookCategory.MISC, result, input);
+            CraftingRecipe recipe = new ShapelessRecipe(id, recipeGroup, result, input);
             return exactWrapper(recipe, result, entry, customItems);
         }
         if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
@@ -121,7 +132,7 @@ public abstract class ServerRecipeManagerMixin {
             stack.setCount(Math.max(1, Math.min(entry.keyCount(String.valueOf(symbol)), stack.getMaxStackSize())));
             input.set(y * width + x, Ingredient.of(stack));
         }
-        CraftingRecipe recipe = new ShapedRecipe(id, recipeGroup, CraftingBookCategory.MISC,
+        CraftingRecipe recipe = new ShapedRecipe(id, recipeGroup,
                 width, height, input, result);
         return exactWrapper(recipe, result, entry, customItems);
     }
@@ -131,8 +142,8 @@ public abstract class ServerRecipeManagerMixin {
             return CustomItemLibrary.decode(CustomItemLibrary.find(customItems, value), null);
         }
         ResourceLocation id = ResourceLocation.tryParse(value);
-        return id != null && BuiltInRegistries.ITEM.containsKey(id)
-                ? new ItemStack(BuiltInRegistries.ITEM.get(id)) : ItemStack.EMPTY;
+        return id != null && Registry.ITEM.containsKey(id)
+                ? new ItemStack(Registry.ITEM.get(id)) : ItemStack.EMPTY;
     }
 
     private String ingredientBaseId(String value, List<CustomItemEntry> customItems) {

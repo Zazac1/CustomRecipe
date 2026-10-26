@@ -1,7 +1,7 @@
 package fr.zazac1.customrecipe;
 
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.resources.ResourceLocation;
@@ -74,8 +74,8 @@ public final class CustomItemLibrary {
     public static String baseItemId(CustomItemEntry entry) {
         if (entry == null || entry.item_id == null) return "";
         ResourceLocation id = ResourceLocation.tryParse(entry.item_id);
-        return id != null && BuiltInRegistries.ITEM.containsKey(id)
-                && BuiltInRegistries.ITEM.get(id) != Items.AIR ? id.toString() : "";
+        return id != null && Registry.ITEM.containsKey(id)
+                && Registry.ITEM.get(id) != Items.AIR ? id.toString() : "";
     }
 
     public static boolean exactMatch(ItemStack actual, ItemStack expected) {

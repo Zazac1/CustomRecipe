@@ -4,7 +4,7 @@ import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.ModConfig;
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -15,13 +15,13 @@ final class ClientItemStacks {
 
     static ItemStack fromItem(Item item) {
         if (item == null) return ItemStack.EMPTY;
-        return fromId(BuiltInRegistries.ITEM.getKey(item));
+        return fromId(Registry.ITEM.getKey(item));
     }
 
     static ItemStack fromId(ResourceLocation id) {
         if (id == null) return ItemStack.EMPTY;
 
-        return BuiltInRegistries.ITEM.containsKey(id) ? new ItemStack(BuiltInRegistries.ITEM.get(id)) : ItemStack.EMPTY;
+        return Registry.ITEM.containsKey(id) ? new ItemStack(Registry.ITEM.get(id)) : ItemStack.EMPTY;
     }
 
     static ItemStack fromReference(String value, ModConfig config) {

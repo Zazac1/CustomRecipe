@@ -1,13 +1,15 @@
 package fr.zazac1.customrecipe.client;
 
+import org.lwjgl.glfw.GLFW;
+
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import fr.zazac1.customrecipe.WorldRecipeTarget;
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.EditBox;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.world.item.ItemStack;
@@ -32,7 +34,7 @@ import java.util.stream.Stream;
 import java.util.function.Function;
 
 /** Direct save-folder scan: no asynchronous vanilla world-list omissions. */
-final class RecipeTargetSelectScreen extends Screen {
+final class RecipeTargetSelectScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     // Vanilla world entries are compact: 32px thumbnail and three 12px text lines.
     private static final int ROW = 42;
     private static final DateTimeFormatter LAST_PLAYED_FORMAT =
@@ -176,6 +178,7 @@ final class RecipeTargetSelectScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) return super.mouseClicked(mouseX, mouseY, button);
         if (hasScrollBar() && mouseX >= scrollBarX() - 2 && mouseX <= scrollBarX() + 8
                 && mouseY >= rowsTop() && mouseY < rowsBottom()) {
             setScrollFromMouse(mouseY);

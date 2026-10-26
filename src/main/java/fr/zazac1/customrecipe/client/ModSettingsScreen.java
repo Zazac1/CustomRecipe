@@ -4,14 +4,14 @@ import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.RecipeTarget;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /** Persistent client preferences for the Custom Recipe editor. */
-final class ModSettingsScreen extends Screen {
+final class ModSettingsScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final ConfigScreen parent;
     private final ModConfig config;
 
@@ -65,7 +65,7 @@ final class ModSettingsScreen extends Screen {
             save();
             minecraft.setScreen(parent);
         }).bounds(width / 2 - 100, saveY, 200, 22).build());
-        addRenderableOnly((graphics, mouseX, mouseY, delta) -> {
+        addLegacyRenderable((graphics, mouseX, mouseY, delta) -> {
             int iconX = width / 2 - font.width(saveLabel) / 2 - 20;
             CustomRecipeSprites.draw(graphics, CustomRecipeSprites.SAVE, iconX, saveY + 3, 16, 16);
             graphics.drawCenteredString(font, saveLabel, width / 2, saveY + 7, 0xFFFFFFFF);
@@ -97,7 +97,7 @@ final class ModSettingsScreen extends Screen {
             minecraft.setScreen(new ModSettingsScreen(parent));
         }).tooltip(Tooltip.create(Component.translatable("customrecipe.settings.reset")))
                 .bounds(x, y, 20, 20).build());
-        addRenderableOnly((graphics, mouseX, mouseY, delta) ->
+        addLegacyRenderable((graphics, mouseX, mouseY, delta) ->
                 CustomRecipeSprites.draw(graphics, CustomRecipeSprites.RESET, x + 2, y + 2, 16, 16));
     }
 

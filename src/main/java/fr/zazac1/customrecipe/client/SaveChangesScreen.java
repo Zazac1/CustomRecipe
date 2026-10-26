@@ -1,12 +1,12 @@
 package fr.zazac1.customrecipe.client;
 
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
+import fr.zazac1.customrecipe.client.compat.Button;
 import net.minecraft.network.chat.Component;
 
 /** Small confirmation shown only when Recipe Creator has unsaved edits. */
-final class SaveChangesScreen extends Screen {
+final class SaveChangesScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final Screen returnTo;
     private final Runnable save;
     private final Runnable discard;

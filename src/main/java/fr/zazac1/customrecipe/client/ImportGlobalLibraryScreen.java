@@ -1,12 +1,12 @@
 package fr.zazac1.customrecipe.client;
 
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
+import fr.zazac1.customrecipe.client.compat.Button;
 import net.minecraft.network.chat.Component;
 
 /** Confirmation for the non-destructive bulk import into a selected world. */
-final class ImportGlobalLibraryScreen extends Screen {
+final class ImportGlobalLibraryScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final ConfigScreen config;
     private final CustomRecipesScreen returnTo;
     private final int recipeCount;

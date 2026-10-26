@@ -4,7 +4,7 @@ import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.RecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.world.item.ItemStack;

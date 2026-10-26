@@ -2,20 +2,20 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.VanillaRecipePage;
 import fr.zazac1.customrecipe.VanillaRecipeDetails;
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.Tooltip;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 
 /** Read-only crafting preview before enabling or disabling a recipe. */
-public final class VanillaRecipeDetailsScreen extends Screen {
+public final class VanillaRecipeDetailsScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private static final int VARIANT_COLUMNS = 6;
     private static final int VARIANT_CELL = 24;
     private final VanillaRecipesScreen parent;
@@ -37,7 +37,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
     @Override
     protected void init() {
         ConfigScreen config = parent.configScreen();
-        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, config.target(),
+        addLegacyRenderable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, config.target(),
                 config.target().isWorld() ? config.target().displayName() : "Global Library"));
         if (details == null) parent.requestDetails(this, recipe.id());
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
@@ -135,12 +135,12 @@ public final class VanillaRecipeDetailsScreen extends Screen {
 
     private void drawItem(GuiGraphics ctx, String id, int x, int y) {
         if (id == null || id.isBlank() || id.startsWith("#")) return;
-        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
+        var item = Registry.ITEM.get(ResourceLocation.tryParse(id));
         if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, y);
     }
 
     private String itemName(String id) {
-        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
+        var item = Registry.ITEM.get(ResourceLocation.tryParse(id));
         return item == null || item == Items.AIR ? id : new ItemStack(item).getHoverName().getString();
     }
 

@@ -2,9 +2,9 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
+import fr.zazac1.customrecipe.client.compat.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.storage.LevelSummary;
 
@@ -14,7 +14,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /** Manage every available custom recipe from the perspective of one local world. */
-final class WorldRecipesScreen extends Screen {
+final class WorldRecipesScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final ConfigScreen config;
     private final RecipeWorldsScreen parent;
     private final LevelSummary world;
@@ -43,13 +43,13 @@ final class WorldRecipesScreen extends Screen {
             CustomRecipeEntry recipe = recipes.get(i);
             boolean enabled = isEnabled(recipe);
             if (enabled && !wroteEnabledHeader) {
-                addRenderableWidget(new net.minecraft.client.gui.components.MultiLineTextWidget(x, y,
+                addRenderableWidget(new fr.zazac1.customrecipe.client.compat.MultiLineTextWidget(x, y,
                         Component.translatable("customrecipe.world.enabled_recipes").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x55FF55)), font));
                 y += 16;
                 wroteEnabledHeader = true;
             }
             if (!enabled && !wroteDisabledHeader) {
-                addRenderableWidget(new net.minecraft.client.gui.components.MultiLineTextWidget(x, y,
+                addRenderableWidget(new fr.zazac1.customrecipe.client.compat.MultiLineTextWidget(x, y,
                         Component.translatable("customrecipe.world.available_recipes").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xAAAAAA)), font));
                 y += 16;
                 wroteDisabledHeader = true;
@@ -60,7 +60,7 @@ final class WorldRecipesScreen extends Screen {
                 toggle(target);
                 rebuildWidgets();
             }).bounds(x + 24, rowY, 316, 18).build());
-            addRenderableOnly((ctx, mouseX, mouseY, delta) -> CustomRecipeSprites.draw(ctx,
+            addLegacyRenderable((ctx, mouseX, mouseY, delta) -> CustomRecipeSprites.draw(ctx,
                     isEnabled(target) ? CustomRecipeSprites.ACCEPT : CustomRecipeSprites.REJECT,
                     x, rowY, 18, 18));
             y += 22;

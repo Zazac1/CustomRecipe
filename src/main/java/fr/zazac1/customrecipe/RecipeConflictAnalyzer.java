@@ -1,7 +1,7 @@
 package fr.zazac1.customrecipe;
 
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
@@ -135,7 +135,7 @@ public final class RecipeConflictAnalyzer {
 
     private static boolean accepts(Ingredient ingredient, String itemId) {
         ResourceLocation id = ResourceLocation.tryParse(itemId);
-        return id != null && BuiltInRegistries.ITEM.containsKey(id) && ingredient.test(new ItemStack(BuiltInRegistries.ITEM.get(id)));
+        return id != null && Registry.ITEM.containsKey(id) && ingredient.test(new ItemStack(Registry.ITEM.get(id)));
     }
 
     private static boolean sameOutput(CustomRecipeEntry custom, CraftingRecipe candidate,
@@ -143,8 +143,8 @@ public final class RecipeConflictAnalyzer {
         ResourceLocation resultId = ResourceLocation.tryParse(custom.result);
         if (resultId == null) return false;
         try {
-            ItemStack result = unwrap(candidate).getResultItem(registries);
-            return !result.isEmpty() && resultId.equals(BuiltInRegistries.ITEM.getKey(result.getItem()));
+            ItemStack result = unwrap(candidate).getResultItem();
+            return !result.isEmpty() && resultId.equals(Registry.ITEM.getKey(result.getItem()));
         } catch (RuntimeException ignored) {
             return false;
         }

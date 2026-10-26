@@ -14,6 +14,8 @@ plugins {
 
 apply plugin: 'org.spongepowered.mixin'
 
+if (project.hasProperty('basicValidation')) { sourceSets.main.java.srcDir 'validation/src/main/java' }
+
 version = project.mod_version
 group = project.maven_group
 base { archivesName = project.mod_id }
@@ -31,8 +33,8 @@ minecraft {
             arg '-mixin.config=customrecipe.mixins.json'
             mods { "${project.mod_id}" { source sourceSets.main } }
         }
-        client { }
-        server { args '--nogui' }
+        client { workingDirectory project.file('run/client') }
+        server { workingDirectory project.file('run/server'); args '--nogui' }
     }
 }
 
@@ -116,6 +118,7 @@ tasks.configureEach {
 java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
 
 jar {
+    exclude 'fr/zazac1/customrecipe/validation/**'
     manifest { attributes([
         'Specification-Title': project.mod_id,
         'Specification-Vendor': 'zazac1',
@@ -132,3 +135,5 @@ publishing {
     publications { mavenJava(MavenPublication) { artifact jar } }
     repositories { }
 }
+
+jar.finalizedBy('reobfJar')

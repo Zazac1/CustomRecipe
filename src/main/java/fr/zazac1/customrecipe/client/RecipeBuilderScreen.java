@@ -1,23 +1,25 @@
 package fr.zazac1.customrecipe.client;
 
+import org.lwjgl.glfw.GLFW;
+
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.RecipeIntegrity;
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.MultiLineTextWidget;
-import net.minecraft.client.gui.components.EditBox;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.MultiLineTextWidget;
+import fr.zazac1.customrecipe.client.compat.EditBox;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.*;
 
-public class RecipeBuilderScreen extends Screen {
+public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
 
     private static final int PAD   = 20;
     private static final int SLOT  = 18;
@@ -33,8 +35,8 @@ public class RecipeBuilderScreen extends Screen {
     private static final int MAX_SHAPELESS_INGREDIENTS = 9;
     private static final int VISIBLE_SHAPELESS_ROWS = 5;
     // Mouse button values follow GLFW: left=0 and right=1.
-    private static final int LEFT_MOUSE_BUTTON = 0;
-    private static final int RIGHT_MOUSE_BUTTON = 1;
+    private static final int LEFT_MOUSE_BUTTON = GLFW.GLFW_MOUSE_BUTTON_LEFT;
+    private static final int RIGHT_MOUSE_BUTTON = GLFW.GLFW_MOUSE_BUTTON_RIGHT;
 
     private final ConfigScreen parent;
     /** Exact screen that opened this editor, retained for Cancel, Escape and Save. */
@@ -219,13 +221,13 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     protected void init() {
-        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, parent.target(),
+        addLegacyRenderable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, parent.target(),
                 parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
         shapelessScroll = Math.max(0, Math.min(maxShapelessScroll(), shapelessScroll));
         if (itemFieldText.isBlank() && itemMatches.isEmpty()) itemMatches = findItemMatches("");
 
         // Background fills + grid + result slot drawn via addDrawable
-        addRenderableOnly((ctx, mx, my, d) -> renderFills(ctx, mx, my));
+        addLegacyRenderable((ctx, mx, my, d) -> renderFills(ctx, mx, my));
         addRenderableWidget(makeRightLabel(rightX() + 8, panelY() + 8, "Recipe preview", 0xFFEECC77));
         if (shaped) {
             addRenderableWidget(makeRightLabel(rightX() + 8, shapelessHeaderY(),
@@ -245,7 +247,7 @@ public class RecipeBuilderScreen extends Screen {
         // Item search field
         itemField = addRenderableWidget(new EditBox(
                 font, leftX() + 4, fieldY() + SEARCH_TEXT_Y_OFFSET,
-                leftW() - 22, SEARCH_H, Component.literal("item")));
+                leftW() - 22, SEARCH_H - SEARCH_TEXT_Y_OFFSET, Component.literal("item")));
         // The whole search-and-clear control already has one shared outline in render().
         // Do not render a second TextField border beside the × button.
         itemField.setBordered(false);
@@ -260,7 +262,7 @@ public class RecipeBuilderScreen extends Screen {
             }
         });
         int clearSearchX = leftX() + leftW() - 18;
-        addRenderableOnly((ctx, mx, my, d) -> {
+        addLegacyRenderable((ctx, mx, my, d) -> {
             if (mx >= clearSearchX && mx < clearSearchX + 18 && my >= fieldY() && my < fieldY() + 18) {
                 ctx.fill(clearSearchX, fieldY(), clearSearchX + 18, fieldY() + 18, 0x443355BB);
             }
@@ -280,7 +282,7 @@ public class RecipeBuilderScreen extends Screen {
         // ── Right panel ──────────────────────────────────────────────────
 
         if (!shaped) {
-            addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+            addLegacyRenderable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                     CustomRecipeSprites.OUTPUT_ARROW,
                     resX() - 29, resY() + 5, 22, 15));
         }
@@ -323,7 +325,7 @@ public class RecipeBuilderScreen extends Screen {
         addRenderableWidget(Button.builder(Component.empty(),
                 b -> { toggleShapeMode(); rebuildWidgets(); }
         ).bounds(modeX, modeY, 20, 20).build());
-        addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+        addLegacyRenderable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                 shaped ? CustomRecipeSprites.LOCKED_BUTTON : CustomRecipeSprites.UNLOCKED_BUTTON,
                 modeX, modeY, 20, 20));
         addRenderableWidget(makeRightLabel(modeX + 24, modeY + 6,
@@ -334,7 +336,7 @@ public class RecipeBuilderScreen extends Screen {
         addRenderableWidget(Button.builder(Component.empty(),
                 b -> { knownByDefault = !knownByDefault; rebuildWidgets(); }
         ).bounds(knownX, knownY, 20, 20).build());
-        addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+        addLegacyRenderable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                 knownByDefault ? CustomRecipeSprites.KNOWN_BY_DEFAULT : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT,
                 knownX, knownY, 20, 20));
         addRenderableWidget(makeRightLabel(knownX + 24, knownY + 6,
@@ -359,7 +361,7 @@ public class RecipeBuilderScreen extends Screen {
                         ? "customrecipe.builder.save" : "customrecipe.button.add_recipe"),
                 b -> confirm()
         ).bounds(width / 2 + 4, height - 22, 98, 18).build());
-        addRenderableOnly((ctx, mx, my, d) -> {
+        addLegacyRenderable((ctx, mx, my, d) -> {
             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, width / 2 - 98, height - 22, 18, 18);
             CustomRecipeSprites.draw(ctx, CustomRecipeSprites.ACCEPT, width / 2 + 8, height - 22, 18, 18);
         });
@@ -367,6 +369,7 @@ public class RecipeBuilderScreen extends Screen {
         // Restore focus after clearAndInit
         if (restoreFocus == 1 && itemField != null) {
             setFocused(itemField);
+            itemField.setFocused(true);
             restoreFocus = 0;
         } else if (focusIngredientCount && ingredientCountField != null) {
             setFocused(ingredientCountField);
@@ -425,7 +428,7 @@ public class RecipeBuilderScreen extends Screen {
             String searchable = custom.id + " " + custom.name + " " + custom.item_id;
             if (searchable.toLowerCase(Locale.ROOT).contains(ql)) matches.add(reference);
         }
-        for (var entry : BuiltInRegistries.ITEM.entrySet()) {
+        for (var entry : Registry.ITEM.entrySet()) {
             if (entry.getValue() == Items.AIR) continue;
             String id = entry.getKey().location().toString();
             String path = entry.getKey().location().getPath();
@@ -710,7 +713,7 @@ public class RecipeBuilderScreen extends Screen {
                     if (rowIndex == 0 && rows.size() == 1) clearFirstShapelessSlot();
                     else removeShapelessSlot(row.slotIndex());
                 }).bounds(removeX, y + 4, 18, 18).build());
-                addRenderableOnly((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+                addLegacyRenderable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
                         CustomRecipeSprites.REJECT, removeX, y + 4, 18, 18));
             }
         }
@@ -888,6 +891,9 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        boolean overItemSearch = itemField != null
+                && mx >= leftX() && mx < leftX() + leftW() - 18
+                && my >= fieldY() && my < fieldY() + SEARCH_H;
         // The bottom action bar always has priority over a palette that reaches
         // it on short windows or large GUI scales.
         if (button == LEFT_MOUSE_BUTTON && mx >= width / 2.0 - 110 && mx < width / 2.0 + 110
@@ -897,14 +903,14 @@ public class RecipeBuilderScreen extends Screen {
         // This icon is rendered directly: a vanilla Button behind reject.png
         // leaks its hover chrome. Handle the full 18×18 target before the field.
         int clearSearchX = leftX() + leftW() - 18;
-        if (button == 0 && mx >= clearSearchX && mx < clearSearchX + 18
+        if (button == LEFT_MOUSE_BUTTON && mx >= clearSearchX && mx < clearSearchX + 18
                 && my >= fieldY() && my < fieldY() + 18) {
             clearItemSearch();
             return true;
         }
         // Right-clicking the preview area cancels the item currently carried
         // by the cursor; it never edits a recipe slot.
-        if (button == 1
+        if (button == RIGHT_MOUSE_BUTTON
                 && mx >= rightX() && mx < rightX() + rightW()
                 && my >= panelY() && my < panelY() + workspaceH()) {
             heldItemId = null;
@@ -912,6 +918,11 @@ public class RecipeBuilderScreen extends Screen {
             selectedShapelessSlot = -1;
             rebuildWidgets();
             return true;
+        }
+        if (button != LEFT_MOUSE_BUTTON) {
+            // Legacy EditBox gives itself focus even for a right click.
+            if (overItemSearch) return false;
+            return super.mouseClicked(mx, my, button);
         }
         int gx = gridX(), gy = gridY();
 
@@ -970,22 +981,21 @@ public class RecipeBuilderScreen extends Screen {
             return true;
         }
 
-        // Click on text field — laisser super.mouseClicked gérer
-        // pour que la sélection par drag fonctionne nativement
-        if (itemField != null
-                && mx >= leftX() && mx < leftX() + leftW() - 18
-                && my >= fieldY() && my < fieldY() + SEARCH_H) {
-            // The first click after choosing an item rebuilds suggestions. Keep
-            // focus through that rebuild so it also selects the field immediately.
-            setFocused(itemField);
+        // Rebuilding suggestions replaces the field; focus and click the new instance.
+        if (overItemSearch) {
             if (itemMatches.isEmpty()) {
                 restoreFocus = 1;
                 onItemTyped(itemFieldText);
-                return true;
             }
-            // Dispatch directly: Screen's child traversal could miss this first
-            // click after the search field was rebuilt.
-            itemField.mouseClicked(mx, my, button);
+            if (getFocused() instanceof EditBox && getFocused() != itemField) {
+                ((EditBox) getFocused()).setFocused(false);
+            }
+            setFocused(itemField);
+            itemField.setFocused(true);
+            // Padding belongs to the search control, although glyphs start below it.
+            itemField.mouseClicked(Math.max(mx, leftX() + 4),
+                    Math.max(my, fieldY() + SEARCH_TEXT_Y_OFFSET), LEFT_MOUSE_BUTTON);
+            setDragging(true);
             return true;
         }
 
@@ -1061,11 +1071,11 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double my, int button, double deltaX, double deltaY) {
-        if (draggingShapelessScrollbar) {
+        if (button == LEFT_MOUSE_BUTTON && draggingShapelessScrollbar) {
             updateShapelessScrollbar(my);
             return true;
         }
-        if (draggingSuggestionScrollbar) {
+        if (button == LEFT_MOUSE_BUTTON && draggingSuggestionScrollbar) {
             updateSuggestionScrollbar(my);
             return true;
         }
@@ -1074,8 +1084,10 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        draggingSuggestionScrollbar = false;
-        draggingShapelessScrollbar = false;
+        if (button == LEFT_MOUSE_BUTTON) {
+            draggingSuggestionScrollbar = false;
+            draggingShapelessScrollbar = false;
+        }
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
@@ -1141,6 +1153,10 @@ public class RecipeBuilderScreen extends Screen {
         entry.server_enabled = editingEntry == null ? null : editingEntry.server_enabled;
         entry.enabled = editingEntry == null ? null : editingEntry.enabled;
         entry.quick_add = editingEntry == null ? null : editingEntry.quick_add;
+        entry.global_auto_add = editingEntry == null || parent.target().isWorld()
+                ? null : editingEntry.global_auto_add;
+        // Editing an automatically added world copy makes it an independent local recipe.
+        entry.global_library_source_id = null;
         entry.known_by_default = knownByDefault;
         entry.result = resultItemId;
         entry.count  = Math.max(1, resultCount);

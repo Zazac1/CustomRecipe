@@ -1,14 +1,14 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomItemEntry;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /** Modal editor for a custom item's visible name and internal identifier. */
-final class RenameCustomItemScreen extends Screen {
+final class RenameCustomItemScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final CustomItemsScreen parent;
     private final CustomItemEntry entry;
     private EditBox nameField;

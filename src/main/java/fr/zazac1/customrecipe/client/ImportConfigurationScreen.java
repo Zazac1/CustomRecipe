@@ -1,13 +1,13 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ModConfig;
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
+import fr.zazac1.customrecipe.client.compat.Button;
 import net.minecraft.network.chat.Component;
 
 /** Central confirmation shown after a full backup has been read successfully. */
-final class ImportConfigurationScreen extends Screen {
+final class ImportConfigurationScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final ConfigScreen returnTo;
     private final ModConfig imported;
     private final int recipeCount;

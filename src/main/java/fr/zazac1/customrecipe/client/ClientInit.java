@@ -10,8 +10,8 @@ import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.Tooltip;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.commands.Commands;
@@ -79,7 +79,7 @@ public final class ClientInit {
         if (!(event.getScreen() instanceof PauseScreen) || Minecraft.getInstance().getSingleplayerServer() == null) return;
         int x = event.getScreen().width - 28;
         int y = event.getScreen().height - 28;
-        event.getGuiGraphics().blit(PAUSE_BUTTON_ICON, x + 2, y + 2, 0, 0, 16, 16, 16, 16);
+        new fr.zazac1.customrecipe.client.compat.GuiGraphics(event.getPoseStack()).blit(PAUSE_BUTTON_ICON, x + 2, y + 2, 0, 0, 16, 16, 16, 16);
     }
 
     /**

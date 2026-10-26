@@ -5,11 +5,11 @@ import java.util.List;
 import java.util.Map;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.CraftingBookCategory;
+
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeSerializer;
@@ -120,7 +120,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         ItemStack custom = customStacks.get(token);
         if (custom != null) return CustomItemLibrary.exactMatch(actual, custom);
         ResourceLocation id = ResourceLocation.tryParse(token);
-        return id != null && BuiltInRegistries.ITEM.getKey(actual.getItem()).equals(id);
+        return id != null && Registry.ITEM.getKey(actual.getItem()).equals(id);
     }
 
     public static List<String> shrinkPattern(List<String> pattern) {
@@ -147,17 +147,15 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         return result;
     }
 
-    @Override public ItemStack assemble(CraftingContainer input, RegistryAccess registries) { return delegate.assemble(input, registries); }
+    @Override public ItemStack assemble(CraftingContainer input) { return delegate.assemble(input); }
     @Override public boolean canCraftInDimensions(int width, int height) { return delegate.canCraftInDimensions(width, height); }
-    @Override public ItemStack getResultItem(RegistryAccess registries) { return delegate.getResultItem(registries); }
+    @Override public ItemStack getResultItem() { return delegate.getResultItem(); }
     @Override public NonNullList<ItemStack> getRemainingItems(CraftingContainer input) { return delegate.getRemainingItems(input); }
     @Override public NonNullList<Ingredient> getIngredients() { return delegate.getIngredients(); }
     @Override public ResourceLocation getId() { return delegate.getId(); }
     @Override public RecipeSerializer<?> getSerializer() { return delegate.getSerializer(); }
-    @Override public CraftingBookCategory category() { return delegate.category(); }
     @Override public boolean isSpecial() { return delegate.isSpecial(); }
     @Override public String getGroup() { return delegate.getGroup(); }
-    @Override public boolean showNotification() { return delegate.showNotification(); }
 
     private record Expected(String token, int count) {}
     private record Actual(int inputIndex, ItemStack stack) {}

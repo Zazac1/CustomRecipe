@@ -27,7 +27,7 @@ public abstract class ResultSlotMixin {
     @Inject(method = "onTake", at = @At("HEAD"))
     private void customrecipe$captureRequiredCounts(Player player, ItemStack result, CallbackInfo ci) {
         customrecipe$requiredCounts = new int[0];
-        if (!(player.level() instanceof ServerLevel level)) return;
+        if (!(player.level instanceof ServerLevel level)) return;
         Recipe<?> recipe = level.getRecipeManager()
                 .getRecipeFor(RecipeType.CRAFTING, craftSlots, level).orElse(null);
         if (recipe instanceof CountedCraftingRecipe counted) {

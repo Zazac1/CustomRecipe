@@ -2,10 +2,10 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
-import net.minecraft.client.gui.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.EditBox;
 import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
@@ -16,7 +16,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-public final class RecipeWorldsScreen extends Screen {
+public final class RecipeWorldsScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private static final int ROW_HEIGHT = 22;
     private final ConfigScreen config;
     private final CustomRecipesScreen returnScreen;
