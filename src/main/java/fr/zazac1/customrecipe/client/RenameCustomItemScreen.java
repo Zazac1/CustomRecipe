@@ -42,7 +42,7 @@ final class RenameCustomItemScreen extends Screen {
         idField.setResponder(value -> updateSaveState());
 
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.cancel"),
-                button -> minecraft.gui.setScreen(parent)).bounds(width / 2 + 4, panelY + 116, 100, 20).build());
+                button -> minecraft.setScreen(parent)).bounds(width / 2 + 4, panelY + 116, 100, 20).build());
         setFocused(nameField);
         nameField.setFocused(true);
     }
@@ -53,12 +53,12 @@ final class RenameCustomItemScreen extends Screen {
 
     private void save() {
         String name = nameField.getValue().strip();
-        if (parent.rename(entry, name, idField.getValue())) minecraft.gui.setScreen(parent);
+        if (parent.rename(entry, name, idField.getValue())) minecraft.setScreen(parent);
     }
 
     @Override
     public void onClose() {
-        minecraft.gui.setScreen(parent);
+        minecraft.setScreen(parent);
     }
 
     @Override

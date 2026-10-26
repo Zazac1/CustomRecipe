@@ -32,7 +32,7 @@ final class ModSettingsScreen extends Screen {
                 .bounds(x, y, 276, 20).build());
         addResetButton(x + 280, y, () -> config.automatic_gui_scale = true);
 
-        addRenderableWidget(Button.builder(targetLabel(), button -> minecraft.gui.setScreen(
+        addRenderableWidget(Button.builder(targetLabel(), button -> minecraft.setScreen(
                 RecipeTargetSelectScreen.forSettings(this, target -> {
                     setDefaultTarget(target); return new ModSettingsScreen(parent);
                 }))).tooltip(Tooltip.create(Component.translatable("customrecipe.settings.open_target.tooltip")))
@@ -50,7 +50,7 @@ final class ModSettingsScreen extends Screen {
         addResetButton(x + 280, y + 56, () -> config.preload_recipes_on_startup = true);
 
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.save"), button -> {
-            save(); minecraft.gui.setScreen(parent);
+            save(); minecraft.setScreen(parent);
         }).bounds(width / 2 - 100, y + 96, 200, 22).build());
     }
 
@@ -65,7 +65,7 @@ final class ModSettingsScreen extends Screen {
             .withStyle(value ? ChatFormatting.GREEN : ChatFormatting.RED); }
     private void addResetButton(int x, int y, Runnable reset) {
         addRenderableWidget(Button.builder(Component.empty(), button -> {
-            reset.run(); save(); minecraft.gui.setScreen(new ModSettingsScreen(parent));
+            reset.run(); save(); minecraft.setScreen(new ModSettingsScreen(parent));
         }).tooltip(Tooltip.create(Component.translatable("customrecipe.settings.reset"))).bounds(x, y, 20, 20).build());
         addRenderableOnly((ctx, mouseX, mouseY, delta) -> CustomRecipeSprites.draw(ctx, CustomRecipeSprites.RESET, x + 2, y + 2, 16, 16));
     }
@@ -77,5 +77,5 @@ final class ModSettingsScreen extends Screen {
         context.centeredText(font, Component.translatable("customrecipe.settings.preload_hint"), width / 2, height / 2 + 26, 0xAAAAAA);
         super.extractRenderState(context, mouseX, mouseY, delta);
     }
-    @Override public void onClose() { minecraft.gui.setScreen(parent); }
+    @Override public void onClose() { minecraft.setScreen(parent); }
 }

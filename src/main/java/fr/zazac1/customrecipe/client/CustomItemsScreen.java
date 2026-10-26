@@ -37,7 +37,7 @@ final class CustomItemsScreen extends Screen {
             int giveX = deleteX - 60;
             int renameX = giveX - 84;
             addRenderableWidget(Button.builder(Component.translatable("customrecipe.custom_items.rename"),
-                    button -> minecraft.gui.setScreen(new RenameCustomItemScreen(this, entry)))
+                    button -> minecraft.setScreen(new RenameCustomItemScreen(this, entry)))
                     .bounds(renameX, rowY + 3, 80, 20).build());
             Button give = Button.builder(Component.translatable("customrecipe.custom_items.give"),
                     button -> give(entry)).bounds(giveX, rowY + 3, 56, 20).build();
@@ -55,7 +55,7 @@ final class CustomItemsScreen extends Screen {
         next.active = (page + 1) * pageSize < items.size();
         addRenderableWidget(next);
         addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"),
-                button -> minecraft.gui.setScreen(parent)).bounds(width / 2 - 80, height - 25, 160, 20).build());
+                button -> minecraft.setScreen(parent)).bounds(width / 2 - 80, height - 25, 160, 20).build());
     }
 
     private void give(CustomItemEntry entry) {
@@ -111,7 +111,7 @@ final class CustomItemsScreen extends Screen {
         }
     }
 
-    @Override public void onClose() { minecraft.gui.setScreen(parent); }
+    @Override public void onClose() { minecraft.setScreen(parent); }
 
     private int pageSize() { return Math.max(1, (height - 112) / 28); }
     private int rowWidth() { return Math.min(MAX_ROW_WIDTH, width - 24); }

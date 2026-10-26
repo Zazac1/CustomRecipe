@@ -1,5 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -983,7 +985,7 @@ public class VanillaRecipesScreen extends Screen {
     @Override
     public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent click, boolean focused) {
         List<VanillaRecipePage.VanillaRecipeInfo> shownRecipes = filteredRecipes();
-        if (click.button() == 1 && isOverRecipeScrollbar(click.x(), click.y(), shownRecipes)) {
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && isOverRecipeScrollbar(click.x(), click.y(), shownRecipes)) {
             draggingRecipeScrollbar = true;
             updateRecipeScrollbar(click.y(), shownRecipes);
             return true;
@@ -993,7 +995,7 @@ public class VanillaRecipesScreen extends Screen {
 
     @Override
     public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent click, double deltaX, double deltaY) {
-        if (draggingRecipeScrollbar) {
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && draggingRecipeScrollbar) {
             updateRecipeScrollbar(click.y(), filteredRecipes());
             return true;
         }
@@ -1002,7 +1004,7 @@ public class VanillaRecipesScreen extends Screen {
 
     @Override
     public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent click) {
-        draggingRecipeScrollbar = false;
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT) draggingRecipeScrollbar = false;
         return super.mouseReleased(click);
     }
 
@@ -1022,5 +1024,5 @@ public class VanillaRecipesScreen extends Screen {
     @Override public boolean isPauseScreen() { return true; }
 
     /** Recipe states belong to ConfigScreen and are only persisted from there. */
-    @Override public void onClose() { minecraft.gui.setScreen(parent); }
+    @Override public void onClose() { minecraft.setScreen(parent); }
 }

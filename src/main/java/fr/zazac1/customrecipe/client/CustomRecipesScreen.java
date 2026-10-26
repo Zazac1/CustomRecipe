@@ -1,5 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomItemEntry;
@@ -296,9 +298,9 @@ public class CustomRecipesScreen extends Screen {
                     : Component.translatable("customrecipe.button.select_world_to_import");
             Button addAll = Button.builder(importLabel, b -> {
                 if (hasWorldTarget) {
-                    minecraft.gui.setScreen(new ImportGlobalLibraryScreen(parent, this, importable));
+                    minecraft.setScreen(new ImportGlobalLibraryScreen(parent, this, importable));
                 } else {
-                    minecraft.gui.setScreen(new RecipeTargetSelectScreen(parent,
+                    minecraft.setScreen(new RecipeTargetSelectScreen(parent,
                             selected -> new CustomRecipesScreen(selected, true)));
                 }
             }).bounds(importButtonX, 4, importButtonW, 20).build();
@@ -348,7 +350,7 @@ public class CustomRecipesScreen extends Screen {
                         if (isCorrupted(recipes.get(idx))) return;
                         if (libraryPicker) {
                             parent.addFromLibrary(recipes.get(idx));
-                            client.gui.setScreen(new CustomRecipesScreen(parent));
+                            client.setScreen(new CustomRecipesScreen(parent));
                             return;
                         }
                         if (parent.target().isWorld()) {
@@ -502,7 +504,7 @@ public class CustomRecipesScreen extends Screen {
                 addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.recipe.add_to", parent.target().displayName()), b -> {
                     if (isCorrupted(recipes.get(selected))) return;
                     parent.addFromLibrary(recipes.get(selected));
-                    client.gui.setScreen(new CustomRecipesScreen(parent));
+                    client.setScreen(new CustomRecipesScreen(parent));
                 }).dimensions(detailRight() - 202, detailY() + 4, 198, 18).build());
             } else if (corrupted) {
                 String mods = String.join(", ", RecipeIntegrity.requiredModIds(e));
@@ -520,10 +522,10 @@ public class CustomRecipesScreen extends Screen {
                 }).dimensions(detailRight() - 142, detailY() + 30, 138, 18).build());
             } else {
                 addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.duplicate"),
-                        b -> client.gui.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), -1)))
+                        b -> client.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), -1)))
                         .dimensions(detailRight() - 204, detailY() + 4, 96, 18).build());
                 addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.edit"),
-                        b -> client.gui.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), selected)))
+                        b -> client.setScreen(new RecipeBuilderScreen(parent, this, recipes.get(selected), selected)))
                         .dimensions(detailRight() - 102, detailY() + 4, 96, 18).build());
                 int typeX = detailActionX();
                 int knownX = detailKnownX();
@@ -582,19 +584,19 @@ public class CustomRecipesScreen extends Screen {
                 clearAndInit();
             }).dimensions(bulkActionX() + 102, 4, 98, OUTER_BUTTON_H).build());
             addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.add_from_library"),
-                    b -> client.gui.setScreen(new CustomRecipesScreen(parent, true))
+                    b -> client.setScreen(new CustomRecipesScreen(parent, true))
             ).dimensions(outerButtonX(), addFromLibraryButtonY(), OUTER_BUTTON_W, OUTER_BUTTON_H).build());
         }
 
         if (!libraryPicker) {
             addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.add_recipe_new"),
-                    b -> client.gui.setScreen(new RecipeBuilderScreen(parent, this, null, -1))
+                    b -> client.setScreen(new RecipeBuilderScreen(parent, this, null, -1))
             ).dimensions(outerButtonX(), addRecipeButtonY(), OUTER_BUTTON_W, OUTER_BUTTON_H).build());
         }
 
         if (libraryPicker) {
             addDrawableChild(ButtonWidget.builder(Text.translatable("customrecipe.button.back_to_recipes"),
-                    b -> client.gui.setScreen(new CustomRecipesScreen(parent))
+                    b -> client.setScreen(new CustomRecipesScreen(parent))
             ).dimensions(width / 2 - 75, height - 22, 150, 18).build());
         } else {
             String saveLabel = Text.translatable("customrecipe.button.save").getString();
@@ -918,8 +920,9 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
+        if (click.button() != InputConstants.MOUSE_BUTTON_LEFT) return super.mouseClicked(click, focused);
         double mx = click.x(), my = click.y();
-        if (quickAddEditMode && click.button() == 1) {
+        if (quickAddEditMode) {
             quickAddEditMode = false;
             clearAndInit();
             return true;
@@ -978,7 +981,7 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
-        if (draggingRecipeScrollbar) {
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT && draggingRecipeScrollbar) {
             updateRecipeScrollbar(click.y());
             return true;
         }
@@ -987,7 +990,7 @@ public class CustomRecipesScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent click) {
-        draggingRecipeScrollbar = false;
+        if (click.button() == InputConstants.MOUSE_BUTTON_LEFT) draggingRecipeScrollbar = false;
         return super.mouseReleased(click);
     }
 
@@ -1149,7 +1152,7 @@ public class CustomRecipesScreen extends Screen {
 
     /** Escape leaves Recipe Creator, so let its owner protect pending edits. */
     @Override public void onClose() {
-        if (libraryPicker) client.gui.setScreen(new CustomRecipesScreen(parent));
-        else client.gui.setScreen(parent);
+        if (libraryPicker) client.setScreen(new CustomRecipesScreen(parent));
+        else client.setScreen(parent);
     }
 }

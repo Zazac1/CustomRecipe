@@ -1,5 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -31,7 +33,7 @@ public final class RecipeWorldsScreen extends Screen {
     @Override
     protected void init() {
         if (recipeIndex < 0 || recipeIndex >= config.recipes.size()) {
-            minecraft.gui.setScreen(returnScreen);
+            minecraft.setScreen(returnScreen);
             return;
         }
 
@@ -39,9 +41,9 @@ public final class RecipeWorldsScreen extends Screen {
             // A dedicated server cannot inspect a player's local saves; keep its current-world assignment flow.
             addRenderableWidget(Button.builder(Component.literal("Add current server world"), b -> {
                 config.addToCurrentWorld(recipe());
-                minecraft.gui.setScreen(returnScreen);
+                minecraft.setScreen(returnScreen);
             }).bounds(width / 2 - 110, height / 2 - 12, 220, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.gui.setScreen(returnScreen))
+            addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(returnScreen))
                     .bounds(width / 2 - 55, height / 2 + 16, 110, 20).build());
             return;
         }
@@ -66,7 +68,7 @@ public final class RecipeWorldsScreen extends Screen {
         searchBox.setResponder(worldList::updateFilter);
         addRenderableWidget(searchBox);
 
-        addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.gui.setScreen(returnScreen))
+        addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(returnScreen))
                 .bounds(width / 2 - 55, height - 28, 110, 20).build());
     }
 
@@ -119,6 +121,7 @@ public final class RecipeWorldsScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
+        if (click.button() != InputConstants.MOUSE_BUTTON_LEFT) return super.mouseClicked(click, focused);
         if (worldList != null) {
             double mouseX = click.x();
             double mouseY = click.y();
@@ -134,7 +137,7 @@ public final class RecipeWorldsScreen extends Screen {
                     toggleCurrentRecipe(summary);
                     return true;
                 }
-                minecraft.gui.setScreen(new WorldRecipesScreen(config, this, summary));
+                minecraft.setScreen(new WorldRecipesScreen(config, this, summary));
                 return true;
             }
         }
@@ -152,5 +155,5 @@ public final class RecipeWorldsScreen extends Screen {
     public boolean isPauseScreen() { return true; }
 
     @Override
-    public void onClose() { minecraft.gui.setScreen(returnScreen); }
+    public void onClose() { minecraft.setScreen(returnScreen); }
 }

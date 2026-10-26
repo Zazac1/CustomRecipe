@@ -59,13 +59,13 @@ public final class ClientInit {
                     // The requirement above hides it remotely; retain this guard for a
                     // disconnect occurring between parsing and execution.
                     if (client.getSingleplayerServer() == null) return 0;
-                    client.execute(() -> client.gui.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true))));
+                    client.execute(() -> client.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true))));
                     return 1;
                 })
         ));
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> {
             Minecraft client = Minecraft.getInstance();
-            updateGuiScaleForScreen(client, client.gui.screen());
+            updateGuiScaleForScreen(client, client.screen);
             if (ConfigLoader.get().preload_recipes_on_startup) VanillaRecipesScreen.preloadAtStartup(client);
             if (client.getSingleplayerServer() == null) {
                 activeClientWorldId = "";
@@ -127,7 +127,7 @@ public final class ClientInit {
                 Minecraft.getInstance().player.sendSystemMessage(Component.translatable("customrecipe.chat.invalid_server_validation"));
                 return;
             }
-            Minecraft.getInstance().gui.setScreen(new ConfigScreen(Minecraft.getInstance().gui.screen(), config,
+            Minecraft.getInstance().setScreen(new ConfigScreen(Minecraft.getInstance().screen, config,
                     "Server Recipes (OP)", true, ClientServerConfigNetworking::save));
     }
 
@@ -146,7 +146,7 @@ public final class ClientInit {
 
     public static void receiveVanillaRecipePage(VanillaRecipePagePayload payload) {
             VanillaRecipePage page = GSON.fromJson(payload.json(), VanillaRecipePage.class);
-            if (page != null && Minecraft.getInstance().gui.screen() instanceof VanillaRecipesScreen screen) {
+            if (page != null && Minecraft.getInstance().screen instanceof VanillaRecipesScreen screen) {
                 screen.applyResult(page);
             }
     }
@@ -154,9 +154,9 @@ public final class ClientInit {
     public static void receiveVanillaRecipeDetails(VanillaRecipeDetailsPayload payload) {
             VanillaRecipeDetails details = GSON.fromJson(payload.json(), VanillaRecipeDetails.class);
             if (details == null) return;
-            if (Minecraft.getInstance().gui.screen() instanceof VanillaRecipesScreen screen) {
+            if (Minecraft.getInstance().screen instanceof VanillaRecipesScreen screen) {
                 screen.applyDetails(details);
-            } else if (Minecraft.getInstance().gui.screen() instanceof VanillaRecipeDetailsScreen screen) {
+            } else if (Minecraft.getInstance().screen instanceof VanillaRecipeDetailsScreen screen) {
                 screen.applyDetails(details);
             }
     }

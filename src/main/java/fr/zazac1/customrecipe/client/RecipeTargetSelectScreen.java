@@ -1,5 +1,7 @@
 package fr.zazac1.customrecipe.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
@@ -66,7 +68,7 @@ final class RecipeTargetSelectScreen extends Screen {
     }
 
     private void selectTarget(RecipeTarget target) {
-        minecraft.gui.setScreen(selectedScreen.apply(target));
+        minecraft.setScreen(selectedScreen.apply(target));
     }
 
     @Override
@@ -80,7 +82,7 @@ final class RecipeTargetSelectScreen extends Screen {
         search.setHint(Component.translatable("customrecipe.screen.search"));
         search.setResponder(value -> scroll = 0);
         addRenderableWidget(search);
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.gui.setScreen(parent))
+        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
                 .bounds(width / 2 - 55, height - 28, 110, 20).build());
     }
 
@@ -182,6 +184,7 @@ final class RecipeTargetSelectScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean focused) {
+        if (click.button() != InputConstants.MOUSE_BUTTON_LEFT) return super.mouseClicked(click, focused);
         if (hasScrollBar() && click.x() >= scrollBarX() - 2 && click.x() <= scrollBarX() + 8
                 && click.y() >= rowsTop() && click.y() < rowsBottom()) {
             setScrollFromMouse(click.y());
@@ -263,7 +266,7 @@ final class RecipeTargetSelectScreen extends Screen {
     public boolean isPauseScreen() { return true; }
 
     @Override
-    public void onClose() { minecraft.gui.setScreen(parent); }
+    public void onClose() { minecraft.setScreen(parent); }
 
     private record WorldIcon(Identifier id, int width, int height) {}
     private record WorldDetails(String name, String lastPlayed, long lastPlayedAt, String description) {}

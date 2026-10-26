@@ -5,4 +5,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = 'customrecipe-neoforge-26.3'
+rootProject.name = 'customrecipe-neoforge-26.1.2'
