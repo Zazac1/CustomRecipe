@@ -1,6 +1,6 @@
 package fr.zazac1.customrecipe;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 
 /** Client-to-server request to validate staged local recipes against server resources. */
 public final class ValidateServerConfigPayload {

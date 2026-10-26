@@ -2,20 +2,20 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.VanillaRecipePage;
 import fr.zazac1.customrecipe.VanillaRecipeDetails;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import net.minecraft.client.gui.screen.Screen;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.Tooltip;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.util.registry.Registry;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.ResourceLocation;
 
 import java.util.List;
 
 /** Read-only crafting preview before enabling or disabling a recipe. */
-public final class VanillaRecipeDetailsScreen extends Screen {
+public final class VanillaRecipeDetailsScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private static final int VARIANT_COLUMNS = 6;
     private static final int VARIANT_CELL = 24;
     private final VanillaRecipesScreen parent;
@@ -24,7 +24,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
     private VanillaRecipeDetails.VariantPreview selectedVariant;
 
     VanillaRecipeDetailsScreen(VanillaRecipesScreen parent, VanillaRecipePage.VanillaRecipeInfo recipe) {
-        super(Component.translatable("customrecipe.details.title"));
+        super(fr.zazac1.customrecipe.Texts.translatable("customrecipe.details.title"));
         this.parent = parent;
         this.recipe = recipe;
     }
@@ -37,30 +37,30 @@ public final class VanillaRecipeDetailsScreen extends Screen {
     @Override
     protected void init() {
         ConfigScreen config = parent.configScreen();
-        addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, config.target(),
+        addLegacyRenderable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, config.target(),
                 config.target().isWorld() ? config.target().displayName() : "Global Library"));
         if (details == null) parent.requestDetails(this, recipe.id());
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
                 .bounds(width / 2 - 50, height - 28, 100, 20).build());
 
         if (details != null) {
             int x = variantGridX();
-            for (VanillaRecipeDetails.VariantPreview variant : details.variants().stream().limit(48).toList()) {
+            for (VanillaRecipeDetails.VariantPreview variant : details.variants().stream().limit(48).collect(java.util.stream.Collectors.toList())) {
                 int index = details.variants().indexOf(variant);
                 int buttonX = x + (index % VARIANT_COLUMNS) * VARIANT_CELL;
                 int buttonY = 44 + (index / VARIANT_COLUMNS) * VARIANT_CELL;
-                Button button = addRenderableWidget(Button.builder(Component.empty(), b -> {
+                Button button = addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(), b -> {
                     selectedVariant = variant;
                     rebuildWidgets();
                 }).bounds(buttonX, buttonY, 20, 20).build());
-                button.setTooltip(Tooltip.create(Component.literal(itemName(variant.materialId()))));
+                button.setTooltip(Tooltip.create(fr.zazac1.customrecipe.Texts.literal(itemName(variant.materialId()))));
             }
             if (!details.variants().isEmpty()) {
                 String material = selectedVariant == null ? details.variants().get(0).materialId() : selectedVariant.materialId();
                 boolean blocked = parent.isVariantDisabled(recipe.id(), material);
                 int actionsY = variantActionsY();
-                addRenderableWidget(Button.builder(blocked ? Component.translatable("customrecipe.details.variant_disabled").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF5555))
-                                : Component.translatable("customrecipe.details.disable_variant").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF5555)), b -> {
+                addRenderableWidget(Button.builder(blocked ? fr.zazac1.customrecipe.Texts.translatable("customrecipe.details.variant_disabled").setStyle(net.minecraft.util.text.Style.EMPTY.withColor(net.minecraft.util.text.Color.fromRgb(0xFF5555)))
+                                : fr.zazac1.customrecipe.Texts.translatable("customrecipe.details.disable_variant").setStyle(net.minecraft.util.text.Style.EMPTY.withColor(net.minecraft.util.text.Color.fromRgb(0xFF5555))), b -> {
                             parent.toggleVariant(recipe.id(), material);
                             rebuildWidgets();
                         }).bounds(x, actionsY, 142, 20).build());
@@ -68,8 +68,8 @@ public final class VanillaRecipeDetailsScreen extends Screen {
         }
         if (details != null && !details.variants().isEmpty()) {
             boolean allDisabled = parent.isRecipeDisabled(recipe.id());
-            addRenderableWidget(Button.builder(allDisabled ? Component.translatable("customrecipe.details.variants_disabled").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF5555))
-                            : Component.translatable("customrecipe.details.disable_variants").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF5555)), b -> {
+            addRenderableWidget(Button.builder(allDisabled ? fr.zazac1.customrecipe.Texts.translatable("customrecipe.details.variants_disabled").setStyle(net.minecraft.util.text.Style.EMPTY.withColor(net.minecraft.util.text.Color.fromRgb(0xFF5555)))
+                            : fr.zazac1.customrecipe.Texts.translatable("customrecipe.details.disable_variants").setStyle(net.minecraft.util.text.Style.EMPTY.withColor(net.minecraft.util.text.Color.fromRgb(0xFF5555))), b -> {
                         parent.toggleAllVariants(recipe.id());
                         rebuildWidgets();
                     }).bounds(variantGridX(), variantActionsY() + 24, 142, 20).build());
@@ -90,8 +90,8 @@ public final class VanillaRecipeDetailsScreen extends Screen {
 
         int left = width / 2 - 86;
         int top = height / 2 - 74;
-        ctx.drawCenteredString(font, Component.translatable("customrecipe.details.title"), width / 2, top - 30, 0xFFFFFFFF);
-        ctx.drawCenteredString(font, Component.literal(recipe.id()), width / 2, top - 16, 0xFFAAAAAA);
+        ctx.drawCenteredString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.details.title"), width / 2, top - 30, 0xFFFFFFFF);
+        ctx.drawCenteredString(font, fr.zazac1.customrecipe.Texts.literal(recipe.id()), width / 2, top - 16, 0xFFAAAAAA);
 
         for (int slot = 0; slot < 9; slot++) {
             int column = slot % 3;
@@ -107,9 +107,9 @@ public final class VanillaRecipeDetailsScreen extends Screen {
         ctx.drawString(font, "->", left + 82, top + 27, 0xFFFFFFFF);
         ctx.fill(left + 108, top + 24, left + 132, top + 48, 0xFF303030);
         drawItem(ctx, recipe.result(), left + 112, top + 28);
-        ctx.drawCenteredString(font, Component.literal(itemName(recipe.result())), width / 2, top + 82, 0xFFFFFFFF);
+        ctx.drawCenteredString(font, fr.zazac1.customrecipe.Texts.literal(itemName(recipe.result())), width / 2, top + 82, 0xFFFFFFFF);
         String layout = recipe.shapeless() ? "Shapeless: JSON ingredient order" : "Shaped: " + recipe.gridWidth() + "x" + recipe.gridHeight() + " pattern";
-        ctx.drawCenteredString(font, Component.literal(layout), width / 2, top + 98, 0xFFAAAAAA);
+        ctx.drawCenteredString(font, fr.zazac1.customrecipe.Texts.literal(layout), width / 2, top + 98, 0xFFAAAAAA);
         if (details != null && !details.variants().isEmpty()) {
             ctx.drawString(font, "Material variants", variantGridX(), 26, 0xFFFFFFFF);
             for (int index = 0; index < details.variants().size() && index < 48; index++) {
@@ -134,13 +134,13 @@ public final class VanillaRecipeDetailsScreen extends Screen {
     }
 
     private void drawItem(GuiGraphics ctx, String id, int x, int y) {
-        if (id == null || id.isBlank() || id.startsWith("#")) return;
-        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
+        if (id == null || id.trim().isEmpty() || id.startsWith("#")) return;
+        var item = Registry.ITEM.get(ResourceLocation.tryParse(id));
         if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), x, y);
     }
 
     private String itemName(String id) {
-        var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(id));
+        var item = Registry.ITEM.get(ResourceLocation.tryParse(id));
         return item == null || item == Items.AIR ? id : new ItemStack(item).getHoverName().getString();
     }
 

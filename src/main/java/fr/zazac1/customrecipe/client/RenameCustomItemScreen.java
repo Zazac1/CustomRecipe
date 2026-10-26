@@ -1,14 +1,14 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomItemEntry;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.EditBox;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.util.text.ITextComponent;
 
 /** Modal editor for a custom item's visible name and internal identifier. */
-final class RenameCustomItemScreen extends Screen {
+final class RenameCustomItemScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final CustomItemsScreen parent;
     private final CustomItemEntry entry;
     private EditBox nameField;
@@ -16,7 +16,7 @@ final class RenameCustomItemScreen extends Screen {
     private Button saveButton;
 
     RenameCustomItemScreen(CustomItemsScreen parent, CustomItemEntry entry) {
-        super(Component.translatable("customrecipe.custom_items.rename"));
+        super(fr.zazac1.customrecipe.Texts.translatable("customrecipe.custom_items.rename"));
         this.parent = parent;
         this.entry = entry;
     }
@@ -26,33 +26,33 @@ final class RenameCustomItemScreen extends Screen {
         int panelY = height / 2 - 74;
         int fieldWidth = Math.min(328, width - 56);
         nameField = addRenderableWidget(new EditBox(font, width / 2 - fieldWidth / 2,
-                panelY + 38, fieldWidth, 20, Component.translatable("customrecipe.custom_items.name")));
+                panelY + 38, fieldWidth, 20, fr.zazac1.customrecipe.Texts.translatable("customrecipe.custom_items.name")));
         nameField.setMaxLength(128);
         nameField.setValue(entry.name == null ? "" : entry.name);
 
         idField = addRenderableWidget(new EditBox(font, width / 2 - fieldWidth / 2,
-                panelY + 77, fieldWidth, 20, Component.translatable("customrecipe.custom_items.id")));
+                panelY + 77, fieldWidth, 20, fr.zazac1.customrecipe.Texts.translatable("customrecipe.custom_items.id")));
         idField.setMaxLength(64);
         idField.setValue(entry.id == null ? "" : entry.id);
 
-        saveButton = addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.save"),
+        saveButton = addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.save"),
                 button -> save()).bounds(width / 2 - 104, panelY + 116, 100, 20).build());
         updateSaveState();
         nameField.setResponder(value -> updateSaveState());
         idField.setResponder(value -> updateSaveState());
 
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.cancel"),
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.cancel"),
                 button -> minecraft.setScreen(parent)).bounds(width / 2 + 4, panelY + 116, 100, 20).build());
         setFocused(nameField);
         nameField.setFocused(true);
     }
 
     private void updateSaveState() {
-        saveButton.active = !nameField.getValue().isBlank() && parent.canUseId(entry, idField.getValue());
+        saveButton.active = !nameField.getValue().trim().isEmpty() && parent.canUseId(entry, idField.getValue());
     }
 
     private void save() {
-        String name = nameField.getValue().strip();
+        String name = nameField.getValue().trim();
         if (parent.rename(entry, name, idField.getValue())) minecraft.setScreen(parent);
     }
 
@@ -75,10 +75,10 @@ final class RenameCustomItemScreen extends Screen {
         super.render(context, mouseX, mouseY, delta);
 
         context.drawCenteredString(font, title, width / 2, panelY + 11, 0xFFFFFFFF);
-        context.drawString(font, Component.translatable("customrecipe.custom_items.name"), panelX + 16, panelY + 27, 0xFFCCCCCC);
-        context.drawString(font, Component.translatable("customrecipe.custom_items.id"), panelX + 16, panelY + 66, 0xFFCCCCCC);
-        if (!idField.getValue().isBlank() && !parent.canUseId(entry, idField.getValue())) {
-            context.drawCenteredString(font, Component.translatable("customrecipe.custom_items.id_invalid"), width / 2, panelY + 101, 0xFFFF7777);
+        context.drawString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.custom_items.name"), panelX + 16, panelY + 27, 0xFFCCCCCC);
+        context.drawString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.custom_items.id"), panelX + 16, panelY + 66, 0xFFCCCCCC);
+        if (!idField.getValue().trim().isEmpty() && !parent.canUseId(entry, idField.getValue())) {
+            context.drawCenteredString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.custom_items.id_invalid"), width / 2, panelY + 101, 0xFFFF7777);
         }
     }
 

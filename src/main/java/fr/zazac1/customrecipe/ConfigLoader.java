@@ -30,7 +30,15 @@ public final class ConfigLoader {
     private static ModConfig cached = null;
 
     /** Result of a non-destructive Global Library import. */
-    public record LibraryImportResult(int added, int alreadyPresent) {}
+    public static final class LibraryImportResult {
+        private final int added;
+        private final int alreadyPresent;
+        public LibraryImportResult(int added, int alreadyPresent) { this.added=added; this.alreadyPresent=alreadyPresent; }
+        public int added() { return added; }
+        public int alreadyPresent() { return alreadyPresent; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; LibraryImportResult other=(LibraryImportResult)obj; return java.util.Objects.equals(added, other.added) && java.util.Objects.equals(alreadyPresent, other.alreadyPresent); }
+        @Override public int hashCode() { return java.util.Objects.hash(added, alreadyPresent); }
+}
 
     /** Self-identifying, intentionally narrow JSON format for Global Library sharing. */
     private static final class LibraryExport {
@@ -51,8 +59,53 @@ public final class ConfigLoader {
 
     public static WorldRecipeConfig activeWorldConfig(ModConfig config) {
         if (config == null) return new WorldRecipeConfig();
-        WorldRecipeConfig world = config.findWorldConfig(WorldRecipeAssignments.activeWorldId());
+        String worldId = WorldRecipeAssignments.activeWorldId();
+        WorldRecipeConfig world = config.findWorldConfig(worldId);
+        if (world == null && worldId != null && !worldId.trim().isEmpty()) {
+            world = config.getOrCreateWorldConfig(worldId, WorldRecipeAssignments.activeWorldName());
+            synchronizeAutomaticLibraryRecipes(config, world);
+        }
         return world == null ? new WorldRecipeConfig() : world;
+    }
+
+    /** Resolves global default-recipe rules with the active world's explicit overrides. */
+    public static List<String> effectiveDisabledRecipes(ModConfig config, WorldRecipeConfig world) {
+        LinkedHashSet<String> disabled = new LinkedHashSet<>();
+        if (config != null && config.global_disabled_recipes != null) disabled.addAll(config.global_disabled_recipes);
+        if (world != null) {
+            if (world.enabled_recipes != null) disabled.removeAll(world.enabled_recipes);
+            if (world.disabled_recipes != null) disabled.addAll(world.disabled_recipes);
+        }
+        disabled.removeIf(value -> value == null || value.trim().isEmpty());
+        return new ArrayList<>(disabled);
+    }
+
+    /** Resolves global material-variant rules with the active world's explicit overrides. */
+    public static List<RecipeVariantRule> effectiveDisabledRecipeVariants(ModConfig config, WorldRecipeConfig world) {
+        LinkedHashMap<String, RecipeVariantRule> disabled = new LinkedHashMap<>();
+        if (config != null && config.global_disabled_recipe_variants != null) {
+            for (RecipeVariantRule rule : config.global_disabled_recipe_variants) putVariant(disabled, rule);
+        }
+        if (world != null) {
+            if (world.enabled_recipe_variants != null) {
+                for (RecipeVariantRule rule : world.enabled_recipe_variants) disabled.remove(variantKey(rule));
+            }
+            if (world.disabled_recipe_variants != null) {
+                for (RecipeVariantRule rule : world.disabled_recipe_variants) putVariant(disabled, rule);
+            }
+        }
+        return new ArrayList<>(disabled.values());
+    }
+
+    private static void putVariant(Map<String, RecipeVariantRule> target, RecipeVariantRule rule) {
+        String key = variantKey(rule);
+        if (key != null) target.put(key, rule);
+    }
+
+    private static String variantKey(RecipeVariantRule rule) {
+        if (rule == null || rule.recipe_id == null || rule.recipe_id.trim().isEmpty()
+                || rule.material_id == null || rule.material_id.trim().isEmpty()) return null;
+        return rule.recipe_id + "\u0000" + rule.material_id;
     }
 
     /** Forces a reload from disk (called before each recipe injection). */
@@ -87,7 +140,7 @@ public final class ConfigLoader {
 
     /** Saves a portable full configuration chosen by the player. */
     public static void exportTo(ModConfig config, Path destination) throws IOException {
-        Files.writeString(destination, toJson(config), StandardCharsets.UTF_8);
+        fr.zazac1.customrecipe.Java8.writeString(destination, toJson(config), StandardCharsets.UTF_8);
     }
 
     /** Saves only the reusable Global Library, without any world's recipes or settings. */
@@ -99,12 +152,12 @@ public final class ConfigLoader {
         exported.saved_with_mod_version = config.saved_with_mod_version;
         exported.saved_with_minecraft_version = config.saved_with_minecraft_version;
         exported.global_library = config.global_library;
-        Files.writeString(destination, GSON.toJson(exported), StandardCharsets.UTF_8);
+        fr.zazac1.customrecipe.Java8.writeString(destination, GSON.toJson(exported), StandardCharsets.UTF_8);
     }
     /** Loads and validates a portable full configuration without writing it to the active config yet. */
     public static ModConfig importFrom(Path source) throws IOException {
         if (Files.size(source) > 5_000_000L) throw new IOException("Import file is too large.");
-        String json = Files.readString(source, StandardCharsets.UTF_8);
+        String json = fr.zazac1.customrecipe.Java8.readString(source, StandardCharsets.UTF_8);
         ModConfig raw = GSON.fromJson(json, ModConfig.class);
         if (raw != null && raw.recipe_target_version > 2) {
             throw new IOException("This backup uses a newer Custom Recipe format.");
@@ -118,7 +171,7 @@ public final class ConfigLoader {
         if (Files.size(source) > 5_000_000L) throw new IOException("Import file is too large.");
         LibraryExport imported;
         try {
-            imported = GSON.fromJson(Files.readString(source, StandardCharsets.UTF_8), LibraryExport.class);
+            imported = GSON.fromJson(fr.zazac1.customrecipe.Java8.readString(source, StandardCharsets.UTF_8), LibraryExport.class);
         } catch (JsonSyntaxException e) {
             throw new IOException("Invalid Global Library file.");
         }
@@ -143,12 +196,12 @@ public final class ConfigLoader {
         target.disabled_recipe_variants = new ArrayList<>(importedLibrary.disabled_recipe_variants);
         target.hidden_quick_add_builtin = new ArrayList<>(importedLibrary.hidden_quick_add_builtin);
         target.quick_add_recipes = new ArrayList<>(importedLibrary.quick_add_recipes);
-        return importMissingRecipes(importedLibrary.custom_recipes, target);
+        return importMissingRecipes(importedLibrary.custom_recipes, target, true);
     }
     /** Compares recipes without relying on their position in a config file. */
     public static boolean sameRecipe(CustomRecipeEntry first, CustomRecipeEntry second) {
         if (first == null || second == null) return false;
-        if (first.id != null && !first.id.isBlank() && second.id != null && !second.id.isBlank()) {
+        if (first.id != null && !first.id.trim().isEmpty() && second.id != null && !second.id.trim().isEmpty()) {
             return first.id.equals(second.id);
         }
         return recipeFingerprint(first).equals(recipeFingerprint(second));
@@ -175,7 +228,7 @@ public final class ConfigLoader {
             return defaults;
         }
         try {
-            String json = Files.readString(CONFIG_PATH);
+            String json = fr.zazac1.customrecipe.Java8.readString(CONFIG_PATH);
             try {
                 ModConfig rawConfig = GSON.fromJson(json, ModConfig.class);
                 if (rawConfig != null && rawConfig.recipe_target_version < 2) backupLegacyConfig(json);
@@ -196,7 +249,7 @@ public final class ConfigLoader {
         Path temporary = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".tmp");
         Path previous = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".previous");
         try {
-            Files.writeString(temporary, GSON.toJson(config), StandardCharsets.UTF_8);
+            fr.zazac1.customrecipe.Java8.writeString(temporary, GSON.toJson(config), StandardCharsets.UTF_8);
             if (Files.exists(CONFIG_PATH)) Files.copy(CONFIG_PATH, previous, StandardCopyOption.REPLACE_EXISTING);
             try {
                 Files.move(temporary, CONFIG_PATH, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
@@ -215,7 +268,7 @@ public final class ConfigLoader {
         Path backup = CONFIG_PATH.resolveSibling(CONFIG_PATH.getFileName() + ".legacy-backup");
         if (Files.exists(backup)) return;
         try {
-            Files.writeString(backup, json);
+            fr.zazac1.customrecipe.Java8.writeString(backup, json);
             CustomRecipeMod.LOGGER.info("[CustomRecipe] Backed up legacy config to: {}", backup);
         } catch (IOException e) {
             CustomRecipeMod.LOGGER.warn("[CustomRecipe] Could not back up legacy config: {}", e.getMessage());
@@ -225,16 +278,18 @@ public final class ConfigLoader {
     private static void normalize(ModConfig config) {
         if (config.editor_world_id == null) config.editor_world_id = "";
         if (config.editor_world_name == null) config.editor_world_name = "";
-        if (config.default_editor_target_id == null || config.default_editor_target_id.isBlank()) {
+        if (config.default_editor_target_id == null || config.default_editor_target_id.trim().isEmpty()) {
             config.default_editor_target_id = "global";
         }
-        if (config.default_editor_target_name == null || config.default_editor_target_name.isBlank()) {
+        if (config.default_editor_target_name == null || config.default_editor_target_name.trim().isEmpty()) {
             config.default_editor_target_name = "Global Library";
         }
         if (config.disabled_builtin == null) config.disabled_builtin = new java.util.ArrayList<>();
         if (config.known_by_default_builtin == null) config.known_by_default_builtin = new java.util.ArrayList<>();
         if (config.disabled_recipes == null) config.disabled_recipes = new java.util.ArrayList<>();
         if (config.disabled_recipe_variants == null) config.disabled_recipe_variants = new java.util.ArrayList<>();
+        if (config.global_disabled_recipes == null) config.global_disabled_recipes = new ArrayList<>();
+        if (config.global_disabled_recipe_variants == null) config.global_disabled_recipe_variants = new ArrayList<>();
         if (config.custom_recipes == null) config.custom_recipes = new java.util.ArrayList<>();
         if (config.custom_items == null) config.custom_items = new ArrayList<>();
         normalizeCustomItems(config.custom_items);
@@ -248,9 +303,11 @@ public final class ConfigLoader {
         if (config.world_names == null) config.world_names = new LinkedHashMap<>();
         normalizeRecipeConfig(config.global_library);
         normalizeLibraryRecipes(config.global_library);
-        config.world_configs.entrySet().removeIf(entry -> entry.getKey() == null || entry.getKey().isBlank()
+        config.world_configs.entrySet().removeIf(entry -> entry.getKey() == null || entry.getKey().trim().isEmpty()
                 || entry.getValue() == null);
         for (WorldRecipeConfig worldConfig : config.world_configs.values()) normalizeRecipeConfig(worldConfig);
+        synchronizeAutomaticLibraryRecipes(config);
+        normalizeGlobalDefaultRecipeRules(config);
 
         // Retain the old fields while saved files transition. Runtime code and
         // the editor now read targets exclusively.
@@ -270,18 +327,18 @@ public final class ConfigLoader {
 
     private static void normalizeCustomItems(List<CustomItemEntry> items) {
         Set<String> usedIds = new HashSet<>();
-        items.removeIf(entry -> entry == null || entry.stack_data == null || entry.stack_data.isBlank());
+        items.removeIf(entry -> entry == null || entry.stack_data == null || entry.stack_data.trim().isEmpty());
         for (CustomItemEntry entry : items) {
             if (entry.name == null) entry.name = "";
             if (entry.item_id == null) entry.item_id = "minecraft:air";
-            String requested = entry.id == null || entry.id.isBlank() ? entry.name : entry.id;
+            String requested = entry.id == null || entry.id.trim().isEmpty() ? entry.name : entry.id;
             String base = CustomItemLibrary.sanitizeId(requested);
-            if (base.isBlank()) base = "custom_item";
+            if (base.trim().isEmpty()) base = "custom_item";
             String candidate = base;
             int suffix = 2;
             while (!usedIds.add(candidate)) candidate = base + "_" + suffix++;
             entry.id = candidate;
-            if (entry.name.isBlank()) entry.name = candidate;
+            if (entry.name.trim().isEmpty()) entry.name = candidate;
         }
     }
 
@@ -295,6 +352,7 @@ public final class ConfigLoader {
             if (recipe == null) continue;
             recipe.enabled = null;
             recipe.server_enabled = null;
+            recipe.global_library_source_id = null;
         }
     }
 
@@ -322,7 +380,18 @@ public final class ConfigLoader {
     /** Copies every missing Global Library recipe into one isolated world target. */
     public static LibraryImportResult importGlobalLibraryToWorld(ModConfig config, String worldId, String worldName) {
         if (config == null || config.global_library == null) return new LibraryImportResult(0, 0);
-        return importMissingRecipes(config.global_library.custom_recipes, config.getOrCreateWorldConfig(worldId, worldName));
+        return importMissingRecipes(config.global_library.custom_recipes,
+                config.getOrCreateWorldConfig(worldId, worldName), false);
+    }
+
+    /** Ensures a newly opened world receives every Global Library recipe marked All Worlds. */
+    public static void ensureAutomaticLibraryRecipesForWorld(String worldId, String worldName) {
+        if (worldId == null || worldId.trim().isEmpty()) return;
+        ModConfig config = get();
+        boolean created = config.findWorldConfig(worldId) == null;
+        WorldRecipeConfig world = config.getOrCreateWorldConfig(worldId, worldName);
+        boolean changed = synchronizeAutomaticLibraryRecipes(config, world);
+        if (created || changed) saveAndInvalidate(config);
     }
 
     /** Restores all pre-target global settings into the first world opened after upgrade. */
@@ -338,7 +407,7 @@ public final class ConfigLoader {
     private static void mergeStrings(List<String> target, List<String> source) {
         if (target == null || source == null) return;
         for (String value : source) {
-            if (value != null && !value.isBlank() && !target.contains(value)) target.add(value);
+            if (value != null && !value.trim().isEmpty() && !target.contains(value)) target.add(value);
         }
     }
 
@@ -356,14 +425,14 @@ public final class ConfigLoader {
     static LibraryImportResult importLegacyRecipesToWorld(ModConfig config, List<CustomRecipeEntry> legacyRecipes,
                                                            String worldId, String worldName) {
         if (config == null) return new LibraryImportResult(0, 0);
-        return importMissingRecipes(legacyRecipes, config.getOrCreateWorldConfig(worldId, worldName));
+        return importMissingRecipes(legacyRecipes, config.getOrCreateWorldConfig(worldId, worldName), false);
     }
 
     private static LibraryImportResult countMissingRecipes(List<CustomRecipeEntry> source, List<CustomRecipeEntry> target) {
         if (source == null || source.isEmpty()) return new LibraryImportResult(0, 0);
         int added = 0;
         int alreadyPresent = 0;
-        List<CustomRecipeEntry> known = target == null ? List.of() : target;
+        List<CustomRecipeEntry> known = target == null ? fr.zazac1.customrecipe.Java8.list() : target;
         for (CustomRecipeEntry recipe : source) {
             if (recipe == null) continue;
             if (known.stream().anyMatch(existing -> sameRecipe(recipe, existing))) alreadyPresent++; else added++;
@@ -371,7 +440,8 @@ public final class ConfigLoader {
         return new LibraryImportResult(added, alreadyPresent);
     }
 
-    private static LibraryImportResult importMissingRecipes(List<CustomRecipeEntry> source, WorldRecipeConfig target) {
+    private static LibraryImportResult importMissingRecipes(List<CustomRecipeEntry> source, WorldRecipeConfig target,
+                                                             boolean preserveLibraryState) {
         if (source == null || source.isEmpty() || target == null) return new LibraryImportResult(0, 0);
         if (target.custom_recipes == null) target.custom_recipes = new ArrayList<>();
         int added = 0;
@@ -384,11 +454,57 @@ public final class ConfigLoader {
             }
             CustomRecipeEntry copy = copyForTarget(recipe);
             if (copy != null) {
+                if (!preserveLibraryState) {
+                    copy.global_auto_add = null;
+                    copy.global_library_source_id = null;
+                }
                 target.custom_recipes.add(copy);
                 added++;
             }
         }
         return new LibraryImportResult(added, alreadyPresent);
+    }
+
+    private static void synchronizeAutomaticLibraryRecipes(ModConfig config) {
+        if (config == null || config.world_configs == null) return;
+        for (WorldRecipeConfig world : config.world_configs.values()) {
+            synchronizeAutomaticLibraryRecipes(config, world);
+        }
+    }
+
+    private static boolean synchronizeAutomaticLibraryRecipes(ModConfig config, WorldRecipeConfig target) {
+        if (config == null || config.global_library == null || target == null) return false;
+        if (target.custom_recipes == null) target.custom_recipes = new ArrayList<>();
+
+        Map<String, CustomRecipeEntry> automatic = new LinkedHashMap<>();
+        if (config.global_library.custom_recipes != null) {
+            for (CustomRecipeEntry recipe : config.global_library.custom_recipes) {
+                if (recipe != null && recipe.id != null && !recipe.id.trim().isEmpty()
+                        && Boolean.TRUE.equals(recipe.global_auto_add)) automatic.put(recipe.id, recipe);
+            }
+        }
+
+        int previousSize = target.custom_recipes.size();
+        target.custom_recipes.removeIf(recipe -> recipe != null
+                && recipe.global_library_source_id != null
+                && !recipe.global_library_source_id.trim().isEmpty()
+                && !automatic.containsKey(recipe.global_library_source_id));
+        boolean changed = target.custom_recipes.size() != previousSize;
+
+        for (CustomRecipeEntry source : automatic.values()) {
+            boolean present = target.custom_recipes.stream().anyMatch(existing -> existing != null
+                    && (source.id.equals(existing.global_library_source_id) || sameRecipe(source, existing)));
+            if (present) continue;
+            CustomRecipeEntry copy = copyForTarget(source);
+            if (copy == null) continue;
+            copy.global_auto_add = null;
+            copy.global_library_source_id = source.id;
+            copy.enabled = null;
+            copy.server_enabled = null;
+            target.custom_recipes.add(copy);
+            changed = true;
+        }
+        return changed;
     }
     private static void migrateLegacyTargets(ModConfig config) {
         WorldRecipeConfig library = new WorldRecipeConfig();
@@ -410,7 +526,7 @@ public final class ConfigLoader {
                 continue;
             }
             for (String worldId : recipe.world_ids) {
-                if (worldId == null || worldId.isBlank()) continue;
+                if (worldId == null || worldId.trim().isEmpty()) continue;
                 worlds.computeIfAbsent(worldId, ignored -> new WorldRecipeConfig())
                         .custom_recipes.add(copyForTarget(recipe));
                 if (recipe.world_names != null && recipe.world_names.containsKey(worldId)) {
@@ -438,10 +554,16 @@ public final class ConfigLoader {
         if (recipeConfig.known_by_default_builtin == null) recipeConfig.known_by_default_builtin = new ArrayList<>();
         if (recipeConfig.disabled_recipes == null) recipeConfig.disabled_recipes = new ArrayList<>();
         if (recipeConfig.disabled_recipe_variants == null) recipeConfig.disabled_recipe_variants = new ArrayList<>();
+        if (recipeConfig.enabled_recipes == null) recipeConfig.enabled_recipes = new ArrayList<>();
+        if (recipeConfig.enabled_recipe_variants == null) recipeConfig.enabled_recipe_variants = new ArrayList<>();
         if (recipeConfig.hidden_quick_add_builtin == null) recipeConfig.hidden_quick_add_builtin = new ArrayList<>();
         if (recipeConfig.quick_add_recipes == null) recipeConfig.quick_add_recipes = new ArrayList<>();
         if (recipeConfig.custom_recipes == null) recipeConfig.custom_recipes = new ArrayList<>();
-        for (CustomRecipeEntry recipe : recipeConfig.quick_add_recipes) normalizeIngredientCounts(recipe);
+        for (CustomRecipeEntry recipe : recipeConfig.quick_add_recipes) {
+            normalizeIngredientCounts(recipe);
+            recipe.global_auto_add = null;
+            recipe.global_library_source_id = null;
+        }
 
         // v1.3.0 stores Quick Add as independent snapshots rather than a flag
         // linking back to a mutable library/world recipe.
@@ -452,12 +574,27 @@ public final class ConfigLoader {
             recipeConfig.quick_add_recipes.add(snapshot);
             recipe.quick_add = null;
         }
-        for (CustomRecipeEntry recipe : recipeConfig.quick_add_recipes) normalizeIngredientCounts(recipe);
+        for (CustomRecipeEntry recipe : recipeConfig.quick_add_recipes) {
+            normalizeIngredientCounts(recipe);
+            recipe.global_auto_add = null;
+            recipe.global_library_source_id = null;
+        }
 
         Set<String> variantKeys = new HashSet<>();
-        recipeConfig.disabled_recipe_variants.removeIf(rule -> rule == null || rule.recipe_id == null || rule.recipe_id.isBlank()
-                || rule.material_id == null || rule.material_id.isBlank()
+        recipeConfig.disabled_recipe_variants.removeIf(rule -> rule == null || rule.recipe_id == null || rule.recipe_id.trim().isEmpty()
+                || rule.material_id == null || rule.material_id.trim().isEmpty()
                 || !variantKeys.add(rule.recipe_id + "\u0000" + rule.material_id));
+        recipeConfig.disabled_recipes.removeIf(value -> value == null || value.trim().isEmpty());
+        recipeConfig.disabled_recipes = new ArrayList<>(new LinkedHashSet<>(recipeConfig.disabled_recipes));
+        recipeConfig.enabled_recipes.removeIf(value -> value == null || value.trim().isEmpty()
+                || recipeConfig.disabled_recipes.contains(value));
+        recipeConfig.enabled_recipes = new ArrayList<>(new LinkedHashSet<>(recipeConfig.enabled_recipes));
+
+        Set<String> enabledVariantKeys = new HashSet<>();
+        recipeConfig.enabled_recipe_variants.removeIf(rule -> {
+            String key = variantKey(rule);
+            return key == null || variantKeys.contains(key) || !enabledVariantKeys.add(key);
+        });
 
         Map<String, CustomRecipeEntry> legacyRecipes = new LinkedHashMap<>();
         List<CustomRecipeEntry> normalizedRecipes = new ArrayList<>();
@@ -469,8 +606,11 @@ public final class ConfigLoader {
             if (recipe.required_mods == null) recipe.required_mods = new LinkedHashMap<>();
             if (recipe.missing_items == null) recipe.missing_items = new ArrayList<>();
             if (recipe.conflicting_recipes == null) recipe.conflicting_recipes = new ArrayList<>();
+            if (recipe.global_library_source_id != null && recipe.global_library_source_id.trim().isEmpty()) {
+                recipe.global_library_source_id = null;
+            }
             if (recipe.world_ids != null) {
-                recipe.world_ids.removeIf(worldId -> worldId == null || worldId.isBlank());
+                recipe.world_ids.removeIf(worldId -> worldId == null || worldId.trim().isEmpty());
                 recipe.world_ids = new ArrayList<>(new LinkedHashSet<>(recipe.world_ids));
                 if (recipe.world_names == null) recipe.world_names = new LinkedHashMap<>();
                 recipe.world_names.keySet().removeIf(worldId -> !recipe.world_ids.contains(worldId));
@@ -484,7 +624,7 @@ public final class ConfigLoader {
                 recipe.conflicting_recipes.clear();
             }
             RecipeIntegrity.rememberRequiredMods(recipe);
-            if (recipe.id == null || recipe.id.isBlank()) {
+            if (recipe.id == null || recipe.id.trim().isEmpty()) {
                 String fingerprint = recipeFingerprint(recipe);
                 CustomRecipeEntry existing = legacyRecipes.get(fingerprint);
                 if (existing != null) {
@@ -516,6 +656,16 @@ public final class ConfigLoader {
             normalizedRecipes.add(recipe);
         }
         recipeConfig.custom_recipes = normalizedRecipes;
+    }
+
+    private static void normalizeGlobalDefaultRecipeRules(ModConfig config) {
+        config.global_disabled_recipes.removeIf(value -> value == null || value.trim().isEmpty());
+        config.global_disabled_recipes = new ArrayList<>(new LinkedHashSet<>(config.global_disabled_recipes));
+        Set<String> variantKeys = new HashSet<>();
+        config.global_disabled_recipe_variants.removeIf(rule -> {
+            String key = variantKey(rule);
+            return key == null || !variantKeys.add(key);
+        });
     }
 
     /** Missing quantity metadata belongs to recipes made before 1.3.9 and therefore means one item. */

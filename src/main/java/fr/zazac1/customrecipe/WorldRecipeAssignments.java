@@ -1,11 +1,11 @@
 package fr.zazac1.customrecipe;
 
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.server.ServerStartedEvent;
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.event.server.ServerStoppedEvent;
+import net.minecraftforge.fml.event.server.FMLServerStartedEvent;
+import net.minecraftforge.fml.event.server.FMLServerStartingEvent;
+import net.minecraftforge.fml.event.server.FMLServerStoppedEvent;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.storage.FolderName;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -24,29 +24,30 @@ public final class WorldRecipeAssignments {
         MinecraftForge.EVENT_BUS.addListener(WorldRecipeAssignments::onServerStopped);
     }
 
-    private static void onServerStarting(ServerStartingEvent event) {
+    private static void onServerStarting(FMLServerStartingEvent event) {
             MinecraftServer server = event.getServer();
-            activeWorldId = worldId(server.getWorldPath(LevelResource.ROOT));
+            activeWorldId = worldId(server.getWorldPath(FolderName.ROOT));
             // The save root may be reported as "." by an integrated server.
             // Its level name is the name the player actually sees in Minecraft.
             activeWorldName = server.getWorldData().getLevelName();
-            if (activeWorldName == null || activeWorldName.isBlank()) {
+            if (activeWorldName == null || activeWorldName.trim().isEmpty()) {
                 activeWorldName = "Current world";
             }
             migrateLegacyRecipes();
+            ConfigLoader.ensureAutomaticLibraryRecipesForWorld(activeWorldId, activeWorldName);
     }
         // The first data-pack recipe load happens before SERVER_STARTING, so it
         // cannot yet know the active save target. Reapply once the world target
         // is known; this is the same reload path used by the in-game Save button.
-    private static void onServerStarted(ServerStartedEvent event) {
+    private static void onServerStarted(FMLServerStartedEvent event) {
         MinecraftServer server = event.getServer();
         server.execute(() -> {
             ConfigLoader.invalidate();
-            server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSuppressedOutput(), "reload");
+            server.getCommands().performCommand(server.createCommandSourceStack().withSuppressedOutput(), "reload");
         });
     }
 
-    private static void onServerStopped(ServerStoppedEvent event) {
+    private static void onServerStopped(FMLServerStoppedEvent event) {
             activeWorldId = "";
             activeWorldName = "";
     }
@@ -61,7 +62,7 @@ public final class WorldRecipeAssignments {
 
     /** Persists the first-day editor tip directly in the owning world's configuration. */
     public static boolean markEditorTipShown(String worldId, String worldName, String worldInstanceId) {
-        if (worldId == null || worldId.isBlank()) return false;
+        if (worldId == null || worldId.trim().isEmpty()) return false;
         ModConfig config = ConfigLoader.get();
         WorldRecipeConfig worldConfig = config.getOrCreateWorldConfig(worldId, worldName);
         if (worldConfig.shown_editor_tip && worldInstanceId.equals(worldConfig.editor_tip_world_instance)) return false;
@@ -80,7 +81,7 @@ public final class WorldRecipeAssignments {
     }
 
     public static void migrateLegacyRecipes(ModConfig config) {
-        if (config == null || config.recipe_target_version >= 2 || activeWorldId.isBlank()) return;
+        if (config == null || config.recipe_target_version >= 2 || activeWorldId.trim().isEmpty()) return;
 
         List<CustomRecipeEntry> source = new ArrayList<>();
         if (config.custom_recipes != null) source.addAll(config.custom_recipes);
@@ -111,11 +112,11 @@ public final class WorldRecipeAssignments {
         if (recipe.world_ids == null) {
             return !Boolean.FALSE.equals(recipe.enabled) && !Boolean.FALSE.equals(recipe.server_enabled);
         }
-        return !activeWorldId.isBlank() && recipe.world_ids.contains(activeWorldId);
+        return !activeWorldId.trim().isEmpty() && recipe.world_ids.contains(activeWorldId);
     }
 
     public static void addToActiveWorld(CustomRecipeEntry recipe) {
-        if (recipe == null || activeWorldId.isBlank()) return;
+        if (recipe == null || activeWorldId.trim().isEmpty()) return;
         if (recipe.world_ids == null) recipe.world_ids = new ArrayList<>();
         if (recipe.world_names == null) recipe.world_names = new java.util.LinkedHashMap<>();
         if (!recipe.world_ids.contains(activeWorldId)) recipe.world_ids.add(activeWorldId);

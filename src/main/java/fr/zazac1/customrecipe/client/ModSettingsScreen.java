@@ -3,20 +3,20 @@ package fr.zazac1.customrecipe.client;
 import fr.zazac1.customrecipe.ConfigLoader;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.RecipeTarget;
-import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
+import net.minecraft.util.text.TextFormatting;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.Tooltip;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.util.text.ITextComponent;
 
 /** Persistent client preferences for the Custom Recipe editor. */
-final class ModSettingsScreen extends Screen {
+final class ModSettingsScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final ConfigScreen parent;
     private final ModConfig config;
 
     ModSettingsScreen(ConfigScreen parent) {
-        super(Component.translatable("customrecipe.settings.title"));
+        super(fr.zazac1.customrecipe.Texts.translatable("customrecipe.settings.title"));
         this.parent = parent;
         this.config = ConfigLoader.get();
     }
@@ -29,7 +29,7 @@ final class ModSettingsScreen extends Screen {
             config.automatic_gui_scale = !config.automatic_gui_scale;
             save();
             button.setMessage(autoScaleLabel());
-        }).tooltip(Tooltip.create(Component.translatable("customrecipe.settings.auto_scale.tooltip")))
+        }).tooltip(Tooltip.create(fr.zazac1.customrecipe.Texts.translatable("customrecipe.settings.auto_scale.tooltip")))
                 .bounds(x, y, 276, 20).build());
         addResetButton(x + 280, y, () -> {
             config.automatic_gui_scale = true;
@@ -40,7 +40,7 @@ final class ModSettingsScreen extends Screen {
                 RecipeTargetSelectScreen.forSettings(this, target -> {
                     setDefaultTarget(target);
                     return new ModSettingsScreen(parent);
-                }))).tooltip(Tooltip.create(Component.translatable("customrecipe.settings.open_target.tooltip")))
+                }))).tooltip(Tooltip.create(fr.zazac1.customrecipe.Texts.translatable("customrecipe.settings.open_target.tooltip")))
                 .bounds(x, y + 28, 276, 20).build());
         addResetButton(x + 280, y + 28, () -> {
             config.default_editor_target_id = "global";
@@ -52,52 +52,52 @@ final class ModSettingsScreen extends Screen {
             config.preload_recipes_on_startup = !config.preload_recipes_on_startup;
             save();
             button.setMessage(preloadLabel());
-        }).tooltip(Tooltip.create(Component.translatable("customrecipe.settings.preload.tooltip")))
+        }).tooltip(Tooltip.create(fr.zazac1.customrecipe.Texts.translatable("customrecipe.settings.preload.tooltip")))
                 .bounds(x, y + 56, 276, 20).build());
         addResetButton(x + 280, y + 56, () -> {
             config.preload_recipes_on_startup = true;
             save();
         });
 
-        String saveLabel = Component.translatable("customrecipe.button.save").getString();
+        String saveLabel = fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.save").getString();
         int saveY = y + 96;
-        addRenderableWidget(Button.builder(Component.empty(), button -> {
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(), button -> {
             save();
             minecraft.setScreen(parent);
         }).bounds(width / 2 - 100, saveY, 200, 22).build());
-        addRenderableOnly((graphics, mouseX, mouseY, delta) -> {
+        addLegacyRenderable((graphics, mouseX, mouseY, delta) -> {
             int iconX = width / 2 - font.width(saveLabel) / 2 - 20;
             CustomRecipeSprites.draw(graphics, CustomRecipeSprites.SAVE, iconX, saveY + 3, 16, 16);
             graphics.drawCenteredString(font, saveLabel, width / 2, saveY + 7, 0xFFFFFFFF);
         });
     }
 
-    private Component autoScaleLabel() {
-        return Component.translatable("customrecipe.settings.auto_scale", yesNo(config.automatic_gui_scale));
+    private ITextComponent autoScaleLabel() {
+        return fr.zazac1.customrecipe.Texts.translatable("customrecipe.settings.auto_scale", yesNo(config.automatic_gui_scale));
     }
 
-    private Component directoryLabel() {
+    private ITextComponent directoryLabel() {
         String name = "global".equals(config.default_editor_target_id)
-                ? Component.translatable("customrecipe.home.global").getString() : config.default_editor_target_name;
-        return Component.translatable("customrecipe.settings.open_target", name);
+                ? fr.zazac1.customrecipe.Texts.translatable("customrecipe.home.global").getString() : config.default_editor_target_name;
+        return fr.zazac1.customrecipe.Texts.translatable("customrecipe.settings.open_target", name);
     }
 
-    private Component preloadLabel() {
-        return Component.translatable("customrecipe.settings.preload", yesNo(config.preload_recipes_on_startup));
+    private ITextComponent preloadLabel() {
+        return fr.zazac1.customrecipe.Texts.translatable("customrecipe.settings.preload", yesNo(config.preload_recipes_on_startup));
     }
 
-    private Component yesNo(boolean value) {
-        return Component.translatable(value ? "customrecipe.settings.yes" : "customrecipe.settings.no")
-                .withStyle(value ? ChatFormatting.GREEN : ChatFormatting.RED);
+    private ITextComponent yesNo(boolean value) {
+        return fr.zazac1.customrecipe.Texts.translatable(value ? "customrecipe.settings.yes" : "customrecipe.settings.no")
+                .withStyle(value ? TextFormatting.GREEN : TextFormatting.RED);
     }
 
     private void addResetButton(int x, int y, Runnable reset) {
-        addRenderableWidget(Button.builder(Component.empty(), button -> {
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(), button -> {
             reset.run();
             minecraft.setScreen(new ModSettingsScreen(parent));
-        }).tooltip(Tooltip.create(Component.translatable("customrecipe.settings.reset")))
+        }).tooltip(Tooltip.create(fr.zazac1.customrecipe.Texts.translatable("customrecipe.settings.reset")))
                 .bounds(x, y, 20, 20).build());
-        addRenderableOnly((graphics, mouseX, mouseY, delta) ->
+        addLegacyRenderable((graphics, mouseX, mouseY, delta) ->
                 CustomRecipeSprites.draw(graphics, CustomRecipeSprites.RESET, x + 2, y + 2, 16, 16));
     }
 
@@ -115,7 +115,7 @@ final class ModSettingsScreen extends Screen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
         renderBackground(graphics);
         graphics.drawCenteredString(font, title, width / 2, height / 2 - 86, 0xFFFFFF);
-        graphics.drawCenteredString(font, Component.translatable("customrecipe.settings.preload_hint"),
+        graphics.drawCenteredString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.settings.preload_hint"),
                 width / 2, height / 2 + 26, 0xAAAAAA);
         super.render(graphics, mouseX, mouseY, delta);
     }

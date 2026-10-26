@@ -2,11 +2,11 @@ package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.level.storage.LevelSummary;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import net.minecraft.client.gui.screen.Screen;
+import fr.zazac1.customrecipe.client.compat.Button;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.world.storage.WorldSummary;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -14,15 +14,15 @@ import java.util.Comparator;
 import java.util.List;
 
 /** Manage every available custom recipe from the perspective of one local world. */
-final class WorldRecipesScreen extends Screen {
+final class WorldRecipesScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final ConfigScreen config;
     private final RecipeWorldsScreen parent;
-    private final LevelSummary world;
+    private final WorldSummary world;
     private String worldId;
     private int scroll;
 
-    WorldRecipesScreen(ConfigScreen config, RecipeWorldsScreen parent, LevelSummary world) {
-        super(Component.translatable("customrecipe.world.recipes_in", world == null ? Component.translatable("customrecipe.world.default_name") : world.getLevelName()));
+    WorldRecipesScreen(ConfigScreen config, RecipeWorldsScreen parent, WorldSummary world) {
+        super(fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.recipes_in", world == null ? fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.default_name") : world.getLevelName()));
         this.config = config;
         this.parent = parent;
         this.world = world;
@@ -43,30 +43,30 @@ final class WorldRecipesScreen extends Screen {
             CustomRecipeEntry recipe = recipes.get(i);
             boolean enabled = isEnabled(recipe);
             if (enabled && !wroteEnabledHeader) {
-                addRenderableWidget(new net.minecraft.client.gui.components.MultiLineTextWidget(x, y,
-                        Component.translatable("customrecipe.world.enabled_recipes").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0x55FF55)), font));
+                addRenderableWidget(new fr.zazac1.customrecipe.client.compat.MultiLineTextWidget(x, y,
+                        fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.enabled_recipes").setStyle(net.minecraft.util.text.Style.EMPTY.withColor(net.minecraft.util.text.Color.fromRgb(0x55FF55))), font));
                 y += 16;
                 wroteEnabledHeader = true;
             }
             if (!enabled && !wroteDisabledHeader) {
-                addRenderableWidget(new net.minecraft.client.gui.components.MultiLineTextWidget(x, y,
-                        Component.translatable("customrecipe.world.available_recipes").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xAAAAAA)), font));
+                addRenderableWidget(new fr.zazac1.customrecipe.client.compat.MultiLineTextWidget(x, y,
+                        fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.available_recipes").setStyle(net.minecraft.util.text.Style.EMPTY.withColor(net.minecraft.util.text.Color.fromRgb(0xAAAAAA))), font));
                 y += 16;
                 wroteDisabledHeader = true;
             }
             final CustomRecipeEntry target = recipe;
             final int rowY = y;
-            addRenderableWidget(Button.builder(Component.literal(recipeName(recipe)), b -> {
+            addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.literal(recipeName(recipe)), b -> {
                 toggle(target);
                 rebuildWidgets();
             }).bounds(x + 24, rowY, 316, 18).build());
-            addRenderableOnly((ctx, mouseX, mouseY, delta) -> CustomRecipeSprites.draw(ctx,
+            addLegacyRenderable((ctx, mouseX, mouseY, delta) -> CustomRecipeSprites.draw(ctx,
                     isEnabled(target) ? CustomRecipeSprites.ACCEPT : CustomRecipeSprites.REJECT,
                     x, rowY, 18, 18));
             y += 22;
         }
 
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
                 .bounds(width / 2 - 55, height - 28, 110, 20).build());
     }
 
@@ -89,8 +89,8 @@ final class WorldRecipesScreen extends Screen {
         config.persistLocalWorldAssignments();
     }
 
-    private String worldId(LevelSummary summary) {
-        if (summary == null || summary.getLevelId() == null || summary.getLevelId().isBlank()) return null;
+    private String worldId(WorldSummary summary) {
+        if (summary == null || summary.getLevelId() == null || summary.getLevelId().trim().isEmpty()) return null;
         try {
             Path saves = minecraft == null ? null : minecraft.gameDirectory.toPath().resolve("saves");
             return saves == null ? null : WorldRecipeAssignments.worldId(saves.resolve(summary.getLevelId()));
@@ -100,8 +100,8 @@ final class WorldRecipesScreen extends Screen {
     }
 
     private String recipeName(CustomRecipeEntry recipe) {
-        String id = recipe.result == null || recipe.result.isBlank() ? recipe.id : recipe.result;
-        if (id == null || id.isBlank()) return "Unnamed recipe";
+        String id = recipe.result == null || recipe.result.trim().isEmpty() ? recipe.id : recipe.result;
+        if (id == null || id.trim().isEmpty()) return "Unnamed recipe";
         String path = id.contains(":") ? id.substring(id.indexOf(':') + 1) : id;
         StringBuilder name = new StringBuilder();
         for (String word : path.split("_")) {

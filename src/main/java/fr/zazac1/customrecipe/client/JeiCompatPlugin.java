@@ -4,7 +4,7 @@ import fr.zazac1.customrecipe.CustomRecipeMod;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.runtime.IJeiRuntime;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 
 /**
  * JEI discovers vanilla crafting recipes from Minecraft's synchronized recipe

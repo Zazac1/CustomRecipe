@@ -1,9 +1,9 @@
 package fr.zazac1.customrecipe;
 
 import net.minecraftforge.fml.ModList;
-import net.minecraft.world.item.Items;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.item.Items;
+import net.minecraft.util.registry.Registry;
+import net.minecraft.util.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -40,11 +40,11 @@ public final class RecipeIntegrity {
         for (String rawId : referencedItemIds(recipe)) {
             if (CustomItemLibrary.isReference(rawId)) {
                 CustomItemEntry custom = CustomItemLibrary.find(customItems, rawId);
-                if (custom == null || CustomItemLibrary.baseItemId(custom).isBlank()) missing.add(rawId);
+                if (custom == null || CustomItemLibrary.baseItemId(custom).trim().isEmpty()) missing.add(rawId);
                 continue;
             }
             ResourceLocation id = ResourceLocation.tryParse(rawId);
-            if (id == null || !BuiltInRegistries.ITEM.containsKey(id) || BuiltInRegistries.ITEM.get(id) == Items.AIR) {
+            if (id == null || !Java8.registryContains(Registry.ITEM, id) || Registry.ITEM.get(id) == Items.AIR) {
                 missing.add(rawId);
             }
         }
@@ -88,6 +88,6 @@ public final class RecipeIntegrity {
     }
 
     private static void add(Set<String> ids, String id) {
-        if (id != null && !id.isBlank()) ids.add(id.trim());
+        if (id != null && !id.trim().isEmpty()) ids.add(id.trim());
     }
 }

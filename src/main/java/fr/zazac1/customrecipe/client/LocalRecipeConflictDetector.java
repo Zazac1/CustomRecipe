@@ -6,8 +6,8 @@ import com.google.gson.JsonParser;
 import fr.zazac1.customrecipe.CustomRecipeEntry;
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import net.minecraft.client.Minecraft;
-import net.minecraft.server.packs.resources.Resource;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.IResource;
+import net.minecraft.util.ResourceLocation;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -22,7 +22,7 @@ import java.util.jar.JarFile;
 
 /** Matches local ModMenu drafts against installed and other local crafting recipes. */
 final class LocalRecipeConflictDetector {
-    private static Set<String> vanillaCraftingOutputs = Set.of();
+    private static Set<String> vanillaCraftingOutputs = fr.zazac1.customrecipe.Java8.set();
 
     private LocalRecipeConflictDetector() {}
 
@@ -68,16 +68,16 @@ final class LocalRecipeConflictDetector {
     private static List<DefaultRecipe> loadDefaults(Minecraft client) {
         List<DefaultRecipe> recipes = new ArrayList<>();
         Set<String> seenIds = new HashSet<>();
-        Map<ResourceLocation, Resource> resources = client.getResourceManager().listResources("recipe",
+        Map<ResourceLocation, IResource> resources = fr.zazac1.customrecipe.client.compat.LegacyResources.listResources(client.getResourceManager(), "recipes",
                 id -> id.getPath().endsWith(".json"));
-        for (Map.Entry<ResourceLocation, Resource> resource : resources.entrySet()) {
+        for (Map.Entry<ResourceLocation, IResource> resource : resources.entrySet()) {
             ResourceLocation resourceId = resource.getKey();
             if (resourceId.getNamespace().equals(CustomRecipeMod.MOD_ID)
-                    && resourceId.getPath().startsWith("recipe/custom/")) continue;
-            try (var input = resource.getValue().open()) {
+                    && resourceId.getPath().startsWith("recipes/custom/")) continue;
+            try (var input = resource.getValue().getInputStream()) {
                 String recipeId = resourceId.getNamespace() + ":" + resourceId.getPath()
-                        .substring("recipe/".length(), resourceId.getPath().length() - ".json".length());
-                DefaultRecipe recipe = parse(recipeId, new String(input.readAllBytes(), StandardCharsets.UTF_8));
+                        .substring("recipes/".length(), resourceId.getPath().length() - ".json".length());
+                DefaultRecipe recipe = parse(recipeId, new String(fr.zazac1.customrecipe.Java8.readAllBytes(input), StandardCharsets.UTF_8));
                 if (recipe != null && seenIds.add(recipe.id())) recipes.add(recipe);
             } catch (Exception ignored) {
                 // Optional or malformed datapack recipes are not comparable locally.
@@ -92,7 +92,7 @@ final class LocalRecipeConflictDetector {
         try {
             var source = client.getClass().getProtectionDomain().getCodeSource();
             if (source == null) return;
-            Path path = Path.of(source.getLocation().toURI());
+            Path path = java.nio.file.Paths.get(source.getLocation().toURI());
             if (!Files.isRegularFile(path)) return;
             try (JarFile jar = new JarFile(path.toFile())) {
                 var entries = jar.entries();
@@ -102,7 +102,7 @@ final class LocalRecipeConflictDetector {
                     if (!pathName.startsWith("data/minecraft/recipe/") || !pathName.endsWith(".json")) continue;
                     try (var input = jar.getInputStream(entry)) {
                         String recipeId = "minecraft:" + pathName.substring("data/minecraft/recipe/".length(), pathName.length() - ".json".length());
-                        DefaultRecipe recipe = parse(recipeId, new String(input.readAllBytes(), StandardCharsets.UTF_8));
+                        DefaultRecipe recipe = parse(recipeId, new String(fr.zazac1.customrecipe.Java8.readAllBytes(input), StandardCharsets.UTF_8));
                         if (recipe != null && seenIds.add(recipe.id())) recipes.add(recipe);
                     }
                 }
@@ -114,10 +114,10 @@ final class LocalRecipeConflictDetector {
 
     private static DefaultRecipe parse(String id, String json) {
         try {
-            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            JsonObject root = new JsonParser().parse(json).getAsJsonObject();
             String type = root.has("type") ? root.get("type").getAsString() : "";
             String result = resultId(root);
-            if (!type.contains("crafting_") || result.isBlank()) return null;
+            if (!type.contains("crafting_") || result.trim().isEmpty()) return null;
             if (type.contains("crafting_shaped")) return parseShaped(id, result, root);
             return parseShapeless(id, result, root);
         } catch (Exception ignored) {
@@ -201,7 +201,7 @@ final class LocalRecipeConflictDetector {
     }
 
     private static boolean sameRecipeId(CustomRecipeEntry first, CustomRecipeEntry second) {
-        return first.id != null && !first.id.isBlank() && first.id.equals(second.id);
+        return first.id != null && !first.id.trim().isEmpty() && first.id.equals(second.id);
     }
 
     private static Grid customShapedGrid(CustomRecipeEntry recipe) {
@@ -214,7 +214,7 @@ final class LocalRecipeConflictDetector {
                 if (column >= row.length() || row.charAt(column) == ' ') slots.add("");
                 else {
                     String item = recipe.keys.get(String.valueOf(row.charAt(column)));
-                    if (item == null || item.isBlank()) return null;
+                    if (item == null || item.trim().isEmpty()) return null;
                     slots.add(item);
                 }
             }
@@ -223,7 +223,7 @@ final class LocalRecipeConflictDetector {
     }
 
     private static Grid customShapelessGrid(CustomRecipeEntry recipe) {
-        if (recipe.ingredients == null || recipe.ingredients.stream().anyMatch(item -> item == null || item.isBlank())) return null;
+        if (recipe.ingredients == null || recipe.ingredients.stream().anyMatch(item -> item == null || item.trim().isEmpty())) return null;
         List<String> inputs = new ArrayList<>(recipe.ingredients);
         inputs.sort(String::compareTo);
         return new Grid(inputs.size(), 1, inputs);
@@ -233,14 +233,14 @@ final class LocalRecipeConflictDetector {
         int left = source.width(), right = -1, top = source.height(), bottom = -1;
         for (int row = 0; row < source.height(); row++) {
             for (int column = 0; column < source.width(); column++) {
-                if (source.slots().get(row * source.width() + column).isBlank()) continue;
+                if (source.slots().get(row * source.width() + column).trim().isEmpty()) continue;
                 left = Math.min(left, column);
                 right = Math.max(right, column);
                 top = Math.min(top, row);
                 bottom = Math.max(bottom, row);
             }
         }
-        if (right < left || bottom < top) return new Grid(0, 0, List.of());
+        if (right < left || bottom < top) return new Grid(0, 0, fr.zazac1.customrecipe.Java8.list());
         int width = right - left + 1;
         List<String> slots = new ArrayList<>();
         for (int row = top; row <= bottom; row++) {
@@ -251,6 +251,28 @@ final class LocalRecipeConflictDetector {
         return new Grid(width, bottom - top + 1, slots);
     }
 
-    private record DefaultRecipe(String id, String result, boolean shaped, Grid inputs) {}
-    private record Grid(int width, int height, List<String> slots) {}
+    private static final class DefaultRecipe {
+        private final String id;
+        private final String result;
+        private final boolean shaped;
+        private final Grid inputs;
+        public DefaultRecipe(String id, String result, boolean shaped, Grid inputs) { this.id=id; this.result=result; this.shaped=shaped; this.inputs=inputs; }
+        public String id() { return id; }
+        public String result() { return result; }
+        public boolean shaped() { return shaped; }
+        public Grid inputs() { return inputs; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; DefaultRecipe other=(DefaultRecipe)obj; return java.util.Objects.equals(id, other.id) && java.util.Objects.equals(result, other.result) && java.util.Objects.equals(shaped, other.shaped) && java.util.Objects.equals(inputs, other.inputs); }
+        @Override public int hashCode() { return java.util.Objects.hash(id, result, shaped, inputs); }
+}
+    private static final class Grid {
+        private final int width;
+        private final int height;
+        private final List<String> slots;
+        public Grid(int width, int height, List<String> slots) { this.width=width; this.height=height; this.slots=slots; }
+        public int width() { return width; }
+        public int height() { return height; }
+        public List<String> slots() { return slots; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; Grid other=(Grid)obj; return java.util.Objects.equals(width, other.width) && java.util.Objects.equals(height, other.height) && java.util.Objects.equals(slots, other.slots); }
+        @Override public int hashCode() { return java.util.Objects.hash(width, height, slots); }
+}
 }

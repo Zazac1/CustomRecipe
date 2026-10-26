@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 
 /**
  * Represents a single user-created custom crafting recipe.
@@ -63,6 +63,12 @@ public class CustomRecipeEntry {
     /** Shows this saved recipe in the Quick Add sidebar. */
     public Boolean quick_add;
 
+    /** Global Library state: automatically keeps this recipe available in every world. */
+    public Boolean global_auto_add;
+
+    /** Source library recipe for an automatically managed world copy. */
+    public String global_library_source_id;
+
     /** Non-vanilla mod IDs and versions present when this recipe was saved. */
     public Map<String, String> required_mods = new LinkedHashMap<>();
 
@@ -103,7 +109,7 @@ public class CustomRecipeEntry {
 
     /** Stable server key used for recipe loading and automatic recipe-book unlocks. */
     public ResourceLocation serverRecipeId() {
-        String source = id == null || id.isBlank() ? result : id;
+        String source = id == null || id.trim().isEmpty() ? result : id;
         String safeId = source == null ? "recipe"
                 : source.replaceAll("[^a-zA-Z0-9_./-]", "_").toLowerCase(java.util.Locale.ROOT);
         return new ResourceLocation(CustomRecipeMod.MOD_ID, "custom/" + safeId);

@@ -1,5 +1,5 @@
 modLoader="javafml"
-loaderVersion="[47,)"
+loaderVersion="[36,)"
 license="MIT"
 
 [[mods]]
@@ -8,32 +8,32 @@ version="${version}"
 displayName="Custom Recipe"
 authors="zazac1"
 description='''Create, manage, enable, disable and assign custom crafting recipes globally or per world.'''
-logoFile="assets/customrecipe/icon.png"
+logoFile="icon.png"
 
 [[dependencies.customrecipe]]
 modId="forge"
 mandatory=true
-versionRange="[47,)"
+versionRange="[36,)"
 ordering="NONE"
 side="BOTH"
 
 [[dependencies.customrecipe]]
 modId="minecraft"
 mandatory=true
-versionRange="[1.20.1,1.20.2)"
+versionRange="[1.16.5,1.17)"
 ordering="NONE"
 side="BOTH"
 
 [[dependencies.customrecipe]]
-modId="cloth_config"
+modId="cloth-config"
 mandatory=true
-versionRange="[11.1.136,)"
+versionRange="[4.17.101,)"
 ordering="NONE"
 side="CLIENT"
 
 [[dependencies.customrecipe]]
 modId="jei"
 mandatory=false
-versionRange="[15.20.0,)"
+versionRange="[7.8.1,)"
 ordering="AFTER"
 side="CLIENT"

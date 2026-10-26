@@ -4,12 +4,12 @@ import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.RecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import com.mojang.blaze3d.platform.NativeImage;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import net.minecraft.client.renderer.texture.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.util.ResourceLocation;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -83,7 +83,17 @@ final class RecipeTargetBadge {
         return null;
     }
 
-    private record WorldIcon(ResourceLocation id, int width, int height) {}
+    private static final class WorldIcon {
+        private final ResourceLocation id;
+        private final int width;
+        private final int height;
+        public WorldIcon(ResourceLocation id, int width, int height) { this.id=id; this.width=width; this.height=height; }
+        public ResourceLocation id() { return id; }
+        public int width() { return width; }
+        public int height() { return height; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; WorldIcon other=(WorldIcon)obj; return java.util.Objects.equals(id, other.id) && java.util.Objects.equals(width, other.width) && java.util.Objects.equals(height, other.height); }
+        @Override public int hashCode() { return java.util.Objects.hash(id, width, height); }
+}
 
     private RecipeTargetBadge() {}
 }

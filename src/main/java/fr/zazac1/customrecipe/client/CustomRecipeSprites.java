@@ -1,8 +1,8 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.CustomRecipeMod;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.resources.ResourceLocation;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import net.minecraft.util.ResourceLocation;
 
 /** Original GUI sprites supplied for Custom Recipe' actions and recipe states. */
 final class CustomRecipeSprites {

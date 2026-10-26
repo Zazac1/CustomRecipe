@@ -26,17 +26,17 @@ final class WindowsFileDialogs {
                         + "$d = New-Object System.Windows.Forms." + type + "; "
                         + "$d.Filter = '" + FILTER + "'; "
                         + "$d.InitialDirectory = [Environment]::GetFolderPath('MyDocuments'); "
-                        + (filename.isBlank() ? "" : "$d.FileName = '" + filename.replace("'", "''") + "'; ")
+                        + (filename.trim().isEmpty() ? "" : "$d.FileName = '" + filename.replace("'", "''") + "'; ")
                         + "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($d.FileName) }";
                 Process process = new ProcessBuilder("powershell.exe", "-NoProfile", "-STA", "-Command", command)
                         .redirectErrorStream(true).start();
-                String result = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+                String result = new String(fr.zazac1.customrecipe.Java8.readAllBytes(process.getInputStream()), StandardCharsets.UTF_8).trim();
                 int exit = process.waitFor();
                 Minecraft.getInstance().execute(() -> {
                     if (exit != 0) {
                         failed.accept("Windows file dialog failed.");
-                    } else if (!result.isBlank()) {
-                        selected.accept(Path.of(result));
+                    } else if (!result.trim().isEmpty()) {
+                        selected.accept(java.nio.file.Paths.get(result));
                     }
                 });
             } catch (IOException | InterruptedException e) {

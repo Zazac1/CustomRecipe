@@ -1,18 +1,18 @@
 package fr.zazac1.customrecipe.client;
 
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.network.chat.Component;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import net.minecraft.client.gui.screen.Screen;
+import fr.zazac1.customrecipe.client.compat.Button;
+import net.minecraft.util.text.ITextComponent;
 
 /** Confirmation for the non-destructive bulk import into a selected world. */
-final class ImportGlobalLibraryScreen extends Screen {
+final class ImportGlobalLibraryScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final ConfigScreen config;
     private final CustomRecipesScreen returnTo;
     private final int recipeCount;
 
     ImportGlobalLibraryScreen(ConfigScreen config, CustomRecipesScreen returnTo, int recipeCount) {
-        super(Component.translatable("customrecipe.import.title"));
+        super(fr.zazac1.customrecipe.Texts.translatable("customrecipe.import.title"));
         this.config = config;
         this.returnTo = returnTo;
         this.recipeCount = recipeCount;
@@ -21,9 +21,9 @@ final class ImportGlobalLibraryScreen extends Screen {
     @Override
     protected void init() {
         int y = height / 2 + 22;
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.add"), b -> apply())
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.add"), b -> apply())
                 .bounds(width / 2 - 82, y, 76, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.cancel"), b -> minecraft.setScreen(returnTo))
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.cancel"), b -> minecraft.setScreen(returnTo))
                 .bounds(width / 2 + 6, y, 76, 20).build());
     }
 
@@ -53,9 +53,9 @@ final class ImportGlobalLibraryScreen extends Screen {
 
         context.drawCenteredString(font, title, width / 2, panelY + 12, 0xFFFFFFFF);
         context.drawCenteredString(font,
-                Component.translatable("customrecipe.import.confirm", recipeCount, config.target().displayName()),
+                fr.zazac1.customrecipe.Texts.translatable("customrecipe.import.confirm", recipeCount, config.target().displayName()),
                 width / 2, panelY + 31, 0xFFE0E6E3);
-        context.drawCenteredString(font, Component.translatable("customrecipe.import.safe"),
+        context.drawCenteredString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.import.safe"),
                 width / 2, panelY + 45, 0xFFB8C7C1);
     }
 

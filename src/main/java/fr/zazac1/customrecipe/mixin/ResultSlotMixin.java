@@ -1,13 +1,13 @@
 package fr.zazac1.customrecipe.mixin;
 
 import fr.zazac1.customrecipe.CountedCraftingRecipe;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.CraftingContainer;
-import net.minecraft.world.inventory.ResultSlot;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.server.ServerWorld;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.inventory.CraftingInventory;
+import net.minecraft.inventory.container.CraftingResultSlot;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.crafting.IRecipe;
+import net.minecraft.item.crafting.IRecipeType;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -15,21 +15,21 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Consumes each configured ingredient amount once when a counted recipe is crafted. */
-@Mixin(ResultSlot.class)
+@Mixin(CraftingResultSlot.class)
 public abstract class ResultSlotMixin {
-    @Shadow @Final private CraftingContainer craftSlots;
+    @Shadow @Final private CraftingInventory craftSlots;
 
     @Unique private int[] customrecipe$requiredCounts = new int[0];
 
     @Inject(method = "onTake", at = @At("HEAD"))
-    private void customrecipe$captureRequiredCounts(Player player, ItemStack result, CallbackInfo ci) {
+    private void customrecipe$captureRequiredCounts(PlayerEntity player, ItemStack result, CallbackInfoReturnable<ItemStack> cir) {
         customrecipe$requiredCounts = new int[0];
-        if (!(player.level() instanceof ServerLevel level)) return;
-        Recipe<?> recipe = level.getRecipeManager()
-                .getRecipeFor(RecipeType.CRAFTING, craftSlots, level).orElse(null);
+        if (!(player.level instanceof ServerWorld level)) return;
+        IRecipe<?> recipe = level.getRecipeManager()
+                .getRecipeFor(IRecipeType.CRAFTING, craftSlots, level).orElse(null);
         if (recipe instanceof CountedCraftingRecipe counted) {
             int[] required = counted.requiredCounts(craftSlots);
             if (required.length == craftSlots.getContainerSize()) customrecipe$requiredCounts = required;
@@ -38,16 +38,16 @@ public abstract class ResultSlotMixin {
 
     @Redirect(
             method = "onTake",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/inventory/CraftingContainer;removeItem(II)Lnet/minecraft/world/item/ItemStack;")
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/inventory/CraftingInventory;removeItem(II)Lnet/minecraft/item/ItemStack;")
     )
-    private ItemStack customrecipe$consumeConfiguredAmount(CraftingContainer inventory, int slot, int vanillaAmount) {
+    private ItemStack customrecipe$consumeConfiguredAmount(CraftingInventory inventory, int slot, int vanillaAmount) {
         int amount = slot >= 0 && slot < customrecipe$requiredCounts.length
                 ? customrecipe$requiredCounts[slot] : vanillaAmount;
         return inventory.removeItem(slot, Math.max(vanillaAmount, amount));
     }
 
     @Inject(method = "onTake", at = @At("RETURN"))
-    private void customrecipe$clearRequiredCounts(Player player, ItemStack result, CallbackInfo ci) {
+    private void customrecipe$clearRequiredCounts(PlayerEntity player, ItemStack result, CallbackInfoReturnable<ItemStack> cir) {
         customrecipe$requiredCounts = new int[0];
     }
 }

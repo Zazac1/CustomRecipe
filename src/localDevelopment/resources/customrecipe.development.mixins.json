@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8.4",
+  "package": "fr.zazac1.customrecipe.development",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "DevelopmentOfflineSessionMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

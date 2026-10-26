@@ -1,21 +1,23 @@
 package fr.zazac1.customrecipe.client;
 
+import org.lwjgl.glfw.GLFW;
+
 import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.GlobalRecipeTarget;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import fr.zazac1.customrecipe.WorldRecipeTarget;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import com.mojang.blaze3d.platform.NativeImage;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import net.minecraft.client.gui.screen.Screen;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.EditBox;
+import net.minecraft.client.renderer.texture.NativeImage;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtIo;
-import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.nbt.CompoundNBT;
+import net.minecraft.nbt.CompressedStreamTools;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.ResourceLocation;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,7 +34,7 @@ import java.util.stream.Stream;
 import java.util.function.Function;
 
 /** Direct save-folder scan: no asynchronous vanilla world-list omissions. */
-final class RecipeTargetSelectScreen extends Screen {
+final class RecipeTargetSelectScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     // Vanilla world entries are compact: 32px thumbnail and three 12px text lines.
     private static final int ROW = 42;
     private static final DateTimeFormatter LAST_PLAYED_FORMAT =
@@ -58,7 +60,7 @@ final class RecipeTargetSelectScreen extends Screen {
 
     private RecipeTargetSelectScreen(Screen parent, Function<fr.zazac1.customrecipe.RecipeTarget, Screen> selectedScreen,
                                      boolean settingsSelection) {
-        super(Component.translatable("customrecipe.screen.select_target"));
+        super(fr.zazac1.customrecipe.Texts.translatable("customrecipe.screen.select_target"));
         this.parent = parent;
         this.selectedScreen = selectedScreen;
     }
@@ -70,15 +72,15 @@ final class RecipeTargetSelectScreen extends Screen {
     @Override
     protected void init() {
         scanWorlds();
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.screen.global_library"),
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.screen.global_library"),
                 b -> selectTarget(GlobalRecipeTarget.INSTANCE))
                 .bounds(width / 2 - 110, 26, 220, 20).build());
         search = new EditBox(font, width / 2 - 100, 52, 200, 18,
-                Component.translatable("customrecipe.screen.search_worlds"));
-        search.setHint(Component.translatable("customrecipe.screen.search"));
+                fr.zazac1.customrecipe.Texts.translatable("customrecipe.screen.search_worlds"));
+        search.setHint(fr.zazac1.customrecipe.Texts.translatable("customrecipe.screen.search"));
         search.setResponder(value -> scroll = 0);
         addRenderableWidget(search);
-        addRenderableWidget(Button.builder(Component.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("customrecipe.button.back"), b -> minecraft.setScreen(parent))
                 .bounds(width / 2 - 55, height - 28, 110, 20).build());
     }
 
@@ -103,7 +105,7 @@ final class RecipeTargetSelectScreen extends Screen {
         String folderName = directory.getFileName().toString();
         WorldDetails details = readWorldDetails(directory, folderName);
         String name = id.equals(WorldRecipeAssignments.activeWorldId())
-                && !WorldRecipeAssignments.activeWorldName().isBlank()
+                && !WorldRecipeAssignments.activeWorldName().trim().isEmpty()
                 ? WorldRecipeAssignments.activeWorldName() : details.name;
         return new LocalWorld(id, name, details.lastPlayed, details.description, loadIcon(directory, id));
     }
@@ -111,24 +113,24 @@ final class RecipeTargetSelectScreen extends Screen {
     /** Reads only the save metadata, never opens or locks a world. */
     private WorldDetails readWorldDetails(Path directory, String fallbackName) {
         try {
-            CompoundTag data = NbtIo.readCompressed(directory.resolve("level.dat").toFile())
+            CompoundNBT data = CompressedStreamTools.readCompressed(directory.resolve("level.dat").toFile())
                     .getCompound("Data");
             String name = data.contains("LevelName") ? data.getString("LevelName") : fallbackName;
             long lastPlayed = data.contains("LastPlayed") ? data.getLong("LastPlayed") : 0L;
             int gameType = data.contains("GameType") ? data.getInt("GameType") : 0;
             String mode = switch (gameType) {
-                case 1 -> Component.translatable("customrecipe.world.creative").getString();
-                case 2 -> Component.translatable("customrecipe.world.adventure").getString();
-                case 3 -> Component.translatable("customrecipe.world.spectator").getString();
-                default -> Component.translatable("customrecipe.world.survival").getString();
+                case 1 -> fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.creative").getString();
+                case 2 -> fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.adventure").getString();
+                case 3 -> fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.spectator").getString();
+                default -> fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.survival").getString();
             };
-            String commands = data.contains("allowCommands") && data.getBoolean("allowCommands") ? Component.translatable("customrecipe.world.commands").getString() : "";
-            CompoundTag versionData = data.contains("Version") ? data.getCompound("Version") : new CompoundTag();
-            String version = versionData.contains("Name") ? versionData.getString("Name") : Component.translatable("customrecipe.world.unknown_version").getString();
+            String commands = data.contains("allowCommands") && data.getBoolean("allowCommands") ? fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.commands").getString() : "";
+            CompoundNBT versionData = data.contains("Version") ? data.getCompound("Version") : new CompoundNBT();
+            String version = versionData.contains("Name") ? versionData.getString("Name") : fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.unknown_version").getString();
             String played = lastPlayed > 0 ? name + " (" + LAST_PLAYED_FORMAT.format(Instant.ofEpochMilli(lastPlayed)) + ")" : name;
-            return new WorldDetails(name, played, mode + commands + Component.translatable("customrecipe.world.version", version).getString());
+            return new WorldDetails(name, played, mode + commands + fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.version", version).getString());
         } catch (IOException | RuntimeException ignored) {
-            return new WorldDetails(fallbackName, fallbackName, Component.translatable("customrecipe.world.local").getString());
+            return new WorldDetails(fallbackName, fallbackName, fr.zazac1.customrecipe.Texts.translatable("customrecipe.world.local").getString());
         }
     }
 
@@ -151,7 +153,7 @@ final class RecipeTargetSelectScreen extends Screen {
     private List<LocalWorld> visibleWorlds() {
         String query = search == null ? "" : search.getValue().trim().toLowerCase(Locale.ROOT);
         return query.isEmpty() ? worlds : worlds.stream()
-                .filter(world -> world.name.toLowerCase(Locale.ROOT).contains(query)).toList();
+                .filter(world -> world.name.toLowerCase(Locale.ROOT).contains(query)).collect(java.util.stream.Collectors.toList());
     }
 
     private int rowsAreaTop() { return 78; }
@@ -176,6 +178,7 @@ final class RecipeTargetSelectScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) return super.mouseClicked(mouseX, mouseY, button);
         if (hasScrollBar() && mouseX >= scrollBarX() - 2 && mouseX <= scrollBarX() + 8
                 && mouseY >= rowsTop() && mouseY < rowsBottom()) {
             setScrollFromMouse(mouseY);
@@ -231,7 +234,7 @@ final class RecipeTargetSelectScreen extends Screen {
         }
         if (hasScrollBar()) drawScrollBar(context);
         if (shown.isEmpty()) context.drawCenteredString(font,
-                Component.translatable("customrecipe.screen.no_worlds"), width / 2, rowsTop() + 12, 0xAAAAAA);
+                fr.zazac1.customrecipe.Texts.translatable("customrecipe.screen.no_worlds"), width / 2, rowsTop() + 12, 0xAAAAAA);
     }
 
     private void drawScrollBar(GuiGraphics context) {
@@ -258,7 +261,41 @@ final class RecipeTargetSelectScreen extends Screen {
     @Override
     public void onClose() { minecraft.setScreen(parent); }
 
-    private record WorldIcon(ResourceLocation id, int width, int height) {}
-    private record WorldDetails(String name, String lastPlayed, String description) {}
-    private record LocalWorld(String id, String name, String lastPlayed, String description, WorldIcon icon) {}
+    private static final class WorldIcon {
+        private final ResourceLocation id;
+        private final int width;
+        private final int height;
+        public WorldIcon(ResourceLocation id, int width, int height) { this.id=id; this.width=width; this.height=height; }
+        public ResourceLocation id() { return id; }
+        public int width() { return width; }
+        public int height() { return height; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; WorldIcon other=(WorldIcon)obj; return java.util.Objects.equals(id, other.id) && java.util.Objects.equals(width, other.width) && java.util.Objects.equals(height, other.height); }
+        @Override public int hashCode() { return java.util.Objects.hash(id, width, height); }
+}
+    private static final class WorldDetails {
+        private final String name;
+        private final String lastPlayed;
+        private final String description;
+        public WorldDetails(String name, String lastPlayed, String description) { this.name=name; this.lastPlayed=lastPlayed; this.description=description; }
+        public String name() { return name; }
+        public String lastPlayed() { return lastPlayed; }
+        public String description() { return description; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; WorldDetails other=(WorldDetails)obj; return java.util.Objects.equals(name, other.name) && java.util.Objects.equals(lastPlayed, other.lastPlayed) && java.util.Objects.equals(description, other.description); }
+        @Override public int hashCode() { return java.util.Objects.hash(name, lastPlayed, description); }
+}
+    private static final class LocalWorld {
+        private final String id;
+        private final String name;
+        private final String lastPlayed;
+        private final String description;
+        private final WorldIcon icon;
+        public LocalWorld(String id, String name, String lastPlayed, String description, WorldIcon icon) { this.id=id; this.name=name; this.lastPlayed=lastPlayed; this.description=description; this.icon=icon; }
+        public String id() { return id; }
+        public String name() { return name; }
+        public String lastPlayed() { return lastPlayed; }
+        public String description() { return description; }
+        public WorldIcon icon() { return icon; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; LocalWorld other=(LocalWorld)obj; return java.util.Objects.equals(id, other.id) && java.util.Objects.equals(name, other.name) && java.util.Objects.equals(lastPlayed, other.lastPlayed) && java.util.Objects.equals(description, other.description) && java.util.Objects.equals(icon, other.icon); }
+        @Override public int hashCode() { return java.util.Objects.hash(id, name, lastPlayed, description, icon); }
+}
 }

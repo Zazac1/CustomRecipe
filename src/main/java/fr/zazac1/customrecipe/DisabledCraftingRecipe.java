@@ -1,32 +1,30 @@
 package fr.zazac1.customrecipe;
 
-import net.minecraft.world.inventory.CraftingContainer;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.CraftingRecipe;
-import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.item.crafting.RecipeSerializer;
-import net.minecraft.world.item.crafting.RecipeType;
-import net.minecraft.world.item.crafting.CraftingBookCategory;
-import net.minecraft.core.RegistryAccess;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.core.NonNullList;
-import net.minecraft.world.level.Level;
+import net.minecraft.inventory.CraftingInventory;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.crafting.ICraftingRecipe;
+import net.minecraft.item.crafting.Ingredient;
+import net.minecraft.item.crafting.IRecipeSerializer;
+import net.minecraft.item.crafting.IRecipeType;
+
+import net.minecraft.util.registry.DynamicRegistries;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.NonNullList;
+import net.minecraft.world.World;
 
 /** Compatibility wrapper retained for legacy configurations. */
-public final class DisabledCraftingRecipe implements CraftingRecipe {
-    private final CraftingRecipe delegate;
-    public DisabledCraftingRecipe(CraftingRecipe delegate) { this.delegate = delegate; }
-    public CraftingRecipe delegate() { return delegate; }
-    @Override public boolean matches(CraftingContainer input, Level world) { return false; }
-    @Override public ItemStack assemble(CraftingContainer input, RegistryAccess registries) { return delegate.assemble(input, registries); }
+public final class DisabledCraftingRecipe implements ICraftingRecipe {
+    private final ICraftingRecipe delegate;
+    public DisabledCraftingRecipe(ICraftingRecipe delegate) { this.delegate = delegate; }
+    public ICraftingRecipe delegate() { return delegate; }
+    @Override public boolean matches(CraftingInventory input, World world) { return false; }
+    @Override public ItemStack assemble(CraftingInventory input) { return delegate.assemble(input); }
     @Override public boolean canCraftInDimensions(int width, int height) { return delegate.canCraftInDimensions(width, height); }
-    @Override public ItemStack getResultItem(RegistryAccess registries) { return delegate.getResultItem(registries); }
-    @Override public NonNullList<ItemStack> getRemainingItems(CraftingContainer input) { return delegate.getRemainingItems(input); }
+    @Override public ItemStack getResultItem() { return delegate.getResultItem(); }
+    @Override public NonNullList<ItemStack> getRemainingItems(CraftingInventory input) { return delegate.getRemainingItems(input); }
     @Override public ResourceLocation getId() { return delegate.getId(); }
-    @Override public RecipeSerializer<?> getSerializer() { return delegate.getSerializer(); }
-    @Override public RecipeType<?> getType() { return delegate.getType(); }
-    @Override public CraftingBookCategory category() { return delegate.category(); }
+    @Override public IRecipeSerializer<?> getSerializer() { return delegate.getSerializer(); }
+    @Override public IRecipeType<?> getType() { return delegate.getType(); }
     @Override public NonNullList<Ingredient> getIngredients() { return delegate.getIngredients(); }
     @Override public String getGroup() { return delegate.getGroup(); }
-    @Override public boolean showNotification() { return delegate.showNotification(); }
 }

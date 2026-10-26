@@ -7,9 +7,19 @@ import java.util.UUID;
 
 /** Single runtime source for the optional recipes exposed by Quick Add. */
 public final class BuiltinRecipeTemplates {
-    private record Template(String id, String result, String[][] grid) {}
+    private static final class Template {
+        private final String id;
+        private final String result;
+        private final String[][] grid;
+        public Template(String id, String result, String[][] grid) { this.id=id; this.result=result; this.grid=grid; }
+        public String id() { return id; }
+        public String result() { return result; }
+        public String[][] grid() { return grid; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; Template other=(Template)obj; return java.util.Objects.equals(id, other.id) && java.util.Objects.equals(result, other.result) && java.util.Objects.equals(grid, other.grid); }
+        @Override public int hashCode() { return java.util.Objects.hash(id, result, grid); }
+}
 
-    private static final List<Template> ALL = List.of(
+    private static final List<Template> ALL = fr.zazac1.customrecipe.Java8.list(
             new Template("totem_of_undying", "minecraft:totem_of_undying", new String[][] {
                     {null, "minecraft:emerald", null},
                     {"minecraft:gold_block", "minecraft:gold_block", "minecraft:gold_block"},
@@ -32,7 +42,7 @@ public final class BuiltinRecipeTemplates {
             })
     );
 
-    public static final List<String> IDS = ALL.stream().map(Template::id).toList();
+    public static final List<String> IDS = ALL.stream().map(Template::id).collect(java.util.stream.Collectors.toList());
 
     public static int count() { return ALL.size(); }
     public static String id(int index) { return ALL.get(index).id(); }

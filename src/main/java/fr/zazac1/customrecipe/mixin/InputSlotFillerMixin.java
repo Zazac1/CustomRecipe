@@ -1,22 +1,36 @@
 package fr.zazac1.customrecipe.mixin;
 
 import fr.zazac1.customrecipe.CustomRecipeMod;
-import net.minecraft.recipebook.ServerPlaceRecipe;
-import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.inventory.RecipeBookMenu;
-import net.minecraft.stats.ServerRecipeBook;
+import net.minecraft.item.crafting.ServerRecipePlacer;
+import net.minecraft.item.crafting.IRecipe;
+import net.minecraft.inventory.container.RecipeBookContainer;
+import net.minecraft.item.crafting.ServerRecipeBook;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Lets a visible custom recipe be selected from a mixed vanilla/custom book group. */
-@Mixin(ServerPlaceRecipe.class)
+@Mixin(ServerRecipePlacer.class)
 public abstract class InputSlotFillerMixin {
+    @Shadow protected RecipeBookContainer<?> menu;
+
+    @Inject(method = "recipeClicked(Lnet/minecraft/entity/player/ServerPlayerEntity;Lnet/minecraft/item/crafting/IRecipe;Z)V",
+            at = @At("HEAD"), cancellable = true)
+    private void customrecipe$placeCompleteRecipe(net.minecraft.entity.player.ServerPlayerEntity player,
+                                                IRecipe<?> recipe, boolean craftAll, CallbackInfo ci) {
+        if (recipe == null || !fr.zazac1.customrecipe.CountedRecipeBook.handles(recipe)) return;
+        fr.zazac1.customrecipe.CountedRecipeBook.place(player, menu, recipe, craftAll);
+        ci.cancel();
+    }
+
     @Redirect(
-            method = "recipeClicked(Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/world/item/crafting/Recipe;Z)V",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/stats/ServerRecipeBook;contains(Lnet/minecraft/world/item/crafting/Recipe;)Z")
+            method = "recipeClicked(Lnet/minecraft/entity/player/ServerPlayerEntity;Lnet/minecraft/item/crafting/IRecipe;Z)V",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/item/crafting/ServerRecipeBook;contains(Lnet/minecraft/item/crafting/IRecipe;)Z")
     )
-    private boolean customrecipe$allowVisibleCustomRecipe(ServerRecipeBook recipeBook, Recipe<?> recipe) {
+    private boolean customrecipe$allowVisibleCustomRecipe(ServerRecipeBook recipeBook, IRecipe<?> recipe) {
         return recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID) || recipeBook.contains(recipe);
     }
 
@@ -26,11 +40,11 @@ public abstract class InputSlotFillerMixin {
      * a refill to make the newly selected custom output take effect.
      */
     @Redirect(
-            method = "handleRecipeClicked(Lnet/minecraft/world/item/crafting/Recipe;Z)V",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/inventory/RecipeBookMenu;recipeMatches(Lnet/minecraft/world/item/crafting/Recipe;)Z")
+            method = "handleRecipeClicked(Lnet/minecraft/item/crafting/IRecipe;Z)V",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/inventory/container/RecipeBookContainer;recipeMatches(Lnet/minecraft/item/crafting/IRecipe;)Z")
     )
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private boolean customrecipe$refillSelectedCustomRecipe(RecipeBookMenu handler, Recipe recipe) {
+    private boolean customrecipe$refillSelectedCustomRecipe(RecipeBookContainer handler, IRecipe recipe) {
         return !recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID) && handler.recipeMatches(recipe);
     }
 }

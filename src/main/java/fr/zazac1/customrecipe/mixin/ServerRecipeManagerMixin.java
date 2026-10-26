@@ -17,22 +17,24 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import net.minecraft.core.NonNullList;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.resources.ResourceManager;
-import net.minecraft.util.profiling.ProfilerFiller;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.CraftingBookCategory;
-import net.minecraft.world.item.crafting.CraftingRecipe;
-import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.item.crafting.RecipeManager;
-import net.minecraft.world.item.crafting.ShapedRecipe;
-import net.minecraft.world.item.crafting.ShapelessRecipe;
+import net.minecraft.util.NonNullList;
+import net.minecraft.util.registry.Registry;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.resources.IResourceManager;
+import net.minecraft.profiler.IProfiler;
+import net.minecraft.item.ItemStack;
+
+import net.minecraft.item.crafting.ICraftingRecipe;
+import net.minecraft.item.crafting.Ingredient;
+import net.minecraft.item.crafting.IRecipe;
+import net.minecraft.item.crafting.RecipeManager;
+import net.minecraft.item.crafting.IRecipeType;
+import net.minecraft.item.crafting.ShapedRecipe;
+import net.minecraft.item.crafting.ShapelessRecipe;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -41,29 +43,30 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(RecipeManager.class)
 public abstract class ServerRecipeManagerMixin {
-    @Shadow public abstract Collection<Recipe<?>> getRecipes();
-    @Shadow public abstract void replaceRecipes(Iterable<Recipe<?>> recipes);
+    @Shadow private Map<IRecipeType<?>, Map<ResourceLocation, IRecipe<?>>> recipes;
+    @Shadow public abstract Collection<IRecipe<?>> getRecipes();
 
-    @Inject(method = "apply(Ljava/util/Map;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)V", at = @At("TAIL"))
-    private void customrecipe$applyConfig(Map<ResourceLocation, JsonElement> ignored, ResourceManager manager,
-                                          ProfilerFiller profiler, CallbackInfo ci) {
+    @Inject(method = "apply(Ljava/util/Map;Lnet/minecraft/resources/IResourceManager;Lnet/minecraft/profiler/IProfiler;)V", at = @At("TAIL"))
+    private void customrecipe$applyConfig(Map<ResourceLocation, JsonElement> ignored, IResourceManager manager,
+                                          IProfiler profiler, CallbackInfo ci) {
         ConfigLoader.invalidate();
         ModConfig rootConfig = ConfigLoader.get();
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
-        List<Recipe<?>> recipes = new ArrayList<>(getRecipes());
+        List<String> disabledRecipes = ConfigLoader.effectiveDisabledRecipes(rootConfig, config);
+        List<IRecipe<?>> recipes = new ArrayList<>(getRecipes());
         // Bundled JSON files are templates only; Quick Add creates independent custom copies.
         recipes.removeIf(recipe -> recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID)
                 && BuiltinRecipeTemplates.contains(recipe.getId().getPath()));
-        recipes.removeIf(recipe -> config.disabled_recipes.contains(recipe.getId().toString())
-                && !(recipe instanceof CraftingRecipe));
+        recipes.removeIf(recipe -> disabledRecipes.contains(recipe.getId().toString())
+                && !(recipe instanceof ICraftingRecipe));
 
         boolean recipeStateChanged = false;
-        List<Recipe<?>> exactOrCounted = new ArrayList<>();
-        List<Recipe<?>> ordinary = new ArrayList<>();
+        List<IRecipe<?>> exactOrCounted = new ArrayList<>();
+        List<IRecipe<?>> ordinary = new ArrayList<>();
         for (CustomRecipeEntry entry : config.custom_recipes) {
             if (entry == null || Boolean.FALSE.equals(entry.server_enabled) || Boolean.FALSE.equals(entry.enabled)) continue;
             recipeStateChanged |= RecipeIntegrity.refresh(entry, rootConfig.custom_items);
-            Recipe<?> recipe = Boolean.TRUE.equals(entry.corrupted) ? null
+            IRecipe<?> recipe = Boolean.TRUE.equals(entry.corrupted) ? null
                     : build(entry, recipeBookGroup(entry), rootConfig.custom_items);
             if (recipe != null) {
                 if (usesExactOrCountedIngredient(entry)) exactOrCounted.add(recipe);
@@ -73,7 +76,17 @@ public abstract class ServerRecipeManagerMixin {
         if (recipeStateChanged) ConfigLoader.saveIntegrityState(ConfigLoader.get());
         recipes.addAll(0, exactOrCounted);
         recipes.addAll(ordinary);
-        replaceRecipes(recipes);
+        // Minecraft 1.16 removes replaceRecipes on a dedicated server. Rebuild
+        // its sole recipe index directly, preserving the priority above.
+        Map<IRecipeType<?>, Map<ResourceLocation, IRecipe<?>>> orderedRecipes = new LinkedHashMap<>();
+        for (IRecipe<?> recipe : recipes) {
+            Map<ResourceLocation, IRecipe<?>> byType = orderedRecipes.computeIfAbsent(
+                    recipe.getType(), type -> new LinkedHashMap<>());
+            if (byType.put(recipe.getId(), recipe) != null) {
+                throw new IllegalStateException("Duplicate recipe ignored with ID " + recipe.getId());
+            }
+        }
+        this.recipes = Collections.unmodifiableMap(orderedRecipes);
     }
 
     private boolean usesExactOrCountedIngredient(CustomRecipeEntry entry) {
@@ -84,8 +97,8 @@ public abstract class ServerRecipeManagerMixin {
         return values.anyMatch(CustomItemLibrary::isReference);
     }
 
-    private Recipe<?> build(CustomRecipeEntry entry, String recipeGroup, List<CustomItemEntry> customItems) {
-        if (entry.result == null || entry.result.isBlank()) return null;
+    private IRecipe<?> build(CustomRecipeEntry entry, String recipeGroup, List<CustomItemEntry> customItems) {
+        if (entry.result == null || entry.result.trim().isEmpty()) return null;
         ItemStack result = resolveStack(entry.result, customItems);
         if (result.isEmpty()) return null;
         result.setCount(Math.max(1, Math.min(64, entry.count)));
@@ -98,12 +111,12 @@ public abstract class ServerRecipeManagerMixin {
                 ItemStack stack = resolveStack(raw, customItems);
                 if (stack.isEmpty()) return null;
                 stack.setCount(Math.max(1, Math.min(entry.ingredientCount(i), stack.getMaxStackSize())));
-                list.add(Ingredient.of(stack));
+                list.add(fr.zazac1.customrecipe.CountedIngredient.ofStack(stack, CustomItemLibrary.isReference(raw)));
             }
             if (list.isEmpty()) return null;
             NonNullList<Ingredient> input = NonNullList.create();
             input.addAll(list);
-            CraftingRecipe recipe = new ShapelessRecipe(id, recipeGroup, CraftingBookCategory.MISC, result, input);
+            ICraftingRecipe recipe = new ShapelessRecipe(id, recipeGroup, result, input);
             return exactWrapper(recipe, result, entry, customItems);
         }
         if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
@@ -119,9 +132,9 @@ public abstract class ServerRecipeManagerMixin {
             ItemStack stack = raw == null ? ItemStack.EMPTY : resolveStack(raw, customItems);
             if (stack.isEmpty()) return null;
             stack.setCount(Math.max(1, Math.min(entry.keyCount(String.valueOf(symbol)), stack.getMaxStackSize())));
-            input.set(y * width + x, Ingredient.of(stack));
+            input.set(y * width + x, fr.zazac1.customrecipe.CountedIngredient.ofStack(stack, CustomItemLibrary.isReference(raw)));
         }
-        CraftingRecipe recipe = new ShapedRecipe(id, recipeGroup, CraftingBookCategory.MISC,
+        ICraftingRecipe recipe = new ShapedRecipe(id, recipeGroup,
                 width, height, input, result);
         return exactWrapper(recipe, result, entry, customItems);
     }
@@ -131,8 +144,8 @@ public abstract class ServerRecipeManagerMixin {
             return CustomItemLibrary.decode(CustomItemLibrary.find(customItems, value), null);
         }
         ResourceLocation id = ResourceLocation.tryParse(value);
-        return id != null && BuiltInRegistries.ITEM.containsKey(id)
-                ? new ItemStack(BuiltInRegistries.ITEM.get(id)) : ItemStack.EMPTY;
+        return id != null && fr.zazac1.customrecipe.Java8.registryContains(Registry.ITEM, id)
+                ? new ItemStack(Registry.ITEM.get(id)) : ItemStack.EMPTY;
     }
 
     private String ingredientBaseId(String value, List<CustomItemEntry> customItems) {
@@ -140,7 +153,7 @@ public abstract class ServerRecipeManagerMixin {
         return CustomItemLibrary.baseItemId(CustomItemLibrary.find(customItems, value));
     }
 
-    private CraftingRecipe exactWrapper(CraftingRecipe recipe, ItemStack result, CustomRecipeEntry entry,
+    private ICraftingRecipe exactWrapper(ICraftingRecipe recipe, ItemStack result, CustomRecipeEntry entry,
                                         List<CustomItemEntry> customItems) {
         Map<String, ItemStack> stacks = new HashMap<>();
         java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
@@ -167,9 +180,9 @@ public abstract class ServerRecipeManagerMixin {
     private String recipeBookGroup(CustomRecipeEntry entry) {
         String signature;
         if ("shaped".equalsIgnoreCase(entry.type)) {
-            signature = "shaped:" + String.join("/", entry.pattern == null ? List.of() : entry.pattern)
-                    + ":" + (entry.keys == null ? Map.of() : new TreeMap<>(entry.keys))
-                    + ":" + (entry.key_counts == null ? Map.of() : new TreeMap<>(entry.key_counts));
+            signature = "shaped:" + String.join("/", entry.pattern == null ? fr.zazac1.customrecipe.Java8.list() : entry.pattern)
+                    + ":" + (entry.keys == null ? fr.zazac1.customrecipe.Java8.map() : new TreeMap<>(entry.keys))
+                    + ":" + (entry.key_counts == null ? fr.zazac1.customrecipe.Java8.map() : new TreeMap<>(entry.key_counts));
         } else {
             List<String> ingredients = new ArrayList<>();
             if (entry.ingredients != null) for (int i = 0; i < entry.ingredients.size(); i++) {

@@ -7,7 +7,7 @@ public final class WorldRecipeTarget implements RecipeTarget {
 
     public WorldRecipeTarget(String worldId, String worldName) {
         this.worldId = worldId == null ? "" : worldId;
-        this.worldName = worldName == null || worldName.isBlank() ? "World" : worldName;
+        this.worldName = worldName == null || worldName.trim().isEmpty() ? "World" : worldName;
     }
 
     @Override public String id() { return worldId; }

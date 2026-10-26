@@ -4,10 +4,10 @@ import fr.zazac1.customrecipe.CustomItemEntry;
 import fr.zazac1.customrecipe.CustomItemLibrary;
 import fr.zazac1.customrecipe.ModConfig;
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.util.registry.Registry;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
 
 /** Resolves item components from the active client registry when a world is loaded. */
 final class ClientItemStacks {
@@ -15,13 +15,13 @@ final class ClientItemStacks {
 
     static ItemStack fromItem(Item item) {
         if (item == null) return ItemStack.EMPTY;
-        return fromId(BuiltInRegistries.ITEM.getKey(item));
+        return fromId(Registry.ITEM.getKey(item));
     }
 
     static ItemStack fromId(ResourceLocation id) {
         if (id == null) return ItemStack.EMPTY;
 
-        return BuiltInRegistries.ITEM.containsKey(id) ? new ItemStack(BuiltInRegistries.ITEM.get(id)) : ItemStack.EMPTY;
+        return fr.zazac1.customrecipe.Java8.registryContains(Registry.ITEM, id) ? new ItemStack(Registry.ITEM.get(id)) : ItemStack.EMPTY;
     }
 
     static ItemStack fromReference(String value, ModConfig config) {

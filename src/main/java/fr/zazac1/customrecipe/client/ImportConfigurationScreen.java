@@ -1,20 +1,20 @@
 package fr.zazac1.customrecipe.client;
 
 import fr.zazac1.customrecipe.ModConfig;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.network.chat.Component;
+import fr.zazac1.customrecipe.client.compat.GuiGraphics;
+import net.minecraft.client.gui.screen.Screen;
+import fr.zazac1.customrecipe.client.compat.Button;
+import net.minecraft.util.text.ITextComponent;
 
 /** Central confirmation shown after a full backup has been read successfully. */
-final class ImportConfigurationScreen extends Screen {
+final class ImportConfigurationScreen extends fr.zazac1.customrecipe.client.compat.LegacyScreen {
     private final ConfigScreen returnTo;
     private final ModConfig imported;
     private final int recipeCount;
     private final int vanillaCount;
 
     ImportConfigurationScreen(ConfigScreen returnTo, ModConfig imported, int recipeCount, int vanillaCount) {
-        super(Component.literal("Import backup"));
+        super(fr.zazac1.customrecipe.Texts.literal("Import backup"));
         this.returnTo = returnTo;
         this.imported = imported;
         this.recipeCount = recipeCount;
@@ -24,9 +24,9 @@ final class ImportConfigurationScreen extends Screen {
     @Override
     protected void init() {
         int y = height / 2 + 34;
-        addRenderableWidget(Button.builder(Component.literal("Import"), b -> returnTo.confirmImportedConfiguration(imported))
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.literal("Import"), b -> returnTo.confirmImportedConfiguration(imported))
                 .bounds(width / 2 - 82, y, 76, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> minecraft.setScreen(returnTo))
+        addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.translatable("gui.cancel"), b -> minecraft.setScreen(returnTo))
                 .bounds(width / 2 + 6, y, 76, 20).build());
     }
 

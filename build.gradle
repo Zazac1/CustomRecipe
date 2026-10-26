@@ -14,6 +14,17 @@ plugins {
 
 apply plugin: 'org.spongepowered.mixin'
 
+if (project.hasProperty('basicValidation')) { sourceSets.main.java.srcDir 'validation/src/main/java' }
+
+// This source set belongs only to the unauthenticated ForgeGradle client.
+// It is not included in the mod JAR or the dedicated-server launch.
+sourceSets {
+    localDevelopment {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+
 version = project.mod_version
 group = project.maven_group
 base { archivesName = project.mod_id }
@@ -31,8 +42,12 @@ minecraft {
             arg '-mixin.config=customrecipe.mixins.json'
             mods { "${project.mod_id}" { source sourceSets.main } }
         }
-        client { }
-        server { args '--nogui' }
+        client {
+            workingDirectory project.file('run/client')
+            mods { "${project.mod_id}" { source sourceSets.localDevelopment } }
+            arg '-mixin.config=customrecipe.development.mixins.json'
+        }
+        server { workingDirectory project.file('run/server'); args '--nogui' }
     }
 }
 
@@ -59,9 +74,9 @@ dependencies {
     // JEI is optional for players. The APIs compile the client plugin, while
     // the full mod is present only in the development runtime and is remapped
     // by ForgeGradle for Mojang mappings.
-    compileOnly fg.deobf("mezz.jei:jei-${project.minecraft_version}-common-api:${project.jei_version}")
-    compileOnly fg.deobf("mezz.jei:jei-${project.minecraft_version}-forge-api:${project.jei_version}")
-    runtimeOnly fg.deobf("mezz.jei:jei-${project.minecraft_version}-forge:${project.jei_version}")
+
+    compileOnly fg.deobf("mezz.jei:jei-1.16.5:${project.jei_version}:api")
+    runtimeOnly fg.deobf("mezz.jei:jei-1.16.5:${project.jei_version}")
 
     // Local mods used to test compatibility. They must go through ForgeGradle's
     // deobfuscation layer in a development run; raw production jars in
@@ -76,6 +91,7 @@ dependencies {
     // Generates the refmap that translates Mojang names in mixins to the
     // obfuscated names present in a distributed Forge installation.
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    annotationProcessor 'com.github.bsideup.jabel:jabel-javac-plugin:1.0.0'
 }
 
 mixin {
@@ -88,8 +104,15 @@ processResources {
     filesMatching('META-INF/mods.toml') { expand 'version': project.version }
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.release = 17
+tasks.named('compileJava', JavaCompile) {
+    sourceCompatibility = '17'
+    options.release = 8
+    options.compilerArgs += ['-Xplugin:jabel', '-Xmaxerrs', '250']
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('compileLocalDevelopmentJava', JavaCompile) {
+    options.release = 8
     options.encoding = 'UTF-8'
 }
 
@@ -108,6 +131,7 @@ tasks.configureEach {
     if (name == 'runClient') {
         group = 'ForgeGradle runs'
         description = 'Launches the Custom Recipe development client.'
+        dependsOn tasks.named('localDevelopmentClasses')
     } else if (name == 'runServer') {
         group = 'ForgeGradle runs'
         description = 'Launches the Custom Recipe development server.'
@@ -116,6 +140,8 @@ tasks.configureEach {
 java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
 
 jar {
+    exclude 'fr/zazac1/customrecipe/validation/**'
+    exclude 'fr/zazac1/customrecipe/development/**', 'customrecipe.development.mixins.json'
     manifest { attributes([
         'Specification-Title': project.mod_id,
         'Specification-Vendor': 'zazac1',
@@ -131,4 +157,11 @@ jar {
 publishing {
     publications { mavenJava(MavenPublication) { artifact jar } }
     repositories { }
+}
+
+jar.finalizedBy('reobfJar')
+
+// The legacy launcher runs on Java 8; only compilation uses the JDK 17 compiler.
+tasks.withType(JavaExec).configureEach {
+    if (name in ['runClient', 'runServer']) { javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(8) } }
 }

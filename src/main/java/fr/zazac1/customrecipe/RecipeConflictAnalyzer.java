@@ -1,13 +1,13 @@
 package fr.zazac1.customrecipe;
 
-import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.CraftingRecipe;
-import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.item.crafting.ShapedRecipe;
+import net.minecraft.util.registry.DynamicRegistries;
+import net.minecraft.util.registry.Registry;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.crafting.ICraftingRecipe;
+import net.minecraft.item.crafting.Ingredient;
+import net.minecraft.item.crafting.IRecipe;
+import net.minecraft.item.crafting.ShapedRecipe;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -27,20 +27,20 @@ import java.util.Set;
 public final class RecipeConflictAnalyzer {
     private RecipeConflictAnalyzer() {}
 
-    public static boolean refresh(List<CustomRecipeEntry> customs, Iterable<Recipe<?>> candidates,
-                                  Collection<String> disabledRecipeIds, RegistryAccess registries) {
+    public static boolean refresh(List<CustomRecipeEntry> customs, Iterable<IRecipe<?>> candidates,
+                                  Collection<String> disabledRecipeIds, DynamicRegistries registries) {
         if (customs == null) return false;
-        Set<String> disabled = disabledRecipeIds == null ? Set.of() : new HashSet<>(disabledRecipeIds);
+        Set<String> disabled = disabledRecipeIds == null ? fr.zazac1.customrecipe.Java8.set() : new HashSet<>(disabledRecipeIds);
         boolean changed = false;
 
         for (CustomRecipeEntry entry : customs) {
             List<String> duplicates = new ArrayList<>();
             List<String> overlaps = new ArrayList<>();
             if (isActive(entry) && layoutOf(entry) != null) {
-                for (Recipe<?> candidateEntry : candidates) {
+                for (IRecipe<?> candidateEntry : candidates) {
                     ResourceLocation id = candidateEntry.getId();
                     if (isGeneratedCustom(id) || disabled.contains(id.toString())) continue;
-                    if (!(candidateEntry instanceof CraftingRecipe wrapped)) continue;
+                    if (!(candidateEntry instanceof ICraftingRecipe wrapped)) continue;
                     if (!overlaps(entry, wrapped)) continue;
                     if (sameOutput(entry, wrapped, registries)) duplicates.add(id.toString());
                     else overlaps.add(id.toString());
@@ -63,11 +63,11 @@ public final class RecipeConflictAnalyzer {
         return changed;
     }
 
-    private static boolean overlaps(CustomRecipeEntry custom, CraftingRecipe wrappedCandidate) {
+    private static boolean overlaps(CustomRecipeEntry custom, ICraftingRecipe wrappedCandidate) {
         if (wrappedCandidate instanceof DisabledCraftingRecipe) return false;
         if (wrappedCandidate instanceof VariantFilteredCraftingRecipe filtered
                 && filtered.blocksAny(inputItems(custom))) return false;
-        CraftingRecipe candidate = unwrap(wrappedCandidate);
+        ICraftingRecipe candidate = unwrap(wrappedCandidate);
         Layout customLayout = layoutOf(custom);
         if (customLayout == null) return false;
         if (candidate instanceof ShapedRecipe shaped) {
@@ -135,16 +135,16 @@ public final class RecipeConflictAnalyzer {
 
     private static boolean accepts(Ingredient ingredient, String itemId) {
         ResourceLocation id = ResourceLocation.tryParse(itemId);
-        return id != null && BuiltInRegistries.ITEM.containsKey(id) && ingredient.test(new ItemStack(BuiltInRegistries.ITEM.get(id)));
+        return id != null && Java8.registryContains(Registry.ITEM, id) && ingredient.test(new ItemStack(Registry.ITEM.get(id)));
     }
 
-    private static boolean sameOutput(CustomRecipeEntry custom, CraftingRecipe candidate,
-                                      RegistryAccess registries) {
+    private static boolean sameOutput(CustomRecipeEntry custom, ICraftingRecipe candidate,
+                                      DynamicRegistries registries) {
         ResourceLocation resultId = ResourceLocation.tryParse(custom.result);
         if (resultId == null) return false;
         try {
-            ItemStack result = unwrap(candidate).getResultItem(registries);
-            return !result.isEmpty() && resultId.equals(BuiltInRegistries.ITEM.getKey(result.getItem()));
+            ItemStack result = unwrap(candidate).getResultItem();
+            return !result.isEmpty() && resultId.equals(Registry.ITEM.getKey(result.getItem()));
         } catch (RuntimeException ignored) {
             return false;
         }
@@ -161,14 +161,14 @@ public final class RecipeConflictAnalyzer {
     }
 
     private static boolean sameRecipeId(CustomRecipeEntry first, CustomRecipeEntry second) {
-        return first.id != null && !first.id.isBlank() && first.id.equals(second.id);
+        return first.id != null && !first.id.trim().isEmpty() && first.id.equals(second.id);
     }
 
     private static boolean isGeneratedCustom(ResourceLocation id) {
         return id.getNamespace().equals(CustomRecipeMod.MOD_ID) && id.getPath().startsWith("custom/");
     }
 
-    private static CraftingRecipe unwrap(CraftingRecipe recipe) {
+    private static ICraftingRecipe unwrap(ICraftingRecipe recipe) {
         while (true) {
             if (recipe instanceof VariantFilteredCraftingRecipe filtered) recipe = filtered.delegate();
             else if (recipe instanceof DisabledCraftingRecipe disabled) recipe = disabled.delegate();
@@ -182,10 +182,10 @@ public final class RecipeConflictAnalyzer {
             if (entry.ingredients == null || entry.ingredients.isEmpty()) return null;
             List<String> items = new ArrayList<>();
             for (String item : entry.ingredients) {
-                if (item == null || item.isBlank()) return null;
+                if (item == null || item.trim().isEmpty()) return null;
                 items.add(item.trim());
             }
-            return new Layout(false, items.size(), 1, items, List.of());
+            return new Layout(false, items.size(), 1, items, fr.zazac1.customrecipe.Java8.list());
         }
         if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
         int width = entry.pattern.stream().mapToInt(String::length).max().orElse(0);
@@ -194,11 +194,11 @@ public final class RecipeConflictAnalyzer {
             for (int column = 0; column < width; column++) {
                 char symbol = column < row.length() ? row.charAt(column) : ' ';
                 String item = symbol == ' ' ? null : entry.keys.get(String.valueOf(symbol));
-                if (symbol != ' ' && (item == null || item.isBlank())) return null;
+                if (symbol != ' ' && (item == null || item.trim().isEmpty())) return null;
                 slots.add(item == null ? null : item.trim());
             }
         }
-        return trim(new Layout(true, width, entry.pattern.size(), slots, List.of()));
+        return trim(new Layout(true, width, entry.pattern.size(), slots, fr.zazac1.customrecipe.Java8.list()));
     }
 
     private static Layout layoutOf(ShapedRecipe recipe) {
@@ -239,7 +239,7 @@ public final class RecipeConflictAnalyzer {
 
     private static List<String> inputItems(CustomRecipeEntry entry) {
         Layout layout = layoutOf(entry);
-        return layout == null ? List.of() : inputItems(layout);
+        return layout == null ? fr.zazac1.customrecipe.Java8.list() : inputItems(layout);
     }
 
     private static List<String> inputItems(Layout layout) {
@@ -249,16 +249,30 @@ public final class RecipeConflictAnalyzer {
     }
 
     private static List<String> distinctSorted(List<String> ids) {
-        return ids.stream().distinct().sorted(Comparator.naturalOrder()).toList();
+        return ids.stream().distinct().sorted(Comparator.naturalOrder()).collect(java.util.stream.Collectors.toList());
     }
 
-    private record Layout(boolean shaped, int width, int height, List<String> slots, List<Ingredient> ingredients) {
+    private static final class Layout {
+        private final boolean shaped;
+        private final int width;
+        private final int height;
+        private final List<String> slots;
+        private final List<Ingredient> ingredients;
+        public Layout(boolean shaped, int width, int height, List<String> slots, List<Ingredient> ingredients) { this.shaped=shaped; this.width=width; this.height=height; this.slots=slots; this.ingredients=ingredients; }
+        public boolean shaped() { return shaped; }
+        public int width() { return width; }
+        public int height() { return height; }
+        public List<String> slots() { return slots; }
+        public List<Ingredient> ingredients() { return ingredients; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; Layout other=(Layout)obj; return java.util.Objects.equals(shaped, other.shaped) && java.util.Objects.equals(width, other.width) && java.util.Objects.equals(height, other.height) && java.util.Objects.equals(slots, other.slots) && java.util.Objects.equals(ingredients, other.ingredients); }
+        @Override public int hashCode() { return java.util.Objects.hash(shaped, width, height, slots, ingredients); }
+
         boolean isEmpty(int index) {
             return ingredients.isEmpty() ? slots.get(index) == null : ingredients.get(index) == null;
         }
 
         List<Ingredient> nonEmptyIngredients() {
-            return ingredients.stream().filter(java.util.Objects::nonNull).toList();
+            return ingredients.stream().filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.toList());
         }
     }
 }

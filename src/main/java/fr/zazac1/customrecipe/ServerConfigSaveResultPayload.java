@@ -1,6 +1,6 @@
 package fr.zazac1.customrecipe;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ResourceLocation;
 
 /** Server acknowledgement for an OP editor save request. */
 public final class ServerConfigSaveResultPayload {

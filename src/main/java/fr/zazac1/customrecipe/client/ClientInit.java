@@ -8,22 +8,22 @@ import fr.zazac1.customrecipe.CustomRecipeMod;
 import fr.zazac1.customrecipe.ModConfig;
 import fr.zazac1.customrecipe.WorldRecipeAssignments;
 import fr.zazac1.customrecipe.WorldRecipeConfig;
-import net.minecraft.ChatFormatting;
+import net.minecraft.util.text.TextFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
-import net.minecraft.client.gui.screens.PauseScreen;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.ClickEvent;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
-import net.minecraft.network.chat.Style;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.storage.LevelResource;
+import fr.zazac1.customrecipe.client.compat.Button;
+import fr.zazac1.customrecipe.client.compat.Tooltip;
+import net.minecraft.client.gui.screen.IngameMenuScreen;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.command.Commands;
+import net.minecraft.util.text.event.ClickEvent;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.text.event.HoverEvent;
+import net.minecraft.util.text.Style;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.world.storage.FolderName;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.client.event.ScreenEvent;
-import net.minecraftforge.client.event.RegisterClientCommandsEvent;
+import net.minecraftforge.client.event.GuiScreenEvent;
+import net.minecraftforge.client.event.ClientChatEvent;
 import net.minecraftforge.event.TickEvent;
 
 import java.nio.file.Files;
@@ -46,40 +46,32 @@ public final class ClientInit {
         MinecraftForge.EVENT_BUS.addListener(ClientInit::onPauseScreenInit);
         MinecraftForge.EVENT_BUS.addListener(ClientInit::onPauseScreenRender);
         MinecraftForge.EVENT_BUS.addListener(ClientInit::onScreenOpening);
-        MinecraftForge.registerConfigScreen(ClothConfigIntegration::createScreen);
+        net.minecraftforge.fml.ModLoadingContext.get().registerExtensionPoint(net.minecraftforge.fml.ExtensionPoint.CONFIGGUIFACTORY, () -> (client, parent) -> ClothConfigIntegration.createScreen(parent));
     }
 
     /** Registers the local-only command used by the clickable new-world hint. */
-    private static void registerClientCommands(RegisterClientCommandsEvent event) {
-        event.getDispatcher().register(Commands.literal("customrecipe_solo")
-                .requires(source -> Minecraft.getInstance().getSingleplayerServer() != null)
-                .executes(context -> {
-            Minecraft client = Minecraft.getInstance();
-            // This editor writes the local config, never a remote server config.
-            if (client.getSingleplayerServer() == null) return 0;
-            // Chat command processing can restore its old screen after this
-            // callback. Opening on the next tick keeps the editor visible.
+    private static void registerClientCommands(ClientChatEvent event) {
+        if ("/customrecipe_solo".equals(event.getMessage()) && Minecraft.getInstance().getSingleplayerServer() != null) {
+            event.setCanceled(true);
             pendingSoloEditorTicks = 1;
-            return 1;
-        }));
+        }
     }
-
     /** Forge-native pause-menu hook; reliably runs after the 1.20.1 menu is built. */
-    private static void onPauseScreenInit(ScreenEvent.Init.Post event) {
-        if (!(event.getScreen() instanceof PauseScreen) || Minecraft.getInstance().getSingleplayerServer() == null) return;
-        int x = event.getScreen().width - 28;
-        int y = event.getScreen().height - 28;
-        event.addListener(Button.builder(Component.empty(), button ->
-                        Minecraft.getInstance().setScreen(ConfigScreen.fromPauseMenu(event.getScreen())))
-                .tooltip(Tooltip.create(Component.translatable("customrecipe.tooltip.open")))
+    private static void onPauseScreenInit(GuiScreenEvent.InitGuiEvent.Post event) {
+        if (!(event.getGui() instanceof IngameMenuScreen) || Minecraft.getInstance().getSingleplayerServer() == null) return;
+        int x = event.getGui().width - 28;
+        int y = event.getGui().height - 28;
+        event.addWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(), button ->
+                        Minecraft.getInstance().setScreen(ConfigScreen.fromPauseMenu(event.getGui())))
+                .tooltip(Tooltip.create(fr.zazac1.customrecipe.Texts.translatable("customrecipe.tooltip.open")))
                 .bounds(x, y, 20, 20).build());
     }
 
-    private static void onPauseScreenRender(ScreenEvent.Render.Post event) {
-        if (!(event.getScreen() instanceof PauseScreen) || Minecraft.getInstance().getSingleplayerServer() == null) return;
-        int x = event.getScreen().width - 28;
-        int y = event.getScreen().height - 28;
-        event.getGuiGraphics().blit(PAUSE_BUTTON_ICON, x + 2, y + 2, 0, 0, 16, 16, 16, 16);
+    private static void onPauseScreenRender(GuiScreenEvent.DrawScreenEvent.Post event) {
+        if (!(event.getGui() instanceof IngameMenuScreen) || Minecraft.getInstance().getSingleplayerServer() == null) return;
+        int x = event.getGui().width - 28;
+        int y = event.getGui().height - 28;
+        new fr.zazac1.customrecipe.client.compat.GuiGraphics(event.getMatrixStack()).blit(PAUSE_BUTTON_ICON, x + 2, y + 2, 0, 0, 16, 16, 16, 16);
     }
 
     /**
@@ -87,8 +79,8 @@ public final class ClientInit {
      * for every Custom Recipe sub-screen, then put the player's exact setting
      * back as soon as they leave the editor.
      */
-    private static void onScreenOpening(ScreenEvent.Opening event) {
-        updateGuiScaleForScreen(Minecraft.getInstance(), event.getNewScreen());
+    private static void onScreenOpening(net.minecraftforge.client.event.GuiOpenEvent event) {
+        updateGuiScaleForScreen(Minecraft.getInstance(), event.getGui());
     }
 
     /** Re-check on tick too: some Forge configuration entry points bypass the opening event. */
@@ -99,7 +91,7 @@ public final class ClientInit {
                 return;
             }
             if (guiScaleBeforeCustomRecipe == null) {
-                guiScaleBeforeCustomRecipe = client.options.guiScale().get();
+                guiScaleBeforeCustomRecipe = client.options.guiScale;
             }
             setGuiScale(client, 3);
             return;
@@ -117,15 +109,15 @@ public final class ClientInit {
     }
 
     private static void setGuiScale(Minecraft client, int scale) {
-        if (client.options.guiScale().get() == scale) return;
-        client.options.guiScale().set(scale);
+        if (client.options.guiScale == scale) return;
+        client.options.guiScale = scale;
         // OptionInstance updates the stored value. Resize explicitly so the
         // currently open editor is immediately rebuilt at its new scale.
         client.resizeDisplay();
     }
 
     private static boolean isCustomRecipeScreen(Screen screen) {
-        return screen != null && screen.getClass().getPackageName().startsWith("fr.zazac1.customrecipe.client");
+        return screen != null && screen.getClass().getPackage().getName().startsWith("fr.zazac1.customrecipe.client");
     }
 
     /** Same END tick used on Fabric: checks a local world once and sends its editor hint. */
@@ -134,7 +126,7 @@ public final class ClientInit {
         Minecraft client = Minecraft.getInstance();
         if (pendingSoloEditorTicks > 0 && --pendingSoloEditorTicks == 0
                 && client.getSingleplayerServer() != null) {
-            client.setScreen(ConfigScreen.fromPauseMenu(new PauseScreen(true)));
+            client.setScreen(ConfigScreen.fromPauseMenu(new IngameMenuScreen(true)));
         }
         updateGuiScaleForScreen(client, client.screen);
         if (ConfigLoader.get().preload_recipes_on_startup) VanillaRecipesScreen.preloadAtStartup(client);
@@ -144,7 +136,7 @@ public final class ClientInit {
             return;
         }
         if (client.player == null) return;
-        Path worldDirectory = server.getWorldPath(LevelResource.ROOT);
+        Path worldDirectory = server.getWorldPath(FolderName.ROOT);
         String worldId = WorldRecipeAssignments.worldId(worldDirectory);
         if (worldId.equals(activeClientWorldId)) return;
         activeClientWorldId = worldId;
@@ -155,12 +147,12 @@ public final class ClientInit {
         boolean alreadyShown = config != null && config.shown_editor_tip
                 && worldInstanceId.equals(config.editor_tip_world_instance);
         if (day != 0L || alreadyShown || !WorldRecipeAssignments.markEditorTipShown(worldId, levelName, worldInstanceId)) return;
-        Component link = Component.translatable("customrecipe.chat.world_tip.link").setStyle(
-                Style.EMPTY.withColor(ChatFormatting.AQUA).withUnderlined(true)
+        ITextComponent link = fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.world_tip.link").setStyle(
+                Style.EMPTY.withColor(TextFormatting.AQUA).withUnderlined(true)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/customrecipe_solo"))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                                Component.translatable("customrecipe.chat.world_tip.hover"))));
-        client.player.sendSystemMessage(Component.translatable("customrecipe.chat.world_tip", link));
+                                fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.world_tip.hover"))));
+        fr.zazac1.customrecipe.Texts.send(client.player, fr.zazac1.customrecipe.Texts.translatable("customrecipe.chat.world_tip", link));
         CustomRecipeMod.LOGGER.info("[Custom Recipe] Editor tip sent for world '{}'.", levelName);
     }
 
@@ -169,7 +161,15 @@ public final class ClientInit {
         catch (Exception ignored) { return "seed-" + seed; }
     }
 
-    record LocalMergeResult(int recipes, int customItems) {}
+    static final class LocalMergeResult {
+        private final int recipes;
+        private final int customItems;
+        public LocalMergeResult(int recipes, int customItems) { this.recipes=recipes; this.customItems=customItems; }
+        public int recipes() { return recipes; }
+        public int customItems() { return customItems; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; LocalMergeResult other=(LocalMergeResult)obj; return java.util.Objects.equals(recipes, other.recipes) && java.util.Objects.equals(customItems, other.customItems); }
+        @Override public int hashCode() { return java.util.Objects.hash(recipes, customItems); }
+}
 
     /** Stages only an administrator's local recipes and full-stack items in the server editor. */
     static LocalMergeResult mergeLocalContent(ModConfig serverConfig) {

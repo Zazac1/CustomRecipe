@@ -1,6 +1,6 @@
 package fr.zazac1.customrecipe.client;
 
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screen.Screen;
 
 /**
  * Forge configuration integration while Cloth Config remains a required Forge
