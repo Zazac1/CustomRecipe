@@ -89,7 +89,7 @@ public class ServerJsonScreen extends Screen {
    }
 
    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-      ctx.fillGradient(0, 0, this.width, this.height, -1072689136, -804253680);
+      this.renderBackground(ctx, mouseX, mouseY, delta);
       super.render(ctx, mouseX, mouseY, delta);
       if (!this.error.isEmpty()) {
          ctx.drawText(this.textRenderer, this.error, 14, this.height - 44, 16733525, false);

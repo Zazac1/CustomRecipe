@@ -6,6 +6,8 @@ out/
 run/
 run-client/
 run-server/
+validation/runtime/
+validation/logs/
 .idea/
 *.iml
 *.ipr

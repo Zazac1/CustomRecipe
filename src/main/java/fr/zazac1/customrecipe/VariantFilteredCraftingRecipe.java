@@ -30,6 +30,11 @@ public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
       return materialIds.stream().anyMatch(this.blockedMaterials::contains);
    }
 
+   /** Returns whether every choice for one alternative ingredient is rejected. */
+   public boolean blocksAll(java.util.Collection<String> materialIds) {
+      return !materialIds.isEmpty() && materialIds.stream().allMatch(this.blockedMaterials::contains);
+   }
+
    public boolean matches(CraftingRecipeInput input, World world) {
       return !this.delegate.matches(input, world)
          ? false

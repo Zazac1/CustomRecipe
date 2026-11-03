@@ -6,7 +6,9 @@
   "customrecipe.home.library": "Library",
   "customrecipe.home.create": "Create Recipes",
   "customrecipe.home.vanilla": "Default Recipes",
-  "customrecipe.home.vanilla.tooltip": "Select a world to access its default recipes.",
+  "customrecipe.home.vanilla.tooltip": "Configure default recipes globally or for the selected world.",
+  "customrecipe.home.vanilla.global_tooltip": "Disable recipes by default in every world. A world can explicitly re-enable them.",
+  "customrecipe.home.vanilla.world_tooltip": "Configure this world only. Recipes disabled globally can be re-enabled here.",
   "customrecipe.home.current_world_locked": "The current world is locked when opened from the pause menu.",
   "customrecipe.button.back": "Back",
   "customrecipe.button.cancel": "Cancel",
@@ -37,6 +39,7 @@
   "customrecipe.state.enabled": "Enabled",
   "customrecipe.state.disabled": "Disabled",
   "customrecipe.state.library": "Library",
+  "customrecipe.state.all_worlds": "All Worlds",
   "customrecipe.state.corrupted": "Corrupted",
   "customrecipe.screen.my_recipes": "My Recipes",
   "customrecipe.screen.global_library": "Global Library",
@@ -164,4 +167,22 @@
   ,"customrecipe.chat.custom_item.removed": "Removed custom item %s."
   ,"customrecipe.chat.custom_item.list_empty": "The Custom Items library is empty."
   ,"customrecipe.chat.custom_item.list": "Custom Items (%s):"
+  ,"customrecipe.builder.alternatives": "Alternatives: %s"
+  ,"customrecipe.alternatives.title": "Alternative ingredients"
+  ,"customrecipe.alternatives.primary": "This slot accepts %s or any selected alternative"
+  ,"customrecipe.alternatives.search": "Search items..."
+  ,"customrecipe.alternatives.available": "Available items"
+  ,"customrecipe.alternatives.selected": "Selected alternatives (%s)"
+  ,"customrecipe.alternatives.add_all": "Add all search results"
+  ,"customrecipe.alternatives.remove_all": "Remove all alternatives"
+  ,"customrecipe.alternatives.done": "Done"
+  ,"customrecipe.builder.group_use": "%s alternatives — left-click to reuse this group"
+  ,"customrecipe.builder.group_expand": "Right-click to show the individual items"
+  ,"customrecipe.builder.group_collapse": "Right-click to hide the individual items"
+  ,"customrecipe.builder.group_alternative": "Alternative item"
+  ,"customrecipe.builder.group_distinct": "Different items are required between repeated slots"
+  ,"customrecipe.alternatives.distinct": "Different item in each repeated slot: %s"
+  ,"customrecipe.alternatives.distinct_hint": "When this group is used in several recipe slots, every slot must contain a different item from the group."
+  ,"customrecipe.common.on": "ON"
+  ,"customrecipe.common.off": "OFF"
 }

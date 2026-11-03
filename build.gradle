@@ -10,6 +10,10 @@ base {
     archivesName = project.mod_id
 }
 
+if (project.hasProperty('basicValidation')) {
+    sourceSets.main.java.srcDir 'validation/src/main/java'
+}
+
 repositories {
     maven {
         name = 'Fabric'
@@ -34,7 +38,8 @@ loom {
             runDir = "run-client"
         }
         server {
-            runDir = "run-server"
+            runDir = project.hasProperty('basicValidation') ? "validation/runtime/server" : "run-server"
+            if (project.hasProperty('basicValidation')) vmArg '-Dcustomrecipe.basicValidation=true'
         }
     }
 }
@@ -65,6 +70,7 @@ java {
 }
 
 jar {
+    exclude 'fr/zazac1/customrecipe/validation/**'
     from('LICENSE') {
         rename { "${it}_${project.mod_id}" }
     }

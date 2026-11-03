@@ -294,7 +294,7 @@ public final class ServerConfigNetworking {
                      return null;
                   }
 
-                  slots.add(item == null ? "" : item.trim());
+                   slots.add(item == null ? "" : optionSignature(entry.keyOptions(String.valueOf(symbol))));
                }
             }
 
@@ -305,12 +305,13 @@ public final class ServerConfigNetworking {
       } else if (entry.ingredients != null && !entry.ingredients.isEmpty()) {
          List<String> ingredients = new ArrayList<>();
 
-         for (String item : entry.ingredients) {
+         for (int index = 0; index < entry.ingredients.size(); index++) {
+            String item = entry.ingredients.get(index);
             if (item == null || item.isBlank()) {
                return null;
             }
 
-            ingredients.add(item.trim());
+            ingredients.add(optionSignature(entry.ingredientOptions(index)));
          }
 
          ingredients.sort(String::compareTo);
@@ -413,6 +414,11 @@ public final class ServerConfigNetworking {
          .map(stack -> Registries.ITEM.getId(stack.getItem()).toString())
          .sorted()
          .collect(Collectors.joining(","));
+   }
+
+   private static String optionSignature(List<String> options) {
+      return options.stream().filter(value -> value != null && !value.isBlank()).map(String::trim)
+         .sorted().collect(Collectors.joining(","));
    }
 
    private static void awardDefaultRecipes(ServerPlayerEntity player, MinecraftServer server, boolean refreshBook) {

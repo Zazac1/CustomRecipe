@@ -67,7 +67,6 @@ final class RenameCustomItemScreen extends Screen {
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         parent.render(context, mouseX, mouseY, delta);
-        context.fill(0, 0, width, height, 0x98000000);
 
         int panelWidth = Math.min(360, width - 32);
         int panelHeight = 148;

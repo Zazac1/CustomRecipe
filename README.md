@@ -5,6 +5,7 @@ Custom Recipe is a Fabric mod for Minecraft **1.21.1**. Create shaped or shapele
 ## Highlights
 
 - Visual shaped and shapeless recipe builder for vanilla and modded items.
+- Alternative ingredients: one recipe slot can accept any item from a user-selected set.
 - Persistent custom recipes, with stable IDs and enable/disable state.
 - **Known by default** recipes are silently added to every player's recipe book.
 - Custom recipes with identical inputs share one recipe-book group.
@@ -40,6 +41,8 @@ Open **ModMenu -> Custom Recipe**.
 - **Built-in Recipes**: toggle the included recipes.
 - **Create a Recipe**: create a shaped or shapeless recipe.
 - **Default Recipes**: search Minecraft and installed-mod recipes, filter Enabled/Disabled, and click a name to open its preview.
+
+Select a non-empty ingredient in the recipe builder, then click **Alternatives** to search for additional accepted items. The primary item and every selected alternative share the same quantity requirement.
 
 In a recipe preview, interchangeable ingredients appear in a compact icon grid:
 

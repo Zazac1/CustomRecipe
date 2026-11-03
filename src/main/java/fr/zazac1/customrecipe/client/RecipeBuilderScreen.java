@@ -34,9 +34,13 @@ public class RecipeBuilderScreen extends Screen {
     private static final int SHAPELESS_ROW_H = 26;
     private static final int MAX_SHAPELESS_INGREDIENTS = 9;
     private static final int VISIBLE_SHAPELESS_ROWS = 5;
+    private static final int MAX_VISIBLE_PALETTE_ROWS = 2;
     // Mouse button values follow GLFW: left=0 and right=1.
     private static final int LEFT_MOUSE_BUTTON = 0;
     private static final int RIGHT_MOUSE_BUTTON = 1;
+    /** Explicit GUI layers: placed items < quantities < controls < carried cursor item. */
+    private static final float CONTROL_LAYER_Z = 300.0F;
+    private static final float HELD_ITEM_LAYER_Z = 500.0F;
 
     private final ConfigScreen parent;
     /** Exact screen that opened this editor, retained for Cancel, Escape and Save. */
@@ -48,9 +52,13 @@ public class RecipeBuilderScreen extends Screen {
     // ── persistent state (survives clearAndInit) ──────────────────────────
     private final String[] slotItems = new String[9]; // grid slots (0-8)
     private final int[] slotCounts = new int[9];
+    private final List<List<String>> slotAlternatives = new ArrayList<>(9);
+    private final boolean[] slotDistinct = new boolean[9];
     /** Ordered ingredient slots used only while the recipe is shapeless. */
     private final List<String> shapelessItems = new ArrayList<>();
     private final List<Integer> shapelessCounts = new ArrayList<>();
+    private final List<List<String>> shapelessAlternatives = new ArrayList<>();
+    private final List<Boolean> shapelessDistinct = new ArrayList<>();
     private String resultItemId   = "";
     private int    resultCount    = 1;
     private TextFieldWidget resultCountField;
@@ -67,8 +75,14 @@ public class RecipeBuilderScreen extends Screen {
     private int selectedShapelessSlot = -1;
     private int shapelessScroll;
     private boolean draggingShapelessScrollbar;
+    private final Set<String> expandedPaletteGroups = new LinkedHashSet<>();
+    private int paletteScroll;
+    private boolean draggingPaletteScrollbar;
     /** null = no item picked; empty string = the permanent empty/erase item. */
     private String heldItemId;
+    /** Alternative group carried with the palette's primary item. */
+    private List<String> heldAlternatives = List.of();
+    private boolean heldDistinct;
 
     // text field state
     private String         itemFieldText = "";
@@ -101,6 +115,7 @@ public class RecipeBuilderScreen extends Screen {
         this.editingEntry = editingIndex >= 0 ? source : null;
         Arrays.fill(slotItems, "");
         Arrays.fill(slotCounts, 1);
+        for (int i = 0; i < slotItems.length; i++) slotAlternatives.add(new ArrayList<>());
         if (source == null) {
             initialDraft = draftFingerprint();
             return;
@@ -117,7 +132,10 @@ public class RecipeBuilderScreen extends Screen {
                     if (itemId != null && !itemId.isEmpty() && shapelessItems.size() < MAX_SHAPELESS_INGREDIENTS)
                     {
                         shapelessItems.add(itemId);
-                        shapelessCounts.add(clampIngredientCount(itemId, source.ingredientCount(i)));
+                        List<String> alternatives = alternativesOnly(source.ingredientOptions(i), itemId);
+                        shapelessAlternatives.add(alternatives);
+                        shapelessCounts.add(clampIngredientCount(itemId, alternatives, source.ingredientCount(i)));
+                        shapelessDistinct.add(source.ingredientRequiresDistinct(i));
                     }
                 }
             }
@@ -134,7 +152,10 @@ public class RecipeBuilderScreen extends Screen {
                     int slot = row * 3 + column;
                     String itemId = source.keys.getOrDefault(String.valueOf(key), "");
                     slotItems[slot] = itemId;
-                    slotCounts[slot] = clampIngredientCount(itemId, source.keyCount(String.valueOf(key)));
+                    slotAlternatives.set(slot, alternativesOnly(source.keyOptions(String.valueOf(key)), itemId));
+                    slotCounts[slot] = clampIngredientCount(itemId, slotAlternatives.get(slot),
+                            source.keyCount(String.valueOf(key)));
+                    slotDistinct[slot] = source.keyRequiresDistinct(String.valueOf(key));
                 }
             }
         }
@@ -211,11 +232,22 @@ public class RecipeBuilderScreen extends Screen {
                 && mouseX >= suggestionScrollbarX() && mouseX < leftX() + leftW()
                 && mouseY >= suggestionRowsTop() && mouseY < suggestionRowsTop() + suggestionRowsH();
     }
-    private int paletteColumns() { return Math.max(8, Math.min(16, (rightW() - 16) / 24)); }
-    private int paletteRows() { return Math.max(1, (usedItems().size() + 1 + paletteColumns() - 1) / paletteColumns()); }
-    private int paletteH()   { return paletteRows() * 24 + 8; }
+    private int paletteColumns() { return Math.max(1, Math.min(16, (paletteW() - 20) / 24)); }
+    private int paletteRows() { return Math.max(1, (paletteEntries().size() + 1 + paletteColumns() - 1) / paletteColumns()); }
+    private int visiblePaletteRows() { return Math.min(MAX_VISIBLE_PALETTE_ROWS, paletteRows()); }
+    private int maxPaletteScroll() { return Math.max(0, paletteRows() - visiblePaletteRows()); }
+    private boolean hasPaletteScrollbar() { return maxPaletteScroll() > 0; }
+    private int paletteH()   { return visiblePaletteRows() * 24 + 8; }
     private int paletteW()   { return rightW() - 16; }
     private int paletteX()   { return rightX() + 8; }
+    private int paletteScrollbarX() { return paletteX() + paletteW() - 12; }
+    private int paletteScrollbarY() { return paletteY() + 4; }
+    private int paletteScrollbarH() { return paletteH() - 8; }
+    private boolean isOverPaletteScrollbar(double mouseX, double mouseY) {
+        return hasPaletteScrollbar()
+                && mouseX >= paletteScrollbarX() && mouseX < paletteScrollbarX() + 12
+                && mouseY >= paletteScrollbarY() && mouseY < paletteScrollbarY() + paletteScrollbarH();
+    }
 
     // ── init ─────────────────────────────────────────────────────────────
 
@@ -224,6 +256,7 @@ public class RecipeBuilderScreen extends Screen {
         addDrawable((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, client, parent.target(),
                 parent.target().isWorld() ? parent.target().displayName() : "Global Library"));
         shapelessScroll = Math.max(0, Math.min(maxShapelessScroll(), shapelessScroll));
+        paletteScroll = Math.max(0, Math.min(maxPaletteScroll(), paletteScroll));
         if (itemFieldText.isBlank() && itemMatches.isEmpty()) itemMatches = findItemMatches("");
 
         // Background fills + grid + result slot drawn via addDrawable
@@ -266,14 +299,14 @@ public class RecipeBuilderScreen extends Screen {
             if (mx >= clearX && mx < clearX + 18 && my >= fieldY() && my < fieldY() + SEARCH_H) {
                 ctx.fill(clearX, fieldY(), clearX + 18, fieldY() + 18, 0x443355BB);
             }
-            CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, clearX, fieldY(), 18, 18);
+            drawForegroundSprite(ctx, CustomRecipeSprites.REJECT, clearX, fieldY(), 18, 18);
         });
 
         // Autocomplete suggestions (label widgets)
         for (int i = suggestionScroll; i < suggestionScroll + visibleSuggestions(); i++) {
             String id = itemMatches.get(i);
             int ry = suggestionRowsTop() + (i - suggestionScroll) * SUGG_H;
-            MultilineTextWidget suggestionLabel = makeLabel(leftX() + 22, ry + 4, id, 0xCCCCCC);
+            MultilineTextWidget suggestionLabel = makeLabel(leftX() + 22, ry + 4, alternativeDisplayName(id), 0xCCCCCC);
             // Leave five characters of safety before the scrollbar instead of clipping the ellipsis.
             suggestionLabel.setMaxWidth(leftW() - 30);
             addDrawableChild(suggestionLabel);
@@ -295,6 +328,11 @@ public class RecipeBuilderScreen extends Screen {
                     34, 18, Text.translatable("customrecipe.builder.ingredient_count")));
             configureCountField(ingredientCountField, selectedIngredientCount(), selectedIngredientMaxCount(),
                     this::setSelectedIngredientCount);
+            addDrawableChild(ButtonWidget.builder(
+                    Text.translatable("customrecipe.builder.alternatives", selectedIngredientAlternatives().size()),
+                    b -> client.setScreen(new IngredientAlternativesScreen(this, selectedIngredientItemId(),
+                            selectedIngredientAlternatives()))
+            ).dimensions(leftX() + leftW() - 120, panelY() + 2, 116, 18).build());
         } else {
             ingredientCountField = null;
         }
@@ -352,8 +390,8 @@ public class RecipeBuilderScreen extends Screen {
                 b -> confirm()
         ).dimensions(width / 2 + 4, height - 22, 98, 18).build());
         addDrawable((ctx, mx, my, d) -> {
-            CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, width / 2 - 98, height - 22, 18, 18);
-            CustomRecipeSprites.draw(ctx, CustomRecipeSprites.ACCEPT, width / 2 + 8, height - 22, 18, 18);
+            drawForegroundSprite(ctx, CustomRecipeSprites.REJECT, width / 2 - 98, height - 22, 18, 18);
+            drawForegroundSprite(ctx, CustomRecipeSprites.ACCEPT, width / 2 + 8, height - 22, 18, 18);
         });
 
         // Restore focus after clearAndInit
@@ -432,6 +470,8 @@ public class RecipeBuilderScreen extends Screen {
 
     private void selectItem(String itemId) {
         heldItemId = itemId;
+        heldAlternatives = List.of();
+        heldDistinct = false;
         itemFieldText = shortId(itemId);
         itemMatches   = new ArrayList<>();
         suggestionScroll = 0;
@@ -443,6 +483,8 @@ public class RecipeBuilderScreen extends Screen {
 
     private void selectEmptyItem() {
         heldItemId = "";
+        heldAlternatives = List.of();
+        heldDistinct = false;
         itemFieldText = "";
         itemMatches = new ArrayList<>();
         suggestionScroll = 0;
@@ -485,6 +527,9 @@ public class RecipeBuilderScreen extends Screen {
         if (heldItemId == null) return;
         if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessItems.size()) {
             shapelessItems.set(selectedShapelessSlot, heldItemId);
+            shapelessAlternatives.get(selectedShapelessSlot).clear();
+            shapelessAlternatives.get(selectedShapelessSlot).addAll(heldAlternatives);
+            shapelessDistinct.set(selectedShapelessSlot, heldDistinct && !heldAlternatives.isEmpty());
             shapelessCounts.set(selectedShapelessSlot, 1);
             // Shapeless rows are one-shot targets: after placing an item, the
             // row returns to its normal, non-selected state.
@@ -493,6 +538,9 @@ public class RecipeBuilderScreen extends Screen {
             resultItemId = heldItemId;
         } else if (selectedSlot >= 0 && selectedSlot < 9) {
             slotItems[selectedSlot] = heldItemId;
+            slotAlternatives.get(selectedSlot).clear();
+            slotAlternatives.get(selectedSlot).addAll(heldAlternatives);
+            slotDistinct[selectedSlot] = heldDistinct && !heldAlternatives.isEmpty();
             slotCounts[selectedSlot] = 1;
         }
     }
@@ -512,7 +560,7 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     private void setSelectedIngredientCount(int value) {
-        int normalized = clampIngredientCount(selectedIngredientItemId(), value);
+        int normalized = clampIngredientCount(selectedIngredientItemId(), selectedIngredientAlternatives(), value);
         if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessCounts.size()) {
             shapelessCounts.set(selectedShapelessSlot, normalized);
         } else if (selectedSlot >= 0 && selectedSlot < slotCounts.length) {
@@ -528,7 +576,36 @@ public class RecipeBuilderScreen extends Screen {
     }
 
     private int selectedIngredientMaxCount() {
-        return maxIngredientCount(selectedIngredientItemId());
+        return maxIngredientCount(selectedIngredientItemId(), selectedIngredientAlternatives());
+    }
+
+    private List<String> selectedIngredientAlternatives() {
+        if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessAlternatives.size()) {
+            return shapelessAlternatives.get(selectedShapelessSlot);
+        }
+        if (selectedSlot >= 0 && selectedSlot < slotAlternatives.size()) return slotAlternatives.get(selectedSlot);
+        return new ArrayList<>();
+    }
+
+    boolean selectedIngredientRequiresDistinct() {
+        if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessDistinct.size()) {
+            return Boolean.TRUE.equals(shapelessDistinct.get(selectedShapelessSlot));
+        }
+        return selectedSlot >= 0 && selectedSlot < slotDistinct.length && slotDistinct[selectedSlot];
+    }
+
+    void setSelectedIngredientRequiresDistinct(boolean value) {
+        boolean normalized = value && !selectedIngredientAlternatives().isEmpty();
+        if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessDistinct.size()) {
+            shapelessDistinct.set(selectedShapelessSlot, normalized);
+        } else if (selectedSlot >= 0 && selectedSlot < slotDistinct.length) {
+            slotDistinct[selectedSlot] = normalized;
+        }
+    }
+
+    void alternativesChanged() {
+        setSelectedIngredientRequiresDistinct(selectedIngredientRequiresDistinct());
+        setSelectedIngredientCount(selectedIngredientCount());
     }
 
     private boolean heldItemDiffersFrom(String itemId) {
@@ -552,6 +629,8 @@ public class RecipeBuilderScreen extends Screen {
                 resultItemId = "";
             } else if (slot >= 0 && slot < 9) {
                 slotItems[slot] = "";
+                slotAlternatives.get(slot).clear();
+                slotDistinct[slot] = false;
                 slotCounts[slot] = 1;
             }
             selectedSlot = -2;
@@ -566,17 +645,100 @@ public class RecipeBuilderScreen extends Screen {
         clearAndInit();
     }
 
-    /** Unique items already present in the draft, ordered result first. */
-    private List<String> usedItems() {
-        LinkedHashSet<String> items = new LinkedHashSet<>();
-        if (resultItemId != null && !resultItemId.isBlank()) items.add(resultItemId);
-        for (String item : slotItems) {
-            if (item != null && !item.isBlank()) items.add(item);
+    /** Palette groups preserve alternative sets instead of flattening every item into the strip. */
+    private List<PaletteGroup> paletteGroups() {
+        Map<String, LinkedHashSet<String>> grouped = new LinkedHashMap<>();
+        Set<String> distinctGroups = new LinkedHashSet<>();
+        addPaletteGroup(grouped, distinctGroups, resultItemId, List.of(), false);
+        for (int i = 0; i < slotItems.length; i++) {
+            addPaletteGroup(grouped, distinctGroups, slotItems[i], slotAlternatives.get(i), slotDistinct[i]);
         }
-        for (String item : shapelessItems) {
-            if (item != null && !item.isBlank()) items.add(item);
+        for (int i = 0; i < shapelessItems.size(); i++) {
+            addPaletteGroup(grouped, distinctGroups, shapelessItems.get(i),
+                    i < shapelessAlternatives.size() ? shapelessAlternatives.get(i) : List.of(),
+                    i < shapelessDistinct.size() && Boolean.TRUE.equals(shapelessDistinct.get(i)));
         }
-        return new ArrayList<>(items);
+        List<PaletteGroup> groups = new ArrayList<>();
+        grouped.forEach((primary, alternatives) -> groups.add(new PaletteGroup(primary,
+                new ArrayList<>(alternatives), distinctGroups.contains(primary))));
+        return groups;
+    }
+
+    private void addPaletteGroup(Map<String, LinkedHashSet<String>> groups, Set<String> distinctGroups,
+                                 String primary, List<String> alternatives, boolean distinct) {
+        if (primary == null || primary.isBlank()) return;
+        LinkedHashSet<String> values = groups.computeIfAbsent(primary, ignored -> new LinkedHashSet<>());
+        if (alternatives != null) alternatives.stream()
+                .filter(value -> value != null && !value.isBlank() && !value.equals(primary))
+                .forEach(values::add);
+        if (distinct) distinctGroups.add(primary);
+    }
+
+    private List<PaletteEntry> paletteEntries() {
+        List<PaletteEntry> entries = new ArrayList<>();
+        for (PaletteGroup group : paletteGroups()) {
+            boolean expanded = !group.alternatives().isEmpty() && expandedPaletteGroups.contains(group.primary());
+            entries.add(new PaletteEntry(group.primary(), group.primary(), group.alternatives().size(),
+                    group.distinct(), true, expanded));
+            if (expanded) {
+                for (String alternative : group.alternatives()) {
+                    entries.add(new PaletteEntry(alternative, group.primary(), 0, false, false, true));
+                }
+            }
+        }
+        return entries;
+    }
+
+    private PaletteEntry paletteEntryAtSlot(int slot) {
+        if (slot <= 0) return null;
+        List<PaletteEntry> entries = paletteEntries();
+        int index = slot - 1;
+        return index < entries.size() ? entries.get(index) : null;
+    }
+
+    private int paletteSlotAt(double mouseX, double mouseY) {
+        if (mouseX < paletteX() + 8 || mouseX >= paletteX() + paletteW()
+                || mouseY < paletteY() + 6 || mouseY >= paletteY() + paletteH()) return -1;
+        int column = (int) (mouseX - paletteX() - 8) / 24;
+        int row = (int) (mouseY - paletteY() - 6) / 24;
+        if (column < 0 || column >= paletteColumns() || row < 0 || row >= visiblePaletteRows()) return -1;
+        int cellX = paletteX() + 8 + column * 24;
+        int cellY = paletteY() + 6 + row * 24;
+        if (mouseX >= cellX + 20 || mouseY >= cellY + 20) return -1;
+        int slot = paletteScroll * paletteColumns() + row * paletteColumns() + column;
+        return slot < paletteEntries().size() + 1 ? slot : -1;
+    }
+
+    private void activatePaletteEntry(PaletteEntry entry) {
+        if (entry.primary() && entry.alternativeCount() > 0) {
+            selectPaletteGroup(entry.groupId());
+            return;
+        }
+        selectUsedItem(entry.itemId());
+    }
+
+    private void selectPaletteGroup(String primary) {
+        for (PaletteGroup group : paletteGroups()) {
+            if (!Objects.equals(group.primary(), primary)) continue;
+            heldItemId = group.primary();
+            heldAlternatives = List.copyOf(group.alternatives());
+            heldDistinct = group.distinct();
+            itemFieldText = shortId(group.primary());
+            itemMatches = new ArrayList<>();
+            suggestionScroll = 0;
+            restoreFocus = 0;
+            setFocused(null);
+            applyNewHeldItemToSelectedSlot();
+            clearAndInit();
+            return;
+        }
+    }
+
+    private void togglePaletteGroup(String primary) {
+        if (primary == null || primary.isBlank()) return;
+        if (!expandedPaletteGroups.add(primary)) expandedPaletteGroups.remove(primary);
+        paletteScroll = Math.min(paletteScroll, maxPaletteScroll());
+        clearAndInit();
     }
 
     private void selectUsedItem(String itemId) {
@@ -586,6 +748,8 @@ public class RecipeBuilderScreen extends Screen {
     private void selectShapelessSlot(int slot) {
         if (heldItemId != null && heldItemId.isEmpty()) {
             shapelessItems.set(slot, "");
+            shapelessAlternatives.get(slot).clear();
+            shapelessDistinct.set(slot, false);
             shapelessCounts.set(slot, 1);
             selectedShapelessSlot = -1;
             selectedSlot = -2;
@@ -602,7 +766,9 @@ public class RecipeBuilderScreen extends Screen {
     private void addShapelessSlot() {
         if (shapelessItems.size() < MAX_SHAPELESS_INGREDIENTS) {
             shapelessItems.add("");
+            shapelessAlternatives.add(new ArrayList<>());
             shapelessCounts.add(1);
+            shapelessDistinct.add(false);
         }
         selectedShapelessSlot = -1;
         clearAndInit();
@@ -611,10 +777,14 @@ public class RecipeBuilderScreen extends Screen {
     private void removeShapelessSlot(int slot) {
         if (shapelessItems.size() > 1) {
             shapelessItems.remove(slot);
+            shapelessAlternatives.remove(slot);
             shapelessCounts.remove(slot);
+            shapelessDistinct.remove(slot);
         } else {
             shapelessItems.set(0, "");
+            shapelessAlternatives.get(0).clear();
             shapelessCounts.set(0, 1);
+            shapelessDistinct.set(0, false);
         }
         selectedShapelessSlot = -1;
         clearAndInit();
@@ -622,7 +792,9 @@ public class RecipeBuilderScreen extends Screen {
 
     private void clearFirstShapelessSlot() {
         shapelessItems.set(0, "");
+        shapelessAlternatives.get(0).clear();
         shapelessCounts.set(0, 1);
+        shapelessDistinct.set(0, false);
         selectedShapelessSlot = -1;
         clearAndInit();
     }
@@ -632,35 +804,57 @@ public class RecipeBuilderScreen extends Screen {
         for (int i = 0; i < shapelessItems.size(); i++) {
             String itemId = shapelessItems.get(i);
             rows.add(new ShapelessRow(itemId == null ? "" : itemId, i,
-                    i < shapelessCounts.size() ? shapelessCounts.get(i) : 1));
+                    i < shapelessCounts.size() ? shapelessCounts.get(i) : 1,
+                    i < shapelessAlternatives.size() ? shapelessAlternatives.get(i).size() : 0));
         }
         return rows;
     }
 
-    private record ShapelessRow(String itemId, int slotIndex, int count) {}
-    private record IngredientKey(String itemId, int count) {}
+    private record ShapelessRow(String itemId, int slotIndex, int count, int alternativeCount) {}
+    private record PaletteGroup(String primary, List<String> alternatives, boolean distinct) {
+        private PaletteGroup {
+            alternatives = alternatives == null ? List.of() : List.copyOf(alternatives);
+        }
+    }
+    private record PaletteEntry(String itemId, String groupId, int alternativeCount, boolean distinct,
+                                boolean primary, boolean expanded) {}
+    private record IngredientKey(String itemId, List<String> alternatives, int count, boolean distinct) {
+        private IngredientKey {
+            alternatives = alternatives == null ? List.of() : List.copyOf(alternatives);
+        }
+    }
 
     private void toggleShapeMode() {
         if (shaped) {
             shapelessItems.clear();
             shapelessCounts.clear();
+            shapelessAlternatives.clear();
+            shapelessDistinct.clear();
             for (int i = 0; i < slotItems.length; i++) {
                 String itemId = slotItems[i];
                 if (itemId != null && !itemId.isBlank()) {
                     shapelessItems.add(itemId);
                     shapelessCounts.add(slotCounts[i]);
+                    shapelessAlternatives.add(new ArrayList<>(slotAlternatives.get(i)));
+                    shapelessDistinct.add(slotDistinct[i]);
                 }
             }
             if (shapelessItems.isEmpty()) {
                 shapelessItems.add("");
                 shapelessCounts.add(1);
+                shapelessAlternatives.add(new ArrayList<>());
+                shapelessDistinct.add(false);
             }
         } else {
             Arrays.fill(slotItems, "");
             Arrays.fill(slotCounts, 1);
+            Arrays.fill(slotDistinct, false);
+            slotAlternatives.forEach(List::clear);
             for (int i = 0; i < shapelessItems.size() && i < slotItems.length; i++) {
                 slotItems[i] = shapelessItems.get(i);
                 slotCounts[i] = shapelessCounts.get(i);
+                slotAlternatives.set(i, new ArrayList<>(shapelessAlternatives.get(i)));
+                slotDistinct[i] = i < shapelessDistinct.size() && Boolean.TRUE.equals(shapelessDistinct.get(i));
             }
         }
         shaped = !shaped;
@@ -668,6 +862,8 @@ public class RecipeBuilderScreen extends Screen {
         selectedShapelessSlot = -1;
         shapelessScroll = 0;
         heldItemId = null;
+        heldAlternatives = List.of();
+        heldDistinct = false;
     }
 
     private void addShapelessListControls() {
@@ -684,7 +880,7 @@ public class RecipeBuilderScreen extends Screen {
                     if (rowIndex == 0 && rows.size() == 1) clearFirstShapelessSlot();
                     else removeShapelessSlot(row.slotIndex());
                 }).dimensions(removeX, y + 4, 18, 18).build());
-                addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+                addDrawable((ctx, mx, my, d) -> drawForegroundSprite(ctx,
                         CustomRecipeSprites.REJECT, removeX, y + 4, 18, 18));
             }
         }
@@ -723,7 +919,9 @@ public class RecipeBuilderScreen extends Screen {
                         if (!stack.isEmpty()) {
                             ctx.drawItem(stack, sx + 1, sy + 1);
                             ctx.drawItemInSlot(textRenderer, stack, sx + 1, sy + 1,
-                                    String.valueOf(slotCounts[slot]));
+                                    slotAlternatives.get(slot).isEmpty()
+                                            ? String.valueOf(slotCounts[slot])
+                                            : "+" + slotAlternatives.get(slot).size());
                         }
                     }
                 }
@@ -783,28 +981,51 @@ public class RecipeBuilderScreen extends Screen {
         int paletteW = paletteW();
         ctx.fill(paletteX + 1, paletteY + 1, paletteX + paletteW - 1, paletteY + paletteH - 1, 0xEE25313A);
         drawBox(ctx, paletteX, paletteY, paletteW, paletteH, 0xFF3E6B84);
-        // Reusable items only: the selected item already follows the cursor.
-        List<String> used = usedItems();
-        for (int i = 0; i <= used.size(); i++) {
-            int x = paletteX + 8 + (i % paletteColumns()) * 24;
-            int y = paletteY + 6 + (i / paletteColumns()) * 24;
+        // Reusable items only: alternative sets stay folded under their primary item.
+        List<PaletteEntry> entries = paletteEntries();
+        int columns = paletteColumns();
+        int firstSlot = paletteScroll * columns;
+        int lastSlot = Math.min(entries.size() + 1, firstSlot + visiblePaletteRows() * columns);
+        for (int slot = firstSlot; slot < lastSlot; slot++) {
+            int visibleIndex = slot - firstSlot;
+            int x = paletteX + 8 + (visibleIndex % columns) * 24;
+            int y = paletteY + 6 + (visibleIndex / columns) * 24;
             boolean hovered = mx >= x && mx < x + 20 && my >= y && my < y + 20;
-            boolean empty = i == 0;
+            boolean empty = slot == 0;
+            PaletteEntry entry = paletteEntryAtSlot(slot);
             ctx.fill(x + 1, y + 1, x + 19, y + 19,
                     hovered ? 0xFF315D7D : empty ? 0xFF242A30 : 0xFF303030);
-            drawBox(ctx, x, y, 20, 20, hovered ? 0xFF78C8FF : empty ? 0xFF9A6670 : 0xFF5C6D78);
+            int border = entry != null && !entry.primary() ? 0xFF6B8E9E : 0xFF5C6D78;
+            drawBox(ctx, x, y, 20, 20, hovered ? 0xFF78C8FF : empty ? 0xFF9A6670 : border);
             if (empty) {
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, x + 1, y + 1, 18, 18);
-            } else {
-                ItemStack stack = stackFor(used.get(i - 1));
-                if (!stack.isEmpty()) ctx.drawItem(stack, x + 2, y + 2);
+            } else if (entry != null) {
+                ItemStack stack = stackFor(entry.itemId());
+                if (!stack.isEmpty()) {
+                    ctx.drawItem(stack, x + 2, y + 2);
+                    if (entry.primary() && entry.alternativeCount() > 0) {
+                        ctx.drawItemInSlot(textRenderer, stack, x + 2, y + 2,
+                                entry.expanded() ? "−" : "+" + entry.alternativeCount());
+                    }
+                }
             }
+        }
+        if (hasPaletteScrollbar()) {
+            int trackX = paletteScrollbarX();
+            int trackY = paletteScrollbarY();
+            int trackH = paletteScrollbarH();
+            int thumbH = 15;
+            int thumbY = trackY + (trackH - thumbH) * paletteScroll / maxPaletteScroll();
+            ctx.fill(trackX, trackY, trackX + 12, trackY + trackH, SCROLLBAR_TRACK_COLOR);
+            CustomRecipeSprites.draw(ctx,
+                    draggingPaletteScrollbar ? CustomRecipeSprites.SCROLLER_ACTIVE : CustomRecipeSprites.SCROLLER_IDLE,
+                    trackX, thumbY, 12, 15);
         }
     }
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
+        renderBackground(ctx, mouseX, mouseY, delta);
         super.render(ctx, mouseX, mouseY, delta);
         if (itemField != null)
             drawBox(ctx, leftX(), fieldY(), leftW(), SEARCH_H,
@@ -816,16 +1037,26 @@ public class RecipeBuilderScreen extends Screen {
                 && mouseY >= panelY() && mouseY < panelY() + workspaceH()) {
             int ghostX = mouseX - 8;
             int ghostY = mouseY - 8;
-            if (heldItemId.isEmpty()) {
-                CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, ghostX - 1, ghostY - 1, 18, 18);
-            } else {
-                ItemStack heldItem = stackFor(heldItemId);
-                if (!heldItem.isEmpty()) {
-                ctx.drawItem(heldItem, ghostX, ghostY);
-                // This GUI item pipeline has no alpha overload. Its
-                // translucent veil keeps the cursor item at 80% visual weight.
-                ctx.fill(ghostX, ghostY, ghostX + 16, ghostY + 16, 0x33000000);
+            ctx.getMatrices().push();
+            ctx.getMatrices().translate(0.0F, 0.0F, HELD_ITEM_LAYER_Z);
+            try {
+                if (heldItemId.isEmpty()) {
+                    CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, ghostX - 1, ghostY - 1, 18, 18);
+                } else {
+                    ItemStack heldItem = stackFor(heldItemId);
+                    if (!heldItem.isEmpty()) {
+                        ctx.drawItem(heldItem, ghostX, ghostY);
+                        // This GUI item pipeline has no alpha overload. Its
+                        // translucent veil keeps the cursor item at 80% visual weight.
+                        ctx.fill(ghostX, ghostY, ghostX + 16, ghostY + 16, 0x33000000);
+                        if (!heldAlternatives.isEmpty()) {
+                            ctx.drawItemInSlot(textRenderer, heldItem, ghostX, ghostY,
+                                    "+" + heldAlternatives.size());
+                        }
+                    }
                 }
+            } finally {
+                ctx.getMatrices().pop();
             }
         }
 
@@ -845,15 +1076,35 @@ public class RecipeBuilderScreen extends Screen {
             }
         }
 
-        List<String> used = usedItems();
         int paletteY = paletteY();
         int paletteX = paletteX();
-        for (int i = 0; i <= used.size(); i++) {
-            int x = paletteX + 8 + (i % paletteColumns()) * 24;
-            int y = paletteY + 6 + (i / paletteColumns()) * 24;
+        int columns = paletteColumns();
+        int firstSlot = paletteScroll * columns;
+        int lastSlot = Math.min(paletteEntries().size() + 1, firstSlot + visiblePaletteRows() * columns);
+        for (int slot = firstSlot; slot < lastSlot; slot++) {
+            int visibleIndex = slot - firstSlot;
+            int x = paletteX + 8 + (visibleIndex % columns) * 24;
+            int y = paletteY + 6 + (visibleIndex / columns) * 24;
             if (mouseX >= x && mouseX < x + 20 && mouseY >= y && mouseY < y + 20) {
-                ctx.drawOrderedTooltip(textRenderer,
-                        List.of(i == 0 ? Text.translatable("customrecipe.builder.empty_remove").asOrderedText() : Text.literal(used.get(i - 1)).asOrderedText()), mouseX, mouseY);
+                PaletteEntry entry = paletteEntryAtSlot(slot);
+                List<net.minecraft.text.OrderedText> tooltip = new ArrayList<>();
+                if (slot == 0) {
+                    tooltip.add(Text.translatable("customrecipe.builder.empty_remove").asOrderedText());
+                } else if (entry != null) {
+                    tooltip.add(Text.literal(entry.itemId()).asOrderedText());
+                    if (entry.primary() && entry.alternativeCount() > 0) {
+                        tooltip.add(Text.translatable("customrecipe.builder.group_use",
+                                entry.alternativeCount()).asOrderedText());
+                        tooltip.add(Text.translatable(entry.expanded()
+                                ? "customrecipe.builder.group_collapse" : "customrecipe.builder.group_expand")
+                                .asOrderedText());
+                        if (entry.distinct()) tooltip.add(Text.translatable(
+                                "customrecipe.builder.group_distinct").asOrderedText());
+                    } else if (!entry.primary()) {
+                        tooltip.add(Text.translatable("customrecipe.builder.group_alternative").asOrderedText());
+                    }
+                }
+                ctx.drawOrderedTooltip(textRenderer, tooltip, mouseX, mouseY);
                 break;
             }
         }
@@ -870,12 +1121,24 @@ public class RecipeBuilderScreen extends Screen {
                 && my >= height - 48) {
             return super.mouseClicked(mx, my, button);
         }
+        // A group itself is selected with left click. Right click is reserved
+        // for unfolding/folding its individual alternatives.
+        if (button == RIGHT_MOUSE_BUTTON) {
+            int paletteSlot = paletteSlotAt(mx, my);
+            PaletteEntry entry = paletteSlot <= 0 ? null : paletteEntryAtSlot(paletteSlot);
+            if (entry != null && entry.primary() && entry.alternativeCount() > 0) {
+                togglePaletteGroup(entry.groupId());
+                return true;
+            }
+        }
         // Right-clicking the preview area cancels the item currently carried
         // by the cursor; it never edits a recipe slot.
         if (button == RIGHT_MOUSE_BUTTON
                 && mx >= rightX() && mx < rightX() + rightW()
                 && my >= panelY() && my < panelY() + workspaceH()) {
             heldItemId = null;
+            heldAlternatives = List.of();
+            heldDistinct = false;
             selectedSlot = -2;
             selectedShapelessSlot = -1;
             clearAndInit();
@@ -896,6 +1159,11 @@ public class RecipeBuilderScreen extends Screen {
                             int amountX = sx + SLOT - textRenderer.getWidth(amount) - 2;
                             if (mx >= amountX && my >= sy + SLOT - 9) {
                                 editIngredientCount(slot, false);
+                                return true;
+                            }
+                            if (heldItemId == null && selectedSlot == slot
+                                    && !slotAlternatives.get(slot).isEmpty()) {
+                                togglePaletteGroup(slotItems[slot]);
                                 return true;
                             }
                         }
@@ -926,6 +1194,11 @@ public class RecipeBuilderScreen extends Screen {
                 }
                 if (mx >= listX + 4 && mx < listX + 4 + SLOT
                         && my >= slotY + 4 && my < slotY + 4 + SLOT) {
+                    if (heldItemId == null && selectedShapelessSlot == row.slotIndex()
+                            && row.alternativeCount() > 0) {
+                        togglePaletteGroup(row.itemId());
+                        return true;
+                    }
                     selectShapelessSlot(row.slotIndex());
                     return true;
                 }
@@ -982,15 +1255,27 @@ public class RecipeBuilderScreen extends Screen {
         }
 
         {
-            List<String> used = usedItems();
             int paletteY = paletteY();
             int paletteX = paletteX();
-            for (int i = 0; i <= used.size(); i++) {
-                int x = paletteX + 8 + (i % paletteColumns()) * 24;
-                int y = paletteY + 6 + (i / paletteColumns()) * 24;
+            if (isOverPaletteScrollbar(mx, my)) {
+                draggingPaletteScrollbar = true;
+                updatePaletteScrollbar(my);
+                return true;
+            }
+            int columns = paletteColumns();
+            int firstSlot = paletteScroll * columns;
+            int lastSlot = Math.min(paletteEntries().size() + 1,
+                    firstSlot + visiblePaletteRows() * columns);
+            for (int slot = firstSlot; slot < lastSlot; slot++) {
+                int visibleIndex = slot - firstSlot;
+                int x = paletteX + 8 + (visibleIndex % columns) * 24;
+                int y = paletteY + 6 + (visibleIndex / columns) * 24;
                 if (mx >= x && mx < x + 20 && my >= y && my < y + 20) {
-                    if (i == 0) selectEmptyItem();
-                    else selectUsedItem(used.get(i - 1));
+                    if (slot == 0) selectEmptyItem();
+                    else {
+                        PaletteEntry entry = paletteEntryAtSlot(slot);
+                        if (entry != null) activatePaletteEntry(entry);
+                    }
                     return true;
                 }
             }
@@ -1001,6 +1286,18 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double horizontalAmount, double verticalAmount) {
+        int countDelta = (int) Math.signum(verticalAmount);
+        if (countDelta != 0 && ingredientCountField != null && ingredientCountField.isMouseOver(mx, my)) {
+            int next = Math.max(1, Math.min(selectedIngredientMaxCount(), selectedIngredientCount() + countDelta));
+            setSelectedIngredientCount(next);
+            ingredientCountField.setText(String.valueOf(next));
+            return true;
+        }
+        if (countDelta != 0 && resultCountField != null && resultCountField.isMouseOver(mx, my)) {
+            resultCount = Math.max(1, Math.min(64, resultCount + countDelta));
+            resultCountField.setText(String.valueOf(resultCount));
+            return true;
+        }
         if (!shaped && hasShapelessScrollbar()
                 && mx >= shapelessScrollbarX() && mx < shapelessListX() + shapelessListW()
                 && my >= shapelessListY() && my < shapelessListY() + visibleShapelessRows() * SHAPELESS_ROW_H) {
@@ -1010,6 +1307,13 @@ public class RecipeBuilderScreen extends Screen {
                 shapelessScroll = next;
                 clearAndInit();
             }
+            return true;
+        }
+        if (mx >= paletteX() && mx < paletteX() + paletteW()
+                && my >= paletteY() && my < paletteY() + paletteH()) {
+            int direction = -(int) Math.signum(verticalAmount);
+            int next = Math.max(0, Math.min(maxPaletteScroll(), paletteScroll + direction));
+            if (next != paletteScroll) paletteScroll = next;
             return true;
         }
         int sy = suggestionRowsTop();
@@ -1043,6 +1347,10 @@ public class RecipeBuilderScreen extends Screen {
             updateSuggestionScrollbar(my);
             return true;
         }
+        if (draggingPaletteScrollbar) {
+            updatePaletteScrollbar(my);
+            return true;
+        }
         return super.mouseDragged(mouseX, my, button, deltaX, deltaY);
     }
 
@@ -1050,6 +1358,7 @@ public class RecipeBuilderScreen extends Screen {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         draggingShapelessScrollbar = false;
         draggingSuggestionScrollbar = false;
+        draggingPaletteScrollbar = false;
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
@@ -1085,6 +1394,14 @@ public class RecipeBuilderScreen extends Screen {
         }
     }
 
+    private void updatePaletteScrollbar(double mouseY) {
+        int maxScroll = maxPaletteScroll();
+        if (maxScroll <= 0) return;
+        double progress = Math.max(0.0, Math.min(1.0,
+                (mouseY - paletteScrollbarY()) / Math.max(1, paletteScrollbarH() - 1)));
+        paletteScroll = (int) Math.round(progress * maxScroll);
+    }
+
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == 256) { // Escape
@@ -1115,6 +1432,10 @@ public class RecipeBuilderScreen extends Screen {
         entry.server_enabled = editingEntry == null ? null : editingEntry.server_enabled;
         entry.enabled = editingEntry == null ? null : editingEntry.enabled;
         entry.quick_add = editingEntry == null ? null : editingEntry.quick_add;
+        entry.global_auto_add = editingEntry == null || parent.target().isWorld()
+                ? null : editingEntry.global_auto_add;
+        // Editing an automatically added world copy makes it an independent local recipe.
+        entry.global_library_source_id = null;
         entry.known_by_default = knownByDefault;
         entry.result = resultItemId;
         entry.count  = Math.max(1, resultCount);
@@ -1133,7 +1454,9 @@ public class RecipeBuilderScreen extends Screen {
                         row.append(' ');
                     } else {
                         IngredientKey ingredient = new IngredientKey(id,
-                                clampIngredientCount(id, slotCounts[r * 3 + c]));
+                                slotAlternatives.get(r * 3 + c),
+                                clampIngredientCount(id, slotAlternatives.get(r * 3 + c), slotCounts[r * 3 + c]),
+                                slotDistinct[r * 3 + c]);
                         if (!itemToChar.containsKey(ingredient)) itemToChar.put(ingredient, next++);
                         row.append(itemToChar.get(ingredient));
                     }
@@ -1144,7 +1467,9 @@ public class RecipeBuilderScreen extends Screen {
             for (Map.Entry<IngredientKey, Character> kv : itemToChar.entrySet()) {
                 String symbol = String.valueOf(kv.getValue());
                 entry.keys.put(symbol, kv.getKey().itemId());
+                entry.key_alternatives.put(symbol, new ArrayList<>(kv.getKey().alternatives()));
                 entry.key_counts.put(symbol, kv.getKey().count());
+                entry.key_distinct.put(symbol, kv.getKey().distinct());
             }
         } else {
             entry.type = "shapeless";
@@ -1152,7 +1477,11 @@ public class RecipeBuilderScreen extends Screen {
                 String itemId = shapelessItems.get(i);
                 if (itemId != null && !itemId.isEmpty()) {
                     entry.ingredients.add(itemId);
-                    entry.ingredient_counts.add(clampIngredientCount(itemId, shapelessCounts.get(i)));
+                    entry.ingredient_alternatives.add(new ArrayList<>(shapelessAlternatives.get(i)));
+                    entry.ingredient_counts.add(clampIngredientCount(itemId, shapelessAlternatives.get(i),
+                            shapelessCounts.get(i)));
+                    entry.ingredient_distinct.add(i < shapelessDistinct.size()
+                            && Boolean.TRUE.equals(shapelessDistinct.get(i)));
                 }
             }
         }
@@ -1198,9 +1527,40 @@ public class RecipeBuilderScreen extends Screen {
         return stack.isEmpty() ? 1 : Math.max(1, Math.min(64, stack.getMaxCount()));
     }
 
+    private int maxIngredientCount(String itemId, List<String> alternatives) {
+        int max = maxIngredientCount(itemId);
+        if (alternatives != null) {
+            for (String alternative : alternatives) max = Math.min(max, maxIngredientCount(alternative));
+        }
+        return max;
+    }
+
     private int clampIngredientCount(String itemId, int value) {
         return Math.max(1, Math.min(maxIngredientCount(itemId), value));
     }
+
+    private int clampIngredientCount(String itemId, List<String> alternatives, int value) {
+        return Math.max(1, Math.min(maxIngredientCount(itemId, alternatives), value));
+    }
+
+    private static List<String> alternativesOnly(List<String> options, String primary) {
+        List<String> alternatives = new ArrayList<>();
+        if (options != null) {
+            for (String option : options) {
+                if (option != null && !option.isBlank() && !Objects.equals(option, primary)
+                        && !alternatives.contains(option)) alternatives.add(option);
+            }
+        }
+        return alternatives;
+    }
+
+    List<String> alternativeMatches(String query) { return findItemMatches(query); }
+    String alternativeDisplayName(String itemId) {
+        // Custom items use their configured display name; the full reference
+        // remains available in the hover tooltip for diagnostics.
+        return toDisplayName(itemId);
+    }
+    ItemStack alternativeStack(String itemId) { return stackFor(itemId); }
 
     @Override
     public void close() {
@@ -1214,7 +1574,9 @@ public class RecipeBuilderScreen extends Screen {
     private String draftFingerprint() {
         return shaped + "|" + resultItemId + "|" + resultCount + "|" + knownByDefault + "|" + alsoSaveToLibrary
                 + "|" + Arrays.toString(slotItems) + "|" + Arrays.toString(slotCounts)
-                + "|" + String.join("\\u001F", shapelessItems) + "|" + shapelessCounts;
+                + "|" + slotAlternatives + "|" + Arrays.toString(slotDistinct)
+                + "|" + String.join("\\u001F", shapelessItems) + "|" + shapelessCounts
+                + "|" + shapelessAlternatives + "|" + shapelessDistinct;
     }
 
     private void renderShapelessIngredientList(DrawContext ctx, int mouseX, int mouseY) {
@@ -1240,7 +1602,8 @@ public class RecipeBuilderScreen extends Screen {
             if (itemId != null && !itemId.isEmpty()) {
                 ItemStack stack = stackFor(itemId);
                 if (!stack.isEmpty()) ctx.drawItem(stack, x + 5, rowY + 5);
-                String name = textRenderer.trimToWidth(toDisplayName(itemId), Math.max(20, countX - x - 46));
+                String suffix = row.alternativeCount() == 0 ? "" : " (+" + row.alternativeCount() + ")";
+                String name = textRenderer.trimToWidth(toDisplayName(itemId) + suffix, Math.max(20, countX - x - 46));
                 ctx.drawText(textRenderer, name, x + 42, rowY + 8, 0xFFDDDDDD, false);
                 ctx.drawText(textRenderer, "×" + row.count(), countX, rowY + 7,
                         selectedShapelessSlot == row.slotIndex() ? 0xFFFFFFFF : 0xFFEECC77, false);
@@ -1293,6 +1656,16 @@ public class RecipeBuilderScreen extends Screen {
         ctx.drawHorizontalLine(x, x + w - 1, y + h - 1, c);
         ctx.drawVerticalLine(x, y, y + h - 1, c);
         ctx.drawVerticalLine(x + w - 1, y, y + h - 1, c);
+    }
+
+    private void drawForegroundSprite(DrawContext ctx, Identifier sprite, int x, int y, int w, int h) {
+        ctx.getMatrices().push();
+        ctx.getMatrices().translate(0.0F, 0.0F, CONTROL_LAYER_Z);
+        try {
+            CustomRecipeSprites.draw(ctx, sprite, x, y, w, h);
+        } finally {
+            ctx.getMatrices().pop();
+        }
     }
 
     private void drawPanel(DrawContext ctx, int x, int y, int w, int h, int fill, int border) {

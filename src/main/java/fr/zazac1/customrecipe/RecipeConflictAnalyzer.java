@@ -67,17 +67,17 @@ public final class RecipeConflictAnalyzer {
 
     private static boolean overlaps(CustomRecipeEntry custom, CraftingRecipe wrappedCandidate) {
         if (wrappedCandidate instanceof DisabledCraftingRecipe) return false;
-        if (wrappedCandidate instanceof VariantFilteredCraftingRecipe filtered
-                && filtered.blocksAny(inputItems(custom))) return false;
-        CraftingRecipe candidate = unwrap(wrappedCandidate);
         Layout customLayout = layoutOf(custom);
         if (customLayout == null) return false;
+        if (wrappedCandidate instanceof VariantFilteredCraftingRecipe filtered
+                && customLayout.nonEmptyOptions().stream().anyMatch(filtered::blocksAll)) return false;
+        CraftingRecipe candidate = unwrap(wrappedCandidate);
         if (candidate instanceof ShapedRecipe shaped) {
             Layout candidateLayout = layoutOf(shaped);
             return candidateLayout != null && overlapsCustomAndCandidate(customLayout, candidateLayout);
         }
         List<Ingredient> ingredients = candidate.getIngredients();
-        return !ingredients.isEmpty() && matchesUnordered(inputItems(customLayout), ingredients);
+        return !ingredients.isEmpty() && matchesUnordered(customLayout.nonEmptyOptions(), ingredients);
     }
 
     private static boolean overlaps(CustomRecipeEntry first, CustomRecipeEntry second) {
@@ -90,46 +90,42 @@ public final class RecipeConflictAnalyzer {
         if (first.shaped && second.shaped) {
             if (first.width != second.width || first.height != second.height) return false;
             for (int index = 0; index < first.slots.size(); index++) {
-                String a = first.slots.get(index);
-                String b = second.slots.get(index);
-                if (a == null ? b != null : !a.equals(b)) return false;
+                List<String> a = first.slots.get(index);
+                List<String> b = second.slots.get(index);
+                if (a == null ? b != null : b == null || !overlap(a, b)) return false;
             }
             return true;
         }
-        List<String> firstItems = inputItems(first);
-        List<String> secondItems = inputItems(second);
-        firstItems.sort(String::compareTo);
-        secondItems.sort(String::compareTo);
-        return firstItems.equals(secondItems);
+        return matchesUnorderedOptions(first.nonEmptyOptions(), second.nonEmptyOptions());
     }
 
     private static boolean overlapsCustomAndCandidate(Layout custom, Layout candidate) {
         if (custom.shaped && candidate.shaped) {
             if (custom.width != candidate.width || custom.height != candidate.height) return false;
             for (int index = 0; index < custom.slots.size(); index++) {
-                String item = custom.slots.get(index);
+                List<String> options = custom.slots.get(index);
                 Ingredient ingredient = candidate.ingredients.get(index);
-                if (item == null ? ingredient != null : ingredient == null || !accepts(ingredient, item)) return false;
+                if (options == null ? ingredient != null : ingredient == null || !acceptsAny(ingredient, options)) return false;
             }
             return true;
         }
-        return matchesUnordered(inputItems(custom), candidate.nonEmptyIngredients());
+        return matchesUnordered(custom.nonEmptyOptions(), candidate.nonEmptyIngredients());
     }
 
-    private static boolean matchesUnordered(List<String> items, List<Ingredient> ingredients) {
-        if (items.size() != ingredients.size()) return false;
+    private static boolean matchesUnordered(List<List<String>> options, List<Ingredient> ingredients) {
+        if (options.size() != ingredients.size()) return false;
         boolean[] assigned = new boolean[ingredients.size()];
-        return assignItem(0, items, ingredients, assigned);
+        return assignItem(0, options, ingredients, assigned);
     }
 
     /** Small bipartite matching: it preserves duplicated ingredients and handles tags/alternatives. */
-    private static boolean assignItem(int itemIndex, List<String> items, List<Ingredient> ingredients, boolean[] assigned) {
-        if (itemIndex == items.size()) return true;
-        String item = items.get(itemIndex);
+    private static boolean assignItem(int itemIndex, List<List<String>> options, List<Ingredient> ingredients, boolean[] assigned) {
+        if (itemIndex == options.size()) return true;
+        List<String> itemOptions = options.get(itemIndex);
         for (int ingredientIndex = 0; ingredientIndex < ingredients.size(); ingredientIndex++) {
-            if (assigned[ingredientIndex] || !accepts(ingredients.get(ingredientIndex), item)) continue;
+            if (assigned[ingredientIndex] || !acceptsAny(ingredients.get(ingredientIndex), itemOptions)) continue;
             assigned[ingredientIndex] = true;
-            if (assignItem(itemIndex + 1, items, ingredients, assigned)) return true;
+            if (assignItem(itemIndex + 1, options, ingredients, assigned)) return true;
             assigned[ingredientIndex] = false;
         }
         return false;
@@ -138,6 +134,32 @@ public final class RecipeConflictAnalyzer {
     private static boolean accepts(Ingredient ingredient, String itemId) {
         Identifier id = Identifier.tryParse(itemId);
         return id != null && Registries.ITEM.containsId(id) && ingredient.test(new ItemStack(Registries.ITEM.get(id)));
+    }
+
+    private static boolean acceptsAny(Ingredient ingredient, List<String> options) {
+        return options.stream().anyMatch(item -> accepts(ingredient, item));
+    }
+
+    private static boolean overlap(List<String> first, List<String> second) {
+        return first.stream().anyMatch(second::contains);
+    }
+
+    private static boolean matchesUnorderedOptions(List<List<String>> first, List<List<String>> second) {
+        if (first.size() != second.size()) return false;
+        boolean[] assigned = new boolean[second.size()];
+        return assignOptions(0, first, second, assigned);
+    }
+
+    private static boolean assignOptions(int index, List<List<String>> first, List<List<String>> second,
+                                         boolean[] assigned) {
+        if (index == first.size()) return true;
+        for (int candidate = 0; candidate < second.size(); candidate++) {
+            if (assigned[candidate] || !overlap(first.get(index), second.get(candidate))) continue;
+            assigned[candidate] = true;
+            if (assignOptions(index + 1, first, second, assigned)) return true;
+            assigned[candidate] = false;
+        }
+        return false;
     }
 
     private static boolean sameOutput(CustomRecipeEntry custom, CraftingRecipe candidate,
@@ -182,29 +204,30 @@ public final class RecipeConflictAnalyzer {
         if (entry == null) return null;
         if (!"shaped".equalsIgnoreCase(entry.type)) {
             if (entry.ingredients == null || entry.ingredients.isEmpty()) return null;
-            List<String> items = new ArrayList<>();
-            for (String item : entry.ingredients) {
+            List<List<String>> items = new ArrayList<>();
+            for (int index = 0; index < entry.ingredients.size(); index++) {
+                String item = entry.ingredients.get(index);
                 if (item == null || item.isBlank()) return null;
-                items.add(item.trim());
+                items.add(entry.ingredientOptions(index));
             }
             return new Layout(false, items.size(), 1, items, List.of());
         }
         if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
         int width = entry.pattern.stream().mapToInt(String::length).max().orElse(0);
-        List<String> slots = new ArrayList<>();
+        List<List<String>> slots = new ArrayList<>();
         for (String row : entry.pattern) {
             for (int column = 0; column < width; column++) {
                 char symbol = column < row.length() ? row.charAt(column) : ' ';
                 String item = symbol == ' ' ? null : entry.keys.get(String.valueOf(symbol));
                 if (symbol != ' ' && (item == null || item.isBlank())) return null;
-                slots.add(item == null ? null : item.trim());
+                slots.add(item == null ? null : entry.keyOptions(String.valueOf(symbol)));
             }
         }
         return trim(new Layout(true, width, entry.pattern.size(), slots, List.of()));
     }
 
     private static Layout layoutOf(ShapedRecipe recipe) {
-        List<String> items = new ArrayList<>();
+        List<List<String>> items = new ArrayList<>();
         List<Ingredient> ingredients = new ArrayList<>();
         for (Ingredient value : recipe.getIngredients()) {
             Ingredient ingredient = value == null || value.isEmpty() ? null : value;
@@ -227,7 +250,7 @@ public final class RecipeConflictAnalyzer {
             }
         }
         if (right < left || bottom < top) return null;
-        List<String> slots = new ArrayList<>();
+        List<List<String>> slots = new ArrayList<>();
         List<Ingredient> ingredients = new ArrayList<>();
         for (int row = top; row <= bottom; row++) {
             for (int column = left; column <= right; column++) {
@@ -239,28 +262,21 @@ public final class RecipeConflictAnalyzer {
         return new Layout(true, right - left + 1, bottom - top + 1, slots, ingredients);
     }
 
-    private static List<String> inputItems(CustomRecipeEntry entry) {
-        Layout layout = layoutOf(entry);
-        return layout == null ? List.of() : inputItems(layout);
-    }
-
-    private static List<String> inputItems(Layout layout) {
-        List<String> items = new ArrayList<>();
-        for (String item : layout.slots) if (item != null) items.add(item);
-        return items;
-    }
-
     private static List<String> distinctSorted(List<String> ids) {
         return ids.stream().distinct().sorted(Comparator.naturalOrder()).toList();
     }
 
-    private record Layout(boolean shaped, int width, int height, List<String> slots, List<Ingredient> ingredients) {
+    private record Layout(boolean shaped, int width, int height, List<List<String>> slots, List<Ingredient> ingredients) {
         boolean isEmpty(int index) {
             return ingredients.isEmpty() ? slots.get(index) == null : ingredients.get(index) == null;
         }
 
         List<Ingredient> nonEmptyIngredients() {
             return ingredients.stream().filter(java.util.Objects::nonNull).toList();
+        }
+
+        List<List<String>> nonEmptyOptions() {
+            return slots.stream().filter(java.util.Objects::nonNull).toList();
         }
     }
 }

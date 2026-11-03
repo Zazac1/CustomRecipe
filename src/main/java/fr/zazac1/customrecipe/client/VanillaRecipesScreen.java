@@ -33,12 +33,13 @@ import java.nio.file.Path;
 import java.nio.file.Files;
 import java.util.Enumeration;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.jar.JarFile;
 
 /** Server-filtered default crafting recipe browser for OPs, including installed mods. */
 @Environment(EnvType.CLIENT)
 public class VanillaRecipesScreen extends Screen {
-    private static List<VanillaRecipePage.VanillaRecipeInfo> startupRecipeCache = List.of();
+    private static volatile List<VanillaRecipePage.VanillaRecipeInfo> startupRecipeCache = List.of();
     private static boolean startupPreloadStarted;
     private static final int ROW = 20;
     private static final int LEFT_HEADER_Y = 34;
@@ -128,7 +129,7 @@ public class VanillaRecipesScreen extends Screen {
 
         List<VanillaRecipePage.VanillaRecipeInfo> filtered = new ArrayList<>();
         for (VanillaRecipePage.VanillaRecipeInfo recipe : recipes) {
-            boolean disabled = parent.disabledRecipes.contains(recipe.id());
+            boolean disabled = parent.isDefaultRecipeDisabled(recipe.id());
             if ((statusFilter == StatusFilter.DISABLED && disabled && !recipe.special())
                     || (statusFilter == StatusFilter.ENABLED && !disabled && !recipe.special())
                     || (statusFilter == StatusFilter.SPECIAL && recipe.special())) {
@@ -190,13 +191,14 @@ public class VanillaRecipesScreen extends Screen {
     static void preloadAtStartup(net.minecraft.client.MinecraftClient client) {
         if (startupPreloadStarted || !startupRecipeCache.isEmpty() || client.getResourceManager() == null) return;
         startupPreloadStarted = true;
-        try {
+        CompletableFuture.supplyAsync(() -> {
             VanillaRecipesScreen scanner = new VanillaRecipesScreen(null, true);
-            VanillaRecipePage page = scanner.findLocalRecipes();
-            startupRecipeCache = List.copyOf(page.recipes());
-        } catch (RuntimeException exception) {
-            startupPreloadStarted = false;
-        }
+            // This screen is never displayed, so Minecraft does not initialise its
+            // client field for us.  The scanner only performs read-only resource work.
+            scanner.client = client;
+            return List.copyOf(scanner.findLocalRecipes().recipes());
+        }).thenAccept(recipes -> client.execute(() -> startupRecipeCache = recipes))
+                .exceptionally(error -> null);
     }
 
     ConfigScreen configScreen() { return parent; }
@@ -244,7 +246,7 @@ public class VanillaRecipesScreen extends Screen {
         for (int i = 0; i < visibleRows && scroll + i < shownRecipes.size(); i++) {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
             int y = LEFT_ROWS_Y + i * ROW;
-            boolean disabled = parent.disabledRecipes.contains(recipe.id());
+            boolean disabled = parent.isDefaultRecipeDisabled(recipe.id());
             addDrawableChild(ButtonWidget.builder(recipeLabel(recipe), b -> selectRecipe(recipe))
                     .dimensions(recipeLabelX(), y, recipeLabelW(), ROW).build());
             addDrawableChild(ButtonWidget.builder(disabled ? Text.translatable("customrecipe.state.disabled").withColor(0xFF5555)
@@ -328,7 +330,7 @@ public class VanillaRecipesScreen extends Screen {
             return;
         }
         ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput,
-                statusFilter.name(), sourceFilter.name(), parent.disabledRecipes, 0);
+                statusFilter.name(), sourceFilter.name(), parent.effectiveDisabledRecipes(), 0);
     }
 
     /** Refresh after a short pause so typing does not scan or query once per key. */
@@ -350,7 +352,7 @@ public class VanillaRecipesScreen extends Screen {
         if (localMode || loading || recipes.size() >= total) return;
         loading = true;
         ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput,
-                statusFilter.name(), sourceFilter.name(), parent.disabledRecipes, nextPage);
+                statusFilter.name(), sourceFilter.name(), parent.effectiveDisabledRecipes(), nextPage);
     }
 
     private VanillaRecipePage findLocalRecipes() {
@@ -577,7 +579,7 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     private void toggle(String recipeId) {
-        if (!parent.disabledRecipes.remove(recipeId)) parent.disabledRecipes.add(recipeId);
+        parent.toggleDefaultRecipe(recipeId);
         scroll = Math.min(scroll, maxScroll(filteredRecipes()));
         clearAndInit();
     }
@@ -770,21 +772,14 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     boolean isVariantDisabled(String recipeId, String materialId) {
-        return parent.disabledRecipeVariants.stream().anyMatch(rule -> recipeId.equals(rule.recipe_id) && materialId.equals(rule.material_id));
+        return parent.isDefaultRecipeVariantDisabled(recipeId, materialId);
     }
 
     void toggleVariant(String recipeId, String materialId) {
-        for (int i = 0; i < parent.disabledRecipeVariants.size(); i++) {
-            var rule = parent.disabledRecipeVariants.get(i);
-            if (recipeId.equals(rule.recipe_id) && materialId.equals(rule.material_id)) {
-                parent.disabledRecipeVariants.remove(i);
-                return;
-            }
-        }
-        parent.disabledRecipeVariants.add(new fr.zazac1.customrecipe.RecipeVariantRule(recipeId, materialId));
+        parent.toggleDefaultRecipeVariant(recipeId, materialId);
     }
 
-    boolean isRecipeDisabled(String recipeId) { return parent.disabledRecipes.contains(recipeId); }
+    boolean isRecipeDisabled(String recipeId) { return parent.isDefaultRecipeDisabled(recipeId); }
 
     void toggleAllVariants(String recipeId) { toggle(recipeId); }
 
@@ -808,7 +803,7 @@ public class VanillaRecipesScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
+        renderBackground(ctx, mouseX, mouseY, delta);
         renderPanels(ctx);
         super.render(ctx, mouseX, mouseY, delta);
         if (loading && recipes.isEmpty()) {
@@ -826,7 +821,7 @@ public class VanillaRecipesScreen extends Screen {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
             int y = LEFT_ROWS_Y + i * ROW;
             int rowColor = recipe.special() ? 0x22335566
-                    : parent.disabledRecipes.contains(recipe.id()) ? 0x44550000 : 0x22005500;
+                    : parent.isDefaultRecipeDisabled(recipe.id()) ? 0x44550000 : 0x22005500;
             ctx.fill(recipeListX(), y, recipeScrollbarX() - 4, y + ROW, rowColor);
             var item = Registries.ITEM.get(Identifier.tryParse(recipe.result()));
             if (item != null && item != Items.AIR) ctx.drawItem(new ItemStack(item), recipeListX() + 2, y + 2);

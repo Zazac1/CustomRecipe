@@ -6,7 +6,9 @@
   "customrecipe.home.library": "Bibliothèque",
   "customrecipe.home.create": "Créer des recettes",
   "customrecipe.home.vanilla": "Recettes par défaut",
-  "customrecipe.home.vanilla.tooltip": "Sélectionnez un monde pour accéder à ses recettes par défaut.",
+  "customrecipe.home.vanilla.tooltip": "Configurez les recettes par défaut globalement ou pour le monde sélectionné.",
+  "customrecipe.home.vanilla.global_tooltip": "Désactive les recettes par défaut dans tous les mondes. Un monde peut les réactiver explicitement.",
+  "customrecipe.home.vanilla.world_tooltip": "Configure uniquement ce monde. Les recettes désactivées globalement peuvent être réactivées ici.",
   "customrecipe.home.current_world_locked": "Le monde actuel est verrouillé lorsque l’éditeur est ouvert depuis le menu pause.",
   "customrecipe.button.back": "Retour",
   "customrecipe.button.cancel": "Annuler",
@@ -37,6 +39,7 @@
   "customrecipe.state.enabled": "Activée",
   "customrecipe.state.disabled": "Désactivée",
   "customrecipe.state.library": "Bibliothèque",
+  "customrecipe.state.all_worlds": "Tous les mondes",
   "customrecipe.state.corrupted": "Corrompue",
   "customrecipe.screen.my_recipes": "Mes recettes",
   "customrecipe.screen.global_library": "Bibliothèque globale",
@@ -164,4 +167,22 @@
   ,"customrecipe.chat.custom_item.removed": "Objet personnalisé %s supprimé."
   ,"customrecipe.chat.custom_item.list_empty": "La bibliothèque d’objets personnalisés est vide."
   ,"customrecipe.chat.custom_item.list": "Objets personnalisés (%s) :"
+  ,"customrecipe.builder.alternatives": "Alternatives : %s"
+  ,"customrecipe.alternatives.title": "Ingrédients alternatifs"
+  ,"customrecipe.alternatives.primary": "Cet emplacement accepte %s ou toute alternative sélectionnée"
+  ,"customrecipe.alternatives.search": "Rechercher des objets..."
+  ,"customrecipe.alternatives.available": "Objets disponibles"
+  ,"customrecipe.alternatives.selected": "Alternatives sélectionnées (%s)"
+  ,"customrecipe.alternatives.add_all": "Ajouter tous les résultats"
+  ,"customrecipe.alternatives.remove_all": "Retirer toutes les alternatives"
+  ,"customrecipe.alternatives.done": "Terminé"
+  ,"customrecipe.builder.group_use": "%s alternatives — clic gauche pour réutiliser ce groupe"
+  ,"customrecipe.builder.group_expand": "Clic droit pour afficher les objets du groupe"
+  ,"customrecipe.builder.group_collapse": "Clic droit pour masquer les objets du groupe"
+  ,"customrecipe.builder.group_alternative": "Objet alternatif"
+  ,"customrecipe.builder.group_distinct": "Des objets différents sont requis entre les cases répétées"
+  ,"customrecipe.alternatives.distinct": "Objet différent dans chaque case répétée : %s"
+  ,"customrecipe.alternatives.distinct_hint": "Lorsque ce groupe est utilisé dans plusieurs cases de la recette, chaque case doit contenir un objet différent du groupe."
+  ,"customrecipe.common.on": "OUI"
+  ,"customrecipe.common.off": "NON"
 }

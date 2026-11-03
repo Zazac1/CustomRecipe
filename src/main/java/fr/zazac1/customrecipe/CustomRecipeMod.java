@@ -13,6 +13,14 @@ public class CustomRecipeMod implements ModInitializer {
     public void onInitialize() {
         WorldRecipeAssignments.initialize();
         ServerConfigNetworking.initialize();
+        if (Boolean.getBoolean("customrecipe.basicValidation")) {
+            try {
+                Class.forName("fr.zazac1.customrecipe.validation.BasicValidation")
+                        .getMethod("initialize").invoke(null);
+            } catch (ReflectiveOperationException error) {
+                throw new IllegalStateException("Could not initialize the development validation suite", error);
+            }
+        }
         LOGGER.info("[CustomRecipe] Initialized.");
     }
 }

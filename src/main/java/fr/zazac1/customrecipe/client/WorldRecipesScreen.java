@@ -133,7 +133,7 @@ final class WorldRecipesScreen extends Screen {
    }
 
    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-      context.fillGradient(0, 0, this.width, this.height, -1072689136, -804253680);
+      this.renderBackground(context, mouseX, mouseY, delta);
       context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 12, 16777215);
       super.render(context, mouseX, mouseY, delta);
    }

@@ -1,5 +1,73 @@
 # Changelog
 
+# 1.4.9-1.21.1-(Fabric)
+
+## Custom Recipe — Minecraft 1.21.1 (Fabric)
+
+This update makes alternative ingredient groups easier to reuse, adds recipes that require different items from the same group, and improves editor readability.
+
+## Added
+
+- **Different items in repeated slots** — an alternative group can now require every repeated recipe slot to use a different item, such as four unique saplings instead of four copies of the same sapling.
+- The new rule works with both shaped and shapeless recipes and remains enforced during actual crafting.
+
+## Improved
+
+- Alternative groups can be selected once and placed into several recipe slots without recreating the group each time.
+- Left-clicking a saved group reuses the complete group, while right-clicking expands or collapses its individual items.
+- The alternative ingredient editor now uses a clear, opaque background so the previous menu never interferes with its text.
+
+## Fixed
+
+- Delete markers and carried items now stay above placed items and quantity labels.
+- Global Library previews now show the Shaped/Shapeless and Known by default icons consistently.
+- Alternative-group settings and the different-item rule are preserved after saving and reloading a recipe.
+
+## Compatibility / servers
+
+- Requires **Minecraft 1.21.1**, **Fabric Loader 0.17.3 or newer**, and **Java 21 or newer**.
+- **Fabric API** and **Mod Menu** are required. **Roughly Enough Items (REI)** remains optional.
+- Install the matching Custom Recipe version on the server and clients when using server-managed recipes.
+
+## Before updating
+
+- Existing recipes and configurations remain compatible.
+- The different-item rule is optional and remains disabled on existing alternative groups until enabled manually.
+- No migration or additional setup is required after updating.
+
+# 1.4.8-1.21.1-(Fabric)
+
+## Custom Recipe — Minecraft 1.21.1 (Fabric)
+
+This update lets recipe creators accept several interchangeable items in a single ingredient slot and improves the recipe editor's readability.
+
+## Added
+
+- **Alternative ingredients** — choose several valid items for one ingredient slot in shaped or shapeless recipes, without creating every possible recipe combination.
+- **Alternative item picker** — search available items, add all matching results, or remove alternatives individually from a compact editor.
+
+## Improved
+
+- Alternative sets stay folded under their main item in the recipe builder; click the stacked item to expand or collapse the group.
+- Expanded groups use a scrollable two-row palette, and ingredient or result quantities can be adjusted with the mouse wheel.
+- Custom Recipe menus now keep Minecraft's standard menu background visible.
+
+## Fixed
+
+- The unsaved-changes confirmation now stays above recipe icons and uses the correct modal background.
+- Custom items in the alternative picker now show their complete Custom Recipe reference instead of an ambiguous base-item name.
+
+## Compatibility / servers
+
+- Requires **Minecraft 1.21.1**, **Fabric Loader 0.17.3 or newer**, and **Java 21 or newer**.
+- **Fabric API** and **Mod Menu** are required. **Roughly Enough Items (REI)** remains optional.
+- Install the matching Custom Recipe version on the server and clients when using server-managed recipes.
+
+## Before updating
+
+- Existing recipes and configurations remain compatible; ingredient slots without alternatives continue to work unchanged.
+- No migration or additional setup is required after updating.
+
 ## 1.3.4+1.21.1
 
 ### Added
