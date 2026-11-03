@@ -98,9 +98,11 @@ jar {
 // any other version or publication task.
 tasks.named("build") {
     doLast {
-        copy {
-            from tasks.named("jar")
-            into "C:/Users/isaac/AppData/Roaming/ModrinthApp/profiles/Fabric 26.3/mods"
+        if (!project.hasProperty("skipLocalDeployment")) {
+            copy {
+                from tasks.named("jar")
+                into "C:/Users/isaac/AppData/Roaming/ModrinthApp/profiles/Fabric 26.3/mods"
+            }
         }
     }
 }

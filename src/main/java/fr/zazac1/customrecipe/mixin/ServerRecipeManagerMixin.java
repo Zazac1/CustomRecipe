@@ -60,6 +60,9 @@ public abstract class ServerRecipeManagerMixin {
         ConfigLoader.invalidate();
         ModConfig rootConfig = ConfigLoader.get();
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
+        List<String> disabledRecipes = ConfigLoader.effectiveDisabledRecipes(rootConfig, config);
+        List<RecipeVariantRule> disabledVariants =
+                ConfigLoader.effectiveDisabledRecipeVariants(rootConfig, config);
 
         List<RecipeHolder<?>> recipes = new ArrayList<>(original.values());
 
@@ -72,37 +75,47 @@ public abstract class ServerRecipeManagerMixin {
 
         // 1b. Non-crafting recipes can be removed. Crafting recipes stay in the manager
         // so the server browser can still show and re-enable them after a restart.
-        if (!config.disabled_recipes.isEmpty()) {
-            recipes.removeIf(entry -> config.disabled_recipes.contains(entry.id().identifier().toString())
+        if (!disabledRecipes.isEmpty()) {
+            recipes.removeIf(entry -> disabledRecipes.contains(entry.id().identifier().toString())
                     && !(entry.value() instanceof CraftingRecipe));
         }
 
         // 1c. Keep recipes available, but make selected material variants fail to match.
-        if (!config.disabled_recipe_variants.isEmpty()) {
+        int disabledCraftingCount = 0;
+        int filteredVariantCount = 0;
+        if (!disabledVariants.isEmpty()) {
             Map<String, Set<String>> variantsByRecipe = new HashMap<>();
-            for (RecipeVariantRule rule : config.disabled_recipe_variants) {
+            for (RecipeVariantRule rule : disabledVariants) {
                 variantsByRecipe.computeIfAbsent(rule.recipe_id, ignored -> new HashSet<>()).add(rule.material_id);
             }
             for (int i = 0; i < recipes.size(); i++) {
                 RecipeHolder<?> entry = recipes.get(i);
-                if (config.disabled_recipes.contains(entry.id().identifier().toString())
+                if (disabledRecipes.contains(entry.id().identifier().toString())
                         && entry.value() instanceof CraftingRecipe recipe) {
                     recipes.set(i, new RecipeHolder<>(entry.id(), new DisabledCraftingRecipe(recipe)));
+                    disabledCraftingCount++;
                     continue;
                 }
                 Set<String> blocked = variantsByRecipe.get(entry.id().identifier().toString());
                 if (blocked != null && entry.value() instanceof CraftingRecipe recipe) {
                     recipes.set(i, new RecipeHolder<>(entry.id(), new VariantFilteredCraftingRecipe(recipe, blocked)));
+                    filteredVariantCount++;
                 }
             }
-        } else if (!config.disabled_recipes.isEmpty()) {
+        } else if (!disabledRecipes.isEmpty()) {
             for (int i = 0; i < recipes.size(); i++) {
                 RecipeHolder<?> entry = recipes.get(i);
-                if (config.disabled_recipes.contains(entry.id().identifier().toString())
+                if (disabledRecipes.contains(entry.id().identifier().toString())
                         && entry.value() instanceof CraftingRecipe recipe) {
                     recipes.set(i, new RecipeHolder<>(entry.id(), new DisabledCraftingRecipe(recipe)));
+                    disabledCraftingCount++;
                 }
             }
+        }
+        if (disabledCraftingCount > 0 || filteredVariantCount > 0) {
+            CustomRecipeMod.LOGGER.info(
+                    "[CustomRecipe] Applied default recipe rules: {} crafting recipe(s) disabled, {} recipe(s) filtered by material.",
+                    disabledCraftingCount, filteredVariantCount);
         }
 
         // 2. Inject user custom recipes
@@ -168,11 +181,18 @@ public abstract class ServerRecipeManagerMixin {
     }
 
     private boolean usesExactOrCountedIngredient(CustomRecipeEntry entry) {
-        if (entry.hasCountedIngredients()) return true;
-        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
-                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
-                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
-        return values.anyMatch(fr.zazac1.customrecipe.CustomItemLibrary::isReference);
+        if (entry.hasCountedIngredients() || entry.hasDistinctIngredients()) return true;
+        return allInputValues(entry).anyMatch(fr.zazac1.customrecipe.CustomItemLibrary::isReference);
+    }
+
+    private java.util.stream.Stream<String> allInputValues(CustomRecipeEntry entry) {
+        if ("shaped".equalsIgnoreCase(entry.type)) {
+            return entry.keys == null ? java.util.stream.Stream.empty()
+                    : entry.keys.keySet().stream().flatMap(key -> entry.keyOptions(key).stream());
+        }
+        return entry.ingredients == null ? java.util.stream.Stream.empty()
+                : java.util.stream.IntStream.range(0, entry.ingredients.size())
+                        .boxed().flatMap(index -> entry.ingredientOptions(index).stream());
     }
 
     // ── dispatch ─────────────────────────────────────────────────────────
@@ -222,14 +242,11 @@ public abstract class ServerRecipeManagerMixin {
     private CraftingRecipe exactWrapper(CraftingRecipe recipe, CustomRecipeEntry entry,
                                         List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
         Map<String, net.minecraft.world.item.ItemStack> stacks = new HashMap<>();
-        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
-                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
-                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
-        values.filter(fr.zazac1.customrecipe.CustomItemLibrary::isReference).distinct().forEach(reference -> {
+        allInputValues(entry).filter(fr.zazac1.customrecipe.CustomItemLibrary::isReference).distinct().forEach(reference -> {
             net.minecraft.world.item.ItemStack stack = resolveStack(reference, customItems);
             if (!stack.isEmpty()) stacks.put(reference, stack.copyWithCount(1));
         });
-        return stacks.isEmpty() && !entry.hasCountedIngredients()
+        return stacks.isEmpty() && !entry.hasCountedIngredients() && !entry.hasDistinctIngredients()
                 ? recipe : new fr.zazac1.customrecipe.CustomItemCraftingRecipe(recipe, entry, stacks);
     }
 
@@ -241,12 +258,14 @@ public abstract class ServerRecipeManagerMixin {
 
     private String recipeInputSignature(CustomRecipeEntry entry) {
         if ("shaped".equalsIgnoreCase(entry.type)) {
-            return "shaped:" + entry.pattern + ":" + entry.keys + ":" + entry.key_counts;
+            Map<String, List<String>> options = new LinkedHashMap<>();
+            if (entry.keys != null) entry.keys.keySet().forEach(key -> options.put(key, entry.keyOptions(key)));
+            return "shaped:" + entry.pattern + ":" + options + ":" + entry.key_counts;
         }
         List<String> ingredients = new ArrayList<>();
         if (entry.ingredients != null) {
             for (int i = 0; i < entry.ingredients.size(); i++) {
-                ingredients.add(entry.ingredients.get(i) + "×" + entry.ingredientCount(i));
+                ingredients.add(entry.ingredientOptions(i) + "×" + entry.ingredientCount(i));
             }
         }
         java.util.Collections.sort(ingredients);
@@ -262,15 +281,16 @@ public abstract class ServerRecipeManagerMixin {
         if (rawIngredients == null || rawIngredients.isEmpty()) return null;
 
         List<Ingredient> ingredients = new ArrayList<>();
-        for (String itemId : rawIngredients) {
+        for (int index = 0; index < rawIngredients.size(); index++) {
+            String itemId = rawIngredients.get(index);
             if (itemId == null || itemId.isBlank()) continue;
-            String baseId = ingredientBaseId(itemId.trim(), customItems);
-            Identifier id = Identifier.tryParse(baseId);
-            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) {
-                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shapeless ingredient not found: {}", itemId);
+            Ingredient ingredient = resolveIngredient(entry.ingredientOptions(index), customItems);
+            if (ingredient == null) {
+                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shapeless ingredient option not found: {}",
+                        entry.ingredientOptions(index));
                 return null;
             }
-            ingredients.add(Ingredient.of(BuiltInRegistries.ITEM.getValue(id)));
+            ingredients.add(ingredient);
         }
         if (ingredients.isEmpty()) return null;
 
@@ -298,12 +318,13 @@ public abstract class ServerRecipeManagerMixin {
         for (Map.Entry<String, String> kv : keysMap.entrySet()) {
             if (kv.getKey() == null || kv.getKey().isEmpty()) continue;
             char sym = kv.getKey().charAt(0);
-            Identifier itemId = Identifier.tryParse(ingredientBaseId(kv.getValue(), customItems));
-            if (itemId == null || !BuiltInRegistries.ITEM.containsKey(itemId)) {
-                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shaped key item not found: {}", kv.getValue());
+            Ingredient ingredient = resolveIngredient(entry.keyOptions(kv.getKey()), customItems);
+            if (ingredient == null) {
+                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shaped key option not found: {}",
+                        entry.keyOptions(kv.getKey()));
                 return null;
             }
-            symbols.put(sym, Ingredient.of(BuiltInRegistries.ITEM.getValue(itemId)));
+            symbols.put(sym, ingredient);
         }
 
         ShapedRecipePattern rawRecipe;
@@ -322,5 +343,18 @@ public abstract class ServerRecipeManagerMixin {
                 result
         );
         return new RecipeHolder<>(key, exactWrapper(recipe, entry, customItems));
+    }
+
+    private Ingredient resolveIngredient(List<String> options,
+                                         List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
+        List<net.minecraft.world.item.Item> items = new ArrayList<>();
+        for (String option : options) {
+            String baseId = ingredientBaseId(option, customItems);
+            Identifier id = Identifier.tryParse(baseId);
+            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return null;
+            net.minecraft.world.item.Item item = BuiltInRegistries.ITEM.getValue(id);
+            if (!items.contains(item)) items.add(item);
+        }
+        return items.isEmpty() ? null : Ingredient.of(items.stream());
     }
 }

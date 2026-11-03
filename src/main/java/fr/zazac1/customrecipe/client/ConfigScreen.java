@@ -52,6 +52,8 @@ public class ConfigScreen extends Screen {
     final List<String> knownByDefaultBuiltin;
     final List<String> disabledRecipes;
     final List<RecipeVariantRule> disabledRecipeVariants;
+    final List<String> enabledRecipes;
+    final List<RecipeVariantRule> enabledRecipeVariants;
     final List<String> hiddenQuickAddBuiltin;
     final List<CustomRecipeEntry> quickAddRecipes;
     final List<CustomItemEntry> customItems;
@@ -98,8 +100,12 @@ public class ConfigScreen extends Screen {
         this.recipes  = new ArrayList<>(targetConfig.custom_recipes);
         this.disabled = new ArrayList<>(targetConfig.disabled_builtin);
         this.knownByDefaultBuiltin = new ArrayList<>(targetConfig.known_by_default_builtin);
-        this.disabledRecipes = new ArrayList<>(targetConfig.disabled_recipes);
-        this.disabledRecipeVariants = new ArrayList<>(targetConfig.disabled_recipe_variants);
+        this.disabledRecipes = new ArrayList<>(target.isWorld()
+                ? targetConfig.disabled_recipes : config.global_disabled_recipes);
+        this.disabledRecipeVariants = new ArrayList<>(target.isWorld()
+                ? targetConfig.disabled_recipe_variants : config.global_disabled_recipe_variants);
+        this.enabledRecipes = new ArrayList<>(targetConfig.enabled_recipes);
+        this.enabledRecipeVariants = new ArrayList<>(targetConfig.enabled_recipe_variants);
         this.hiddenQuickAddBuiltin = new ArrayList<>(targetConfig.hidden_quick_add_builtin);
         this.quickAddRecipes = new ArrayList<>(targetConfig.quick_add_recipes);
         this.customItems = new ArrayList<>(config.custom_items);
@@ -165,9 +171,11 @@ public class ConfigScreen extends Screen {
         Button vanilla = Button.builder(Component.empty(),
                 b -> minecraft.gui.setScreen(new VanillaRecipesScreen(this, !serverManaged)))
                 .bounds(x, vanillaY, buttonWidth, buttonHeight).build();
-        vanilla.active = hasWorldTarget || serverManaged;
-        if (!vanilla.active) vanilla.setTooltip(Tooltip.create(
-                Component.translatable("customrecipe.home.vanilla.tooltip")));
+        vanilla.active = true;
+        vanilla.setTooltip(Tooltip.create(Component.translatable(
+                hasWorldTarget || serverManaged
+                        ? "customrecipe.home.vanilla.world_tooltip"
+                        : "customrecipe.home.vanilla.global_tooltip")));
         addRenderableWidget(vanilla);
         addHomeButton(vanillaY, buttonWidth, Component.translatable("customrecipe.home.vanilla").getString(), null, Items.GRASS_BLOCK, vanilla.active);
 
@@ -419,6 +427,8 @@ public class ConfigScreen extends Screen {
         baseConfig.world_names = original.world_names;
         baseConfig.editor_world_id = original.editor_world_id;
         baseConfig.editor_world_name = original.editor_world_name;
+        baseConfig.global_disabled_recipes = original.global_disabled_recipes;
+        baseConfig.global_disabled_recipe_variants = original.global_disabled_recipe_variants;
         baseConfig.disabled_builtin = original.disabled_builtin;
         baseConfig.known_by_default_builtin = original.known_by_default_builtin;
         baseConfig.disabled_recipes = original.disabled_recipes;
@@ -475,6 +485,8 @@ public class ConfigScreen extends Screen {
             // must not disable the independent copy created for this world.
             copy.enabled = null;
             copy.server_enabled = null;
+            copy.global_auto_add = null;
+            copy.global_library_source_id = null;
         }
         if (copy != null && recipes.stream().noneMatch(existing -> ConfigLoader.sameRecipe(existing, copy))) {
             recipes.add(copy);
@@ -499,7 +511,11 @@ public class ConfigScreen extends Screen {
     void alsoSaveToLibrary(CustomRecipeEntry source) {
         if (!target.isWorld() || source == null) return;
         CustomRecipeEntry copy = ConfigLoader.copyRecipe(source);
-        if (copy != null) baseConfig.global_library.custom_recipes.add(copy);
+        if (copy != null) {
+            copy.global_auto_add = null;
+            copy.global_library_source_id = null;
+            baseConfig.global_library.custom_recipes.add(copy);
+        }
     }
 
     ConfigScreen createTargetScreen(RecipeTarget nextTarget) {
@@ -573,8 +589,18 @@ public class ConfigScreen extends Screen {
             if (recipe.ingredients != null) {
                 recipe.ingredients.replaceAll(value -> oldReference.equals(value) ? newReference : value);
             }
+            if (recipe.ingredient_alternatives != null) {
+                recipe.ingredient_alternatives.forEach(values -> {
+                    if (values != null) values.replaceAll(value -> oldReference.equals(value) ? newReference : value);
+                });
+            }
             if (recipe.keys != null) {
                 recipe.keys.replaceAll((key, value) -> oldReference.equals(value) ? newReference : value);
+            }
+            if (recipe.key_alternatives != null) {
+                recipe.key_alternatives.values().forEach(values -> {
+                    if (values != null) values.replaceAll(value -> oldReference.equals(value) ? newReference : value);
+                });
             }
             if (oldReference.equals(recipe.result)) recipe.result = newReference;
             if (recipe.missing_items != null) {
@@ -587,8 +613,15 @@ public class ConfigScreen extends Screen {
         targetConfig.custom_recipes = new ArrayList<>(recipes);
         targetConfig.disabled_builtin = new ArrayList<>(disabled);
         targetConfig.known_by_default_builtin = new ArrayList<>(knownByDefaultBuiltin);
-        targetConfig.disabled_recipes = new ArrayList<>(disabledRecipes);
-        targetConfig.disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
+        if (target.isWorld()) {
+            targetConfig.disabled_recipes = new ArrayList<>(disabledRecipes);
+            targetConfig.disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
+            targetConfig.enabled_recipes = new ArrayList<>(enabledRecipes);
+            targetConfig.enabled_recipe_variants = new ArrayList<>(enabledRecipeVariants);
+        } else {
+            baseConfig.global_disabled_recipes = new ArrayList<>(disabledRecipes);
+            baseConfig.global_disabled_recipe_variants = new ArrayList<>(disabledRecipeVariants);
+        }
         targetConfig.hidden_quick_add_builtin = new ArrayList<>(hiddenQuickAddBuiltin);
         targetConfig.quick_add_recipes = new ArrayList<>(quickAddRecipes);
         baseConfig.custom_items = new ArrayList<>(customItems);
@@ -604,9 +637,14 @@ public class ConfigScreen extends Screen {
         knownByDefaultBuiltin.clear();
         knownByDefaultBuiltin.addAll(replacement.known_by_default_builtin);
         disabledRecipes.clear();
-        disabledRecipes.addAll(replacement.disabled_recipes);
+        disabledRecipes.addAll(target.isWorld() ? replacement.disabled_recipes : config.global_disabled_recipes);
         disabledRecipeVariants.clear();
-        disabledRecipeVariants.addAll(replacement.disabled_recipe_variants);
+        disabledRecipeVariants.addAll(target.isWorld()
+                ? replacement.disabled_recipe_variants : config.global_disabled_recipe_variants);
+        enabledRecipes.clear();
+        enabledRecipes.addAll(replacement.enabled_recipes);
+        enabledRecipeVariants.clear();
+        enabledRecipeVariants.addAll(replacement.enabled_recipe_variants);
         hiddenQuickAddBuiltin.clear();
         hiddenQuickAddBuiltin.addAll(replacement.hidden_quick_add_builtin);
         quickAddRecipes.clear();
@@ -614,6 +652,75 @@ public class ConfigScreen extends Screen {
         customItems.clear();
         customItems.addAll(config.custom_items);
     }
+
+    List<String> effectiveDisabledRecipes() {
+        if (!target.isWorld()) return new ArrayList<>(disabledRecipes);
+        java.util.LinkedHashSet<String> effective = new java.util.LinkedHashSet<>(baseConfig.global_disabled_recipes);
+        effective.removeAll(enabledRecipes);
+        effective.addAll(disabledRecipes);
+        return new ArrayList<>(effective);
+    }
+
+    boolean isDefaultRecipeDisabled(String recipeId) {
+        return effectiveDisabledRecipes().contains(recipeId);
+    }
+
+    void toggleDefaultRecipe(String recipeId) {
+        if (!target.isWorld()) {
+            if (!disabledRecipes.remove(recipeId)) disabledRecipes.add(recipeId);
+            return;
+        }
+        boolean globallyDisabled = baseConfig.global_disabled_recipes.contains(recipeId);
+        if (isDefaultRecipeDisabled(recipeId)) {
+            disabledRecipes.remove(recipeId);
+            if (globallyDisabled && !enabledRecipes.contains(recipeId)) enabledRecipes.add(recipeId);
+            else if (!globallyDisabled) enabledRecipes.remove(recipeId);
+        } else {
+            enabledRecipes.remove(recipeId);
+            if (!globallyDisabled && !disabledRecipes.contains(recipeId)) disabledRecipes.add(recipeId);
+        }
+    }
+
+    boolean isDefaultRecipeVariantDisabled(String recipeId, String materialId) {
+        if (hasVariant(disabledRecipeVariants, recipeId, materialId)) return true;
+        if (!target.isWorld()) return false;
+        return hasVariant(baseConfig.global_disabled_recipe_variants, recipeId, materialId)
+                && !hasVariant(enabledRecipeVariants, recipeId, materialId);
+    }
+
+    void toggleDefaultRecipeVariant(String recipeId, String materialId) {
+        if (!target.isWorld()) {
+            if (!removeVariant(disabledRecipeVariants, recipeId, materialId)) {
+                disabledRecipeVariants.add(new RecipeVariantRule(recipeId, materialId));
+            }
+            return;
+        }
+        boolean globallyDisabled = hasVariant(baseConfig.global_disabled_recipe_variants, recipeId, materialId);
+        if (isDefaultRecipeVariantDisabled(recipeId, materialId)) {
+            removeVariant(disabledRecipeVariants, recipeId, materialId);
+            if (globallyDisabled && !hasVariant(enabledRecipeVariants, recipeId, materialId)) {
+                enabledRecipeVariants.add(new RecipeVariantRule(recipeId, materialId));
+            } else if (!globallyDisabled) {
+                removeVariant(enabledRecipeVariants, recipeId, materialId);
+            }
+        } else {
+            removeVariant(enabledRecipeVariants, recipeId, materialId);
+            if (!globallyDisabled && !hasVariant(disabledRecipeVariants, recipeId, materialId)) {
+                disabledRecipeVariants.add(new RecipeVariantRule(recipeId, materialId));
+            }
+        }
+    }
+
+    private static boolean hasVariant(List<RecipeVariantRule> rules, String recipeId, String materialId) {
+        return rules.stream().anyMatch(rule -> rule != null
+                && recipeId.equals(rule.recipe_id) && materialId.equals(rule.material_id));
+    }
+
+    private static boolean removeVariant(List<RecipeVariantRule> rules, String recipeId, String materialId) {
+        return rules.removeIf(rule -> rule != null
+                && recipeId.equals(rule.recipe_id) && materialId.equals(rule.material_id));
+    }
+
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
