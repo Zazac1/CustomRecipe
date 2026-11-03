@@ -83,7 +83,17 @@ public final class RecipeIntegrity {
         LinkedHashSet<String> ids = new LinkedHashSet<>();
         add(ids, recipe.result);
         if (recipe.ingredients != null) for (String item : recipe.ingredients) add(ids, item);
+        if (recipe.ingredient_alternatives != null) {
+            for (List<String> alternatives : recipe.ingredient_alternatives) {
+                if (alternatives != null) for (String item : alternatives) add(ids, item);
+            }
+        }
         if (recipe.keys != null) for (String item : recipe.keys.values()) add(ids, item);
+        if (recipe.key_alternatives != null) {
+            for (List<String> alternatives : recipe.key_alternatives.values()) {
+                if (alternatives != null) for (String item : alternatives) add(ids, item);
+            }
+        }
         return new ArrayList<>(ids);
     }
 
