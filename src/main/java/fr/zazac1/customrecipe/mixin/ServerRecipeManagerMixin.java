@@ -88,11 +88,8 @@ public abstract class ServerRecipeManagerMixin {
     }
 
     private boolean usesExactOrCountedIngredient(CustomRecipeEntry entry) {
-        if (entry.hasCountedIngredients()) return true;
-        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
-                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
-                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
-        return values.anyMatch(CustomItemLibrary::isReference);
+        if (entry.hasCountedIngredients() || entry.hasDistinctIngredients()) return true;
+        return allInputValues(entry).stream().anyMatch(CustomItemLibrary::isReference);
     }
 
     private Recipe<?> build(CustomRecipeEntry entry, String recipeGroup, List<CustomItemEntry> customItems) {
@@ -105,11 +102,9 @@ public abstract class ServerRecipeManagerMixin {
             List<Ingredient> list = new ArrayList<>();
             if (entry.ingredients == null) return null;
             for (int i = 0; i < entry.ingredients.size(); i++) {
-                String raw = entry.ingredients.get(i);
-                ItemStack stack = resolveStack(raw, customItems);
-                if (stack.isEmpty()) return null;
-                stack.setCount(Math.max(1, Math.min(entry.ingredientCount(i), stack.getMaxStackSize())));
-                list.add(Ingredient.of(stack));
+                Ingredient ingredient = resolveIngredient(entry.ingredientOptions(i), entry.ingredientCount(i), customItems);
+                if (ingredient.isEmpty()) return null;
+                list.add(ingredient);
             }
             if (list.isEmpty()) return null;
             NonNullList<Ingredient> input = NonNullList.create();
@@ -126,11 +121,10 @@ public abstract class ServerRecipeManagerMixin {
         for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
             char symbol = x < pattern.get(y).length() ? pattern.get(y).charAt(x) : ' ';
             if (symbol == ' ') continue;
-            String raw = entry.keys.get(String.valueOf(symbol));
-            ItemStack stack = raw == null ? ItemStack.EMPTY : resolveStack(raw, customItems);
-            if (stack.isEmpty()) return null;
-            stack.setCount(Math.max(1, Math.min(entry.keyCount(String.valueOf(symbol)), stack.getMaxStackSize())));
-            input.set(y * width + x, Ingredient.of(stack));
+            String key = String.valueOf(symbol);
+            Ingredient ingredient = resolveIngredient(entry.keyOptions(key), entry.keyCount(key), customItems);
+            if (ingredient.isEmpty()) return null;
+            input.set(y * width + x, ingredient);
         }
         CraftingRecipe recipe = new ShapedRecipe(id, recipeGroup,
                 width, height, input, result);
@@ -146,6 +140,27 @@ public abstract class ServerRecipeManagerMixin {
                 ? new ItemStack(Registry.ITEM.get(id)) : ItemStack.EMPTY;
     }
 
+    private Ingredient resolveIngredient(List<String> values, int count, List<CustomItemEntry> customItems) {
+        List<ItemStack> stacks = new ArrayList<>();
+        for (String value : values) {
+            ItemStack stack = resolveStack(value, customItems);
+            if (stack.isEmpty()) return Ingredient.EMPTY;
+            stack.setCount(Math.max(1, Math.min(count, stack.getMaxStackSize())));
+            stacks.add(stack);
+        }
+        return stacks.isEmpty() ? Ingredient.EMPTY : Ingredient.of(stacks.stream());
+    }
+
+    private List<String> allInputValues(CustomRecipeEntry entry) {
+        List<String> values = new ArrayList<>();
+        if ("shaped".equalsIgnoreCase(entry.type)) {
+            if (entry.keys != null) for (String key : entry.keys.keySet()) values.addAll(entry.keyOptions(key));
+        } else if (entry.ingredients != null) {
+            for (int i = 0; i < entry.ingredients.size(); i++) values.addAll(entry.ingredientOptions(i));
+        }
+        return values;
+    }
+
     private String ingredientBaseId(String value, List<CustomItemEntry> customItems) {
         if (!CustomItemLibrary.isReference(value)) return value;
         return CustomItemLibrary.baseItemId(CustomItemLibrary.find(customItems, value));
@@ -154,10 +169,7 @@ public abstract class ServerRecipeManagerMixin {
     private CraftingRecipe exactWrapper(CraftingRecipe recipe, ItemStack result, CustomRecipeEntry entry,
                                         List<CustomItemEntry> customItems) {
         Map<String, ItemStack> stacks = new HashMap<>();
-        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
-                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
-                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
-        values.filter(CustomItemLibrary::isReference).distinct().forEach(reference -> {
+        allInputValues(entry).stream().filter(CustomItemLibrary::isReference).distinct().forEach(reference -> {
             ItemStack stack = resolveStack(reference, customItems);
             if (!stack.isEmpty()) {
                 ItemStack one = stack.copy();
@@ -165,7 +177,7 @@ public abstract class ServerRecipeManagerMixin {
                 stacks.put(reference, one);
             }
         });
-        if (stacks.isEmpty() && !entry.hasCountedIngredients()) return recipe;
+        if (stacks.isEmpty() && !entry.hasCountedIngredients() && !entry.hasDistinctIngredients()) return recipe;
         if (recipe instanceof ShapedRecipe shaped) {
             return new CustomItemShapedRecipe(shaped, result, entry, stacks);
         }
@@ -180,11 +192,12 @@ public abstract class ServerRecipeManagerMixin {
         if ("shaped".equalsIgnoreCase(entry.type)) {
             signature = "shaped:" + String.join("/", entry.pattern == null ? List.of() : entry.pattern)
                     + ":" + (entry.keys == null ? Map.of() : new TreeMap<>(entry.keys))
+                    + ":" + (entry.key_alternatives == null ? Map.of() : new TreeMap<>(entry.key_alternatives))
                     + ":" + (entry.key_counts == null ? Map.of() : new TreeMap<>(entry.key_counts));
         } else {
             List<String> ingredients = new ArrayList<>();
             if (entry.ingredients != null) for (int i = 0; i < entry.ingredients.size(); i++) {
-                ingredients.add(entry.ingredients.get(i) + "×" + entry.ingredientCount(i));
+                ingredients.add(String.join("|", entry.ingredientOptions(i)) + "×" + entry.ingredientCount(i));
             }
             Collections.sort(ingredients);
             signature = "shapeless:" + String.join(",", ingredients);
