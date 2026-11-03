@@ -36,13 +36,16 @@ final class SaveChangesScreen extends fr.zazac1.customrecipe.client.compat.Legac
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        context.fill(0, 0, width, height, 0xFF000000);
+        returnTo.render(context.pose(), mouseX, mouseY, delta);
 
         int panelWidth = 250;
         int panelHeight = 92;
         int panelX = width / 2 - panelWidth / 2;
         int panelY = height / 2 - panelHeight / 2;
-        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF0181B1E);
+        context.pose().pushPose();
+        context.pose().translate(0.0F, 0.0F, 400.0F);
+        context.fill(0, 0, width, height, 0x66000000);
+        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF8181B1E);
         drawBorder(context, panelX, panelY, panelWidth, panelHeight, 0xFF6E7678);
         context.fill(panelX + 8, panelY + 52, panelX + panelWidth - 8, panelY + 53, 0xFF3E4749);
         super.render(context, mouseX, mouseY, delta);
@@ -51,6 +54,7 @@ final class SaveChangesScreen extends fr.zazac1.customrecipe.client.compat.Legac
         context.drawCenteredString(font, Component.translatable("customrecipe.save.title"), width / 2, panelY + 12, 0xFFFFFFFF);
         context.drawCenteredString(font, Component.translatable("customrecipe.save.line1"), width / 2, panelY + 28, 0xFFE0E6E3);
         context.drawCenteredString(font, Component.translatable("customrecipe.save.line2"), width / 2, panelY + 40, 0xFFB8C7C1);
+        context.pose().popPose();
     }
 
     private void drawBorder(GuiGraphics context, int x, int y, int width, int height, int color) {

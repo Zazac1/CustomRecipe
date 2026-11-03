@@ -34,7 +34,11 @@ minecraft {
             mods { "${project.mod_id}" { source sourceSets.main } }
         }
         client { workingDirectory project.file('run/client') }
-        server { workingDirectory project.file('run/server'); args '--nogui' }
+        server {
+            workingDirectory project.file(project.hasProperty('basicValidation')
+                    ? 'validation/runtime/server' : 'run/server')
+            args '--nogui'
+        }
     }
 }
 

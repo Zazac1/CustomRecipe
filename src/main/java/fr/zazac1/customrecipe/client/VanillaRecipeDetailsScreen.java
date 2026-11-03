@@ -85,7 +85,7 @@ public final class VanillaRecipeDetailsScreen extends fr.zazac1.customrecipe.cli
 
     @Override
     public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        ctx.fillGradient(0, 0, width, height, 0xD0101010, 0xE0101010);
+        renderBackground(ctx);
         super.render(ctx, mouseX, mouseY, delta);
 
         int left = width / 2 - 86;
