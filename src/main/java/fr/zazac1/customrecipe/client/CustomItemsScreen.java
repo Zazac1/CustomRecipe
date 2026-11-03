@@ -81,7 +81,7 @@ final class CustomItemsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        context.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
+        renderBackground(context, mouseX, mouseY, delta);
         int rowWidth = rowWidth();
         int x = rowX();
         int top = 52;

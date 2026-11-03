@@ -126,7 +126,7 @@ public class VanillaRecipesScreen extends Screen {
 
         List<VanillaRecipePage.VanillaRecipeInfo> filtered = new ArrayList<>();
         for (VanillaRecipePage.VanillaRecipeInfo recipe : recipes) {
-            boolean disabled = parent.disabledRecipes.contains(recipe.id());
+            boolean disabled = parent.isDefaultRecipeDisabled(recipe.id());
             if ((statusFilter == StatusFilter.DISABLED && disabled && !recipe.special())
                     || (statusFilter == StatusFilter.ENABLED && !disabled && !recipe.special())
                     || (statusFilter == StatusFilter.SPECIAL && recipe.special())) {
@@ -202,10 +202,6 @@ public class VanillaRecipesScreen extends Screen {
 
     @Override
     protected void init() {
-        // Must be registered before widgets: Screen.render applies the blurred
-        // background first, then renderables in insertion order. Drawing this
-        // content directly before super.render would put it behind that blur.
-        addRenderableOnly((ctx, mx, my, d) -> renderBrowserContent(ctx));
         addRenderableOnly((ctx, mx, my, d) -> RecipeTargetBadge.draw(ctx, minecraft, parent.target(), parent.targetLabel()));
         int clearSearchX = recipeContentRight() - 18;
         searchField = addRenderableWidget(new EditBox(font, recipeContentX(), SEARCH_Y,
@@ -245,7 +241,7 @@ public class VanillaRecipesScreen extends Screen {
         for (int i = 0; i < visibleRows && scroll + i < shownRecipes.size(); i++) {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
             int y = ROWS_Y + i * ROW;
-            boolean disabled = parent.disabledRecipes.contains(recipe.id());
+            boolean disabled = parent.isDefaultRecipeDisabled(recipe.id());
             addRenderableWidget(Button.builder(recipeLabel(recipe), b -> selectRecipe(recipe))
                     .bounds(recipeLabelX(), y, recipeLabelWidth(), ROW).build());
             addRenderableWidget(Button.builder(disabled ? Component.translatable("customrecipe.state.disabled").withColor(0xFF5555)
@@ -375,7 +371,7 @@ public class VanillaRecipesScreen extends Screen {
 
     private void requestServerPage(int page) {
         ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput,
-                statusFilter.name(), sourceFilter.name(), parent.disabledRecipes, page);
+                statusFilter.name(), sourceFilter.name(), parent.effectiveDisabledRecipes(), page);
     }
 
 
@@ -599,7 +595,7 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     private void toggle(String recipeId) {
-        if (!parent.disabledRecipes.remove(recipeId)) parent.disabledRecipes.add(recipeId);
+        parent.toggleDefaultRecipe(recipeId);
         // This is a staged client-side change.  Keep the already-loaded page
         // and selection: Fabric 1.3.7 deliberately avoids a full server/JAR
         // search for every Enable/Disable click.
@@ -770,21 +766,14 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     boolean isVariantDisabled(String recipeId, String materialId) {
-        return parent.disabledRecipeVariants.stream().anyMatch(rule -> recipeId.equals(rule.recipe_id) && materialId.equals(rule.material_id));
+        return parent.isDefaultRecipeVariantDisabled(recipeId, materialId);
     }
 
     void toggleVariant(String recipeId, String materialId) {
-        for (int i = 0; i < parent.disabledRecipeVariants.size(); i++) {
-            var rule = parent.disabledRecipeVariants.get(i);
-            if (recipeId.equals(rule.recipe_id) && materialId.equals(rule.material_id)) {
-                parent.disabledRecipeVariants.remove(i);
-                return;
-            }
-        }
-        parent.disabledRecipeVariants.add(new fr.zazac1.customrecipe.RecipeVariantRule(recipeId, materialId));
+        parent.toggleDefaultRecipeVariant(recipeId, materialId);
     }
 
-    boolean isRecipeDisabled(String recipeId) { return parent.disabledRecipes.contains(recipeId); }
+    boolean isRecipeDisabled(String recipeId) { return parent.isDefaultRecipeDisabled(recipeId); }
 
     void toggleAllVariants(String recipeId) { toggle(recipeId); }
 
@@ -809,17 +798,17 @@ public class VanillaRecipesScreen extends Screen {
     @Override
     public void renderBackground(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
         super.renderBackground(ctx, mouseX, mouseY, delta);
-        ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
+        renderPanels(ctx);
     }
 
     @Override
     public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
         super.render(ctx, mouseX, mouseY, delta);
+        renderBrowserContent(ctx);
     }
 
-    /** Rendered as the first renderable, after the background blur and before widgets. */
+    /** Rendered after widgets so the transparent state tint remains visible across each row. */
     private void renderBrowserContent(GuiGraphics ctx) {
-        renderPanels(ctx);
         if (loading && recipes.isEmpty()) {
             ctx.drawString(font, Component.translatable("customrecipe.vanilla.loading"), 8, ROWS_Y + 2, 0xBBBBBB, false);
             return;
@@ -834,7 +823,7 @@ public class VanillaRecipesScreen extends Screen {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
             int y = ROWS_Y + i * ROW;
             int rowColor = recipe.special() ? 0x22335566
-                    : parent.disabledRecipes.contains(recipe.id()) ? 0x44550000 : 0x22005500;
+                    : parent.isDefaultRecipeDisabled(recipe.id()) ? 0x44550000 : 0x22005500;
             ctx.fill(recipeListX(), y, recipeScrollbarX() - 4, y + ROW, rowColor);
             var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(recipe.result()));
             if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), recipeListX() + 2, y + 2);

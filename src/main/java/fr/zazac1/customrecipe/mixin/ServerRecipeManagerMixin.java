@@ -46,6 +46,7 @@ public abstract class ServerRecipeManagerMixin {
         ConfigLoader.invalidate();
         ModConfig rootConfig = ConfigLoader.get();
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
+        List<String> disabledRecipes = ConfigLoader.effectiveDisabledRecipes(rootConfig, config);
 
         List<RecipeHolder<?>> recipes = new ArrayList<>(getRecipes());
         List<RecipeHolder<?>> priorityCustomRecipes = new ArrayList<>();
@@ -61,8 +62,8 @@ public abstract class ServerRecipeManagerMixin {
         // 1b. Non-crafting recipes can be removed. Crafting recipes must retain
         // their concrete vanilla classes for the 1.21.1 recipe-network codec;
         // RecipeManagerCraftingFilterMixin enforces their state at craft time.
-        if (!config.disabled_recipes.isEmpty()) {
-            recipes.removeIf(entry -> config.disabled_recipes.contains(entry.id().toString())
+        if (!disabledRecipes.isEmpty()) {
+            recipes.removeIf(entry -> disabledRecipes.contains(entry.id().toString())
                     && !(entry.value() instanceof CraftingRecipe));
         }
 
@@ -100,9 +101,18 @@ public abstract class ServerRecipeManagerMixin {
 
     private boolean usesExactOrCountedIngredient(CustomRecipeEntry entry) {
         if (entry == null) return false;
-        if (entry.ingredients != null && entry.ingredients.stream().anyMatch(CustomItemLibrary::isReference)) return true;
-        if (entry.keys != null && entry.keys.values().stream().anyMatch(CustomItemLibrary::isReference)) return true;
-        return entry.hasCountedIngredients();
+        if (allInputValues(entry).anyMatch(CustomItemLibrary::isReference)) return true;
+        return entry.hasCountedIngredients() || entry.hasDistinctIngredients();
+    }
+
+    private java.util.stream.Stream<String> allInputValues(CustomRecipeEntry entry) {
+        if ("shaped".equalsIgnoreCase(entry.type)) {
+            return entry.keys == null ? java.util.stream.Stream.empty()
+                    : entry.keys.keySet().stream().flatMap(key -> entry.keyOptions(key).stream());
+        }
+        return entry.ingredients == null ? java.util.stream.Stream.empty()
+                : java.util.stream.IntStream.range(0, entry.ingredients.size())
+                        .boxed().flatMap(index -> entry.ingredientOptions(index).stream());
     }
 
     private RecipeHolder<?> buildCustomRecipe(CustomRecipeEntry entry, int idx, String recipeGroup,
@@ -142,9 +152,14 @@ public abstract class ServerRecipeManagerMixin {
 
     private String recipeInputSignature(CustomRecipeEntry entry) {
         if ("shaped".equalsIgnoreCase(entry.type)) {
-            return "shaped:" + entry.pattern + ":" + entry.keys;
+            Map<String, List<String>> options = new LinkedHashMap<>();
+            if (entry.keys != null) entry.keys.keySet().forEach(key -> options.put(key, entry.keyOptions(key)));
+            return "shaped:" + entry.pattern + ":" + options + ":" + entry.key_counts;
         }
-        List<String> ingredients = entry.ingredients == null ? List.of() : new ArrayList<>(entry.ingredients);
+        List<String> ingredients = new ArrayList<>();
+        if (entry.ingredients != null) for (int i = 0; i < entry.ingredients.size(); i++) {
+            ingredients.add(entry.ingredientOptions(i) + "×" + entry.ingredientCount(i));
+        }
         java.util.Collections.sort(ingredients);
         return "shapeless:" + ingredients;
     }
@@ -162,9 +177,10 @@ public abstract class ServerRecipeManagerMixin {
         for (int i = 0; i < rawIngredients.size(); i++) {
             String itemId = rawIngredients.get(i);
             if (itemId == null || itemId.isBlank()) continue;
-            Ingredient ingredient = ingredientFor(itemId.trim(), entry.ingredientCount(i), customItems, customStacks);
+            Ingredient ingredient = ingredientFor(entry.ingredientOptions(i), entry.ingredientCount(i), customItems, customStacks);
             if (ingredient == null) {
-                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shapeless ingredient not found: {}", itemId);
+                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shapeless ingredient option not found: {}",
+                        entry.ingredientOptions(i));
                 return null;
             }
             ingredients.add(ingredient);
@@ -196,9 +212,10 @@ public abstract class ServerRecipeManagerMixin {
         for (Map.Entry<String, String> kv : keysMap.entrySet()) {
             if (kv.getKey() == null || kv.getKey().isEmpty()) continue;
             char sym = kv.getKey().charAt(0);
-            Ingredient ingredient = ingredientFor(kv.getValue(), entry.keyCount(kv.getKey()), customItems, customStacks);
+            Ingredient ingredient = ingredientFor(entry.keyOptions(kv.getKey()), entry.keyCount(kv.getKey()), customItems, customStacks);
             if (ingredient == null) {
-                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shaped key item not found: {}", kv.getValue());
+                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shaped key option not found: {}",
+                        entry.keyOptions(kv.getKey()));
                 return null;
             }
             symbols.put(sym, ingredient);
@@ -235,6 +252,24 @@ public abstract class ServerRecipeManagerMixin {
         return id != null && BuiltInRegistries.ITEM.containsKey(id)
                 ? Ingredient.of(new ItemStack(BuiltInRegistries.ITEM.get(id), Math.max(1, Math.min(count,
                         BuiltInRegistries.ITEM.get(id).getDefaultMaxStackSize())))) : null;
+    }
+
+    private Ingredient ingredientFor(List<String> options, int count, List<CustomItemEntry> customItems,
+                                     Map<String, ItemStack> customStacks) {
+        List<ItemStack> stacks = new ArrayList<>();
+        for (String option : options) {
+            Ingredient ingredient = ingredientFor(option, count, customItems, customStacks);
+            if (ingredient == null) return null;
+            ItemStack stack = customStacks.get(option);
+            if (stack == null) {
+                ResourceLocation id = ResourceLocation.tryParse(option);
+                if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return null;
+                stack = new ItemStack(BuiltInRegistries.ITEM.get(id));
+            }
+            stack = stack.copyWithCount(Math.max(1, Math.min(count, stack.getMaxStackSize())));
+            stacks.add(stack);
+        }
+        return stacks.isEmpty() ? null : Ingredient.of(stacks.toArray(ItemStack[]::new));
     }
 
     private CraftingRecipe exactWrapper(CraftingRecipe recipe, CustomRecipeEntry entry,

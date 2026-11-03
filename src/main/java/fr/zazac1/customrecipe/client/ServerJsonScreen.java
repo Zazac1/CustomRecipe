@@ -74,11 +74,11 @@ public class ServerJsonScreen extends Screen {
     @Override
     public void renderBackground(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
         super.renderBackground(ctx, mouseX, mouseY, delta);
-        ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
     }
 
     @Override
     public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
+        renderBackground(ctx, mouseX, mouseY, delta);
         super.render(ctx, mouseX, mouseY, delta);
         if (!error.isEmpty()) ctx.drawString(font, error, 14, height - 44, 0xFF5555, false);
     }

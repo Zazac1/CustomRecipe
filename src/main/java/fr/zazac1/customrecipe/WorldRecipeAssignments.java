@@ -34,6 +34,7 @@ public final class WorldRecipeAssignments {
                 activeWorldName = "Current world";
             }
             migrateLegacyRecipes();
+            ConfigLoader.ensureAutomaticLibraryRecipesForWorld(activeWorldId, activeWorldName);
     }
         // The first data-pack recipe load happens before SERVER_STARTING, so it
         // cannot yet know the active save target. Reapply once the world target

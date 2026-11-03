@@ -47,14 +47,14 @@ final class SaveChangesScreen extends Screen {
         // Parent screens use deferred drawables for their labels. Put every modal layer
         // above that batch so a home-screen caption cannot bleed through the panel.
         context.pose().pushPose();
-        context.pose().translate(0.0f, 0.0f, 200.0f);
-        context.fill(0, 0, width, height, 0x98000000);
+        context.pose().translate(0.0f, 0.0f, 400.0f);
+        context.fill(0, 0, width, height, 0x66000000);
 
         int panelWidth = 250;
         int panelHeight = 92;
         int panelX = width / 2 - panelWidth / 2;
         int panelY = height / 2 - panelHeight / 2;
-        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF0181B1E);
+        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF8181B1E);
         drawBorder(context, panelX, panelY, panelWidth, panelHeight, 0xFF6E7678);
         context.hLine(panelX + 8, panelX + panelWidth - 9, panelY + 52, 0xFF3E4749);
         super.render(context, mouseX, mouseY, delta);

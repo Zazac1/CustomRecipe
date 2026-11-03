@@ -129,17 +129,17 @@ final class LocalRecipeConflictDetector {
         if (!root.has("pattern") || !root.has("key")) return null;
         var pattern = root.getAsJsonArray("pattern");
         JsonObject keys = root.getAsJsonObject("key");
-        List<String> slots = new ArrayList<>();
+        List<List<String>> slots = new ArrayList<>();
         int width = 0;
         for (JsonElement row : pattern) width = Math.max(width, row.getAsString().length());
         for (JsonElement row : pattern) {
             String line = row.getAsString();
             for (int column = 0; column < width; column++) {
-                if (column >= line.length() || line.charAt(column) == ' ') slots.add("");
+                if (column >= line.length() || line.charAt(column) == ' ') slots.add(List.of());
                 else {
                     String item = directItem(keys.get(String.valueOf(line.charAt(column))));
                     if (item == null) return null;
-                    slots.add(item);
+                    slots.add(List.of(item));
                 }
             }
         }
@@ -148,13 +148,12 @@ final class LocalRecipeConflictDetector {
 
     private static DefaultRecipe parseShapeless(String id, String result, JsonObject root) {
         if (!root.has("ingredients") || !root.get("ingredients").isJsonArray()) return null;
-        List<String> ingredients = new ArrayList<>();
+        List<List<String>> ingredients = new ArrayList<>();
         for (JsonElement ingredient : root.getAsJsonArray("ingredients")) {
             String item = directItem(ingredient);
             if (item == null) return null;
-            ingredients.add(item);
+            ingredients.add(List.of(item));
         }
-        ingredients.sort(String::compareTo);
         return new DefaultRecipe(id, result, false, new Grid(ingredients.size(), 1, ingredients));
     }
 
@@ -180,19 +179,16 @@ final class LocalRecipeConflictDetector {
 
     private static boolean sameInputs(CustomRecipeEntry custom, DefaultRecipe candidate) {
         boolean shaped = "shaped".equalsIgnoreCase(custom.type);
-        if (shaped != candidate.shaped()) return false;
         Grid customGrid = shaped ? customShapedGrid(custom) : customShapelessGrid(custom);
-        return customGrid != null && customGrid.width() == candidate.inputs().width()
-                && customGrid.height() == candidate.inputs().height()
-                && customGrid.slots().equals(candidate.inputs().slots());
+        return customGrid != null && overlaps(customGrid, shaped, candidate.inputs(), candidate.shaped());
     }
 
     private static boolean sameInputs(CustomRecipeEntry first, CustomRecipeEntry second) {
         boolean shaped = "shaped".equalsIgnoreCase(first.type);
-        if (shaped != "shaped".equalsIgnoreCase(second.type)) return false;
+        boolean secondShaped = "shaped".equalsIgnoreCase(second.type);
         Grid firstGrid = shaped ? customShapedGrid(first) : customShapelessGrid(first);
-        Grid secondGrid = shaped ? customShapedGrid(second) : customShapelessGrid(second);
-        return firstGrid != null && firstGrid.equals(secondGrid);
+        Grid secondGrid = secondShaped ? customShapedGrid(second) : customShapelessGrid(second);
+        return firstGrid != null && secondGrid != null && overlaps(firstGrid, shaped, secondGrid, secondShaped);
     }
 
     /** Output count intentionally does not matter: it is still a recipe-book conflict. */
@@ -208,14 +204,14 @@ final class LocalRecipeConflictDetector {
         if (recipe.pattern == null || recipe.keys == null) return null;
         int height = recipe.pattern.size();
         int width = recipe.pattern.stream().mapToInt(String::length).max().orElse(0);
-        List<String> slots = new ArrayList<>();
+        List<List<String>> slots = new ArrayList<>();
         for (String row : recipe.pattern) {
             for (int column = 0; column < width; column++) {
-                if (column >= row.length() || row.charAt(column) == ' ') slots.add("");
+                if (column >= row.length() || row.charAt(column) == ' ') slots.add(List.of());
                 else {
                     String item = recipe.keys.get(String.valueOf(row.charAt(column)));
                     if (item == null || item.isBlank()) return null;
-                    slots.add(item);
+                    slots.add(recipe.keyOptions(String.valueOf(row.charAt(column))));
                 }
             }
         }
@@ -224,8 +220,8 @@ final class LocalRecipeConflictDetector {
 
     private static Grid customShapelessGrid(CustomRecipeEntry recipe) {
         if (recipe.ingredients == null || recipe.ingredients.stream().anyMatch(item -> item == null || item.isBlank())) return null;
-        List<String> inputs = new ArrayList<>(recipe.ingredients);
-        inputs.sort(String::compareTo);
+        List<List<String>> inputs = new ArrayList<>();
+        for (int index = 0; index < recipe.ingredients.size(); index++) inputs.add(recipe.ingredientOptions(index));
         return new Grid(inputs.size(), 1, inputs);
     }
 
@@ -233,7 +229,7 @@ final class LocalRecipeConflictDetector {
         int left = source.width(), right = -1, top = source.height(), bottom = -1;
         for (int row = 0; row < source.height(); row++) {
             for (int column = 0; column < source.width(); column++) {
-                if (source.slots().get(row * source.width() + column).isBlank()) continue;
+                if (source.slots().get(row * source.width() + column).isEmpty()) continue;
                 left = Math.min(left, column);
                 right = Math.max(right, column);
                 top = Math.min(top, row);
@@ -242,7 +238,7 @@ final class LocalRecipeConflictDetector {
         }
         if (right < left || bottom < top) return new Grid(0, 0, List.of());
         int width = right - left + 1;
-        List<String> slots = new ArrayList<>();
+        List<List<String>> slots = new ArrayList<>();
         for (int row = top; row <= bottom; row++) {
             for (int column = left; column <= right; column++) {
                 slots.add(source.slots().get(row * source.width() + column));
@@ -252,5 +248,38 @@ final class LocalRecipeConflictDetector {
     }
 
     private record DefaultRecipe(String id, String result, boolean shaped, Grid inputs) {}
-    private record Grid(int width, int height, List<String> slots) {}
+    private static boolean overlaps(Grid first, boolean firstShaped, Grid second, boolean secondShaped) {
+        if (first.slots().size() != second.slots().size()) return false;
+        if (firstShaped && secondShaped) {
+            if (first.width() != second.width() || first.height() != second.height()) return false;
+            for (int index = 0; index < first.slots().size(); index++) {
+                List<String> a = first.slots().get(index);
+                List<String> b = second.slots().get(index);
+                if (a.isEmpty() != b.isEmpty() || (!a.isEmpty() && !overlap(a, b))) return false;
+            }
+            return true;
+        }
+        List<List<String>> firstItems = first.slots().stream().filter(values -> !values.isEmpty()).toList();
+        List<List<String>> secondItems = second.slots().stream().filter(values -> !values.isEmpty()).toList();
+        return firstItems.size() == secondItems.size()
+                && assignOptions(0, firstItems, secondItems, new boolean[secondItems.size()]);
+    }
+
+    private static boolean assignOptions(int index, List<List<String>> first, List<List<String>> second,
+                                         boolean[] assigned) {
+        if (index == first.size()) return true;
+        for (int candidate = 0; candidate < second.size(); candidate++) {
+            if (assigned[candidate] || !overlap(first.get(index), second.get(candidate))) continue;
+            assigned[candidate] = true;
+            if (assignOptions(index + 1, first, second, assigned)) return true;
+            assigned[candidate] = false;
+        }
+        return false;
+    }
+
+    private static boolean overlap(List<String> first, List<String> second) {
+        return first.stream().anyMatch(second::contains);
+    }
+
+    private record Grid(int width, int height, List<List<String>> slots) {}
 }
