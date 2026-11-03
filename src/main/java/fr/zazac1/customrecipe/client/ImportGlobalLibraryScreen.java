@@ -43,7 +43,6 @@ final class ImportGlobalLibraryScreen extends Screen {
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         returnTo.render(context, mouseX, mouseY, delta);
-        context.fill(0, 0, width, height, 0x98000000);
 
         int panelWidth = 340;
         int panelHeight = 112;
