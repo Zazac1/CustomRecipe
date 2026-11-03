@@ -68,6 +68,9 @@ public final class BasicValidation {
             shapeless.ingredient_counts=new ArrayList<>(Arrays.asList(2,3)); world.custom_recipes.add(shapeless);
             CustomRecipeEntry shaped=recipe("basic_shaped_counted","minecraft:redstone",2); shaped.type="shaped"; shaped.pattern=new ArrayList<>(Arrays.asList("AB"));
             shaped.keys.put("A","minecraft:glowstone_dust"); shaped.keys.put("B","minecraft:paper"); shaped.key_counts.put("A",3); shaped.key_counts.put("B",2); world.custom_recipes.add(shaped);
+            CustomRecipeEntry alternatives=recipe("basic_alternatives","minecraft:cookie",3,"minecraft:stone","minecraft:feather");
+            alternatives.ingredient_alternatives.add(new ArrayList<>(Arrays.asList("minecraft:cobblestone","minecraft:andesite")));
+            alternatives.ingredient_alternatives.add(new ArrayList<>()); alternatives.ingredient_counts=new ArrayList<>(Arrays.asList(2,1)); world.custom_recipes.add(alternatives);
             config.custom_items.add(item(server,"exact_rod",named(Items.FISHING_ROD,"Validation Rod",7)));
             config.custom_items.add(item(server,"exact_output",named(Items.STICK,"Validation Prize",0)));
             config.custom_items.add(item(server,"collision",named(Items.GOLDEN_AXE,"Server Collision",3)));
@@ -105,6 +108,7 @@ public final class BasicValidation {
         });
         check("shapeless: unordered ingredients and multiple output",() -> { CraftingInventory in=input(new ItemStack(Items.STICK,3),ItemStack.EMPTY,new ItemStack(Items.DIAMOND,2)); ItemStack out=match(server,in).get().assemble(in); require(out.getItem()==Items.APPLE && out.getCount()==2,out.toString()); });
         check("shapeless: insufficient ingredients rejected",() -> require(!match(server,input(new ItemStack(Items.DIAMOND),new ItemStack(Items.STICK,3))).isPresent(),"Incomplete craft matched"));
+        check("alternatives: primary and selected items craft with the required count",() -> { for(Item item:Arrays.asList(Items.STONE,Items.COBBLESTONE,Items.ANDESITE)) { CraftingInventory in=input(new ItemStack(item,2),new ItemStack(Items.FEATHER)); ItemStack out=match(server,in).get().assemble(in); require(out.getItem()==Items.COOKIE && out.getCount()==3,"Alternative failed: "+item); } require(!match(server,input(new ItemStack(Items.GRANITE,2),new ItemStack(Items.FEATHER))).isPresent(),"Unselected item matched"); require(!match(server,input(new ItemStack(Items.COBBLESTONE),new ItemStack(Items.FEATHER))).isPresent(),"Alternative ignored required count"); });
         check("shaped: shifted mirrored pattern and counts",() -> { CraftingInventory in=input(); in.setItem(4,new ItemStack(Items.PAPER,2)); in.setItem(5,new ItemStack(Items.GLOWSTONE_DUST,3)); require(match(server,in).get().assemble(in).getItem()==Items.REDSTONE,"Shifted/mirrored match failed"); });
         check("normal craft: exact consumption and cursor result",() -> { WorkbenchContainer menu=menu(server,player,new ItemStack(Items.DIAMOND,5),new ItemStack(Items.STICK,8)); require(menu.getSlot(0).getItem().getItem()==Items.APPLE,"No output"); menu.clicked(0,0,ClickType.PICKUP,player); require(player.inventory.getCarried().getCount()==2,"Wrong cursor result"); require(menu.getSlot(1).getItem().getCount()==3 && menu.getSlot(2).getItem().getCount()==5,"Wrong consumption"); });
         check("shift craft: repeats without duplication",() -> { WorkbenchContainer menu=menu(server,player,new ItemStack(Items.DIAMOND,6),new ItemStack(Items.STICK,9)); menu.clicked(0,0,ClickType.QUICK_MOVE,player); require(amount(player,Items.APPLE)==6,"Wrong output amount"); require(menu.getSlot(1).getItem().isEmpty() && menu.getSlot(2).getItem().isEmpty(),"Ingredients remain"); });
@@ -116,9 +120,10 @@ public final class BasicValidation {
             player.getRecipeBook().add(recipe);
             player.inventory.setItem(0,new ItemStack(Items.DIAMOND,6));
             player.inventory.setItem(1,new ItemStack(Items.STICK,9));
-            // Use the same entry point as a recipe-book click, including the mod's hooks.
+            // This is the server-side handler invoked by a recipe-book click.
             menu.handlePlacement(true,recipe,player);
-            require(menu.getSlot(0).getItem().getItem()==Items.APPLE,"Book did not fill");
+            require(menu.getSlot(0).getItem().getItem()==Items.APPLE,
+                    "Book did not fill; grid="+menu.getSlot(1).getItem()+","+menu.getSlot(2).getItem());
             menu.clicked(0,0,ClickType.QUICK_MOVE,player);
             require(amount(player,Items.APPLE)==6,"Wrong count after book fill");
         });

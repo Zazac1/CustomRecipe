@@ -1,6 +1,7 @@
 package fr.zazac1.customrecipe;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,16 +22,24 @@ public class CustomRecipeEntry {
     // ── shapeless ─────────────────────────────────────────────────────────
     /** List of ingredient item IDs (e.g. "minecraft:diamond"). Up to 9. */
     public List<String> ingredients = new ArrayList<>();
+    /** Optional alternative item IDs for each shapeless ingredient slot. */
+    public List<List<String>> ingredient_alternatives = new ArrayList<>();
     /** Required stack size for each shapeless ingredient slot (1–64). */
     public List<Integer> ingredient_counts = new ArrayList<>();
+    /** When true, repeated uses of the same alternative group must resolve to different items. */
+    public List<Boolean> ingredient_distinct = new ArrayList<>();
 
     // ── shaped ────────────────────────────────────────────────────────────
     /** 3 pattern rows, each up to 3 characters (' ' = empty slot). */
     public List<String> pattern = new ArrayList<>();
     /** Maps pattern character → item ID. */
     public Map<String, String> keys = new LinkedHashMap<>();
+    /** Optional alternative item IDs for each shaped pattern character. */
+    public Map<String, List<String>> key_alternatives = new LinkedHashMap<>();
     /** Required stack size for each shaped pattern character (1–64). */
     public Map<String, Integer> key_counts = new LinkedHashMap<>();
+    /** When true, repeated cells using this alternative group must resolve to different items. */
+    public Map<String, Boolean> key_distinct = new LinkedHashMap<>();
 
     // ── common ────────────────────────────────────────────────────────────
     /** Result item ID. */
@@ -90,10 +99,51 @@ public class CustomRecipeEntry {
         return clampIngredientCount(value == null ? 1 : value);
     }
 
+    public boolean ingredientRequiresDistinct(int index) {
+        return ingredient_distinct != null && index >= 0 && index < ingredient_distinct.size()
+                && Boolean.TRUE.equals(ingredient_distinct.get(index));
+    }
+
+    /** Primary item followed by every configured alternative for one shapeless slot. */
+    public List<String> ingredientOptions(int index) {
+        if (ingredients == null || index < 0 || index >= ingredients.size()) return Collections.emptyList();
+        return mergedOptions(ingredients.get(index),
+                ingredient_alternatives == null || index >= ingredient_alternatives.size()
+                        ? null : ingredient_alternatives.get(index));
+    }
+
+    /** Primary item followed by every configured alternative for one shaped symbol. */
+    public List<String> keyOptions(String key) {
+        if (keys == null || key == null) return Collections.emptyList();
+        return mergedOptions(keys.get(key), key_alternatives == null ? null : key_alternatives.get(key));
+    }
+
+    public boolean hasAlternativeIngredients() {
+        if (ingredient_alternatives != null
+                && ingredient_alternatives.stream().anyMatch(values -> values != null && !values.isEmpty())) return true;
+        return key_alternatives != null
+                && key_alternatives.values().stream().anyMatch(values -> values != null && !values.isEmpty());
+    }
+
+    private static List<String> mergedOptions(String primary, List<String> alternatives) {
+        LinkedHashMap<String, Boolean> unique = new LinkedHashMap<>();
+        addOption(unique, primary);
+        if (alternatives != null) for (String alternative : alternatives) addOption(unique, alternative);
+        return new ArrayList<>(unique.keySet());
+    }
+
+    private static void addOption(Map<String, Boolean> options, String value) {
+        if (value != null && !value.trim().isEmpty()) options.putIfAbsent(value.trim(), Boolean.TRUE);
+    }
+
     public int keyCount(String key) {
         if (key_counts == null || key == null) return 1;
         Integer value = key_counts.get(key);
         return clampIngredientCount(value == null ? 1 : value);
+    }
+
+    public boolean keyRequiresDistinct(String key) {
+        return key_distinct != null && key != null && Boolean.TRUE.equals(key_distinct.get(key));
     }
 
     public boolean hasCountedIngredients() {
@@ -101,6 +151,11 @@ public class CustomRecipeEntry {
             return true;
         }
         return key_counts != null && key_counts.values().stream().anyMatch(value -> value != null && value > 1);
+    }
+
+    public boolean hasDistinctIngredients() {
+        if (ingredient_distinct != null && ingredient_distinct.stream().anyMatch(Boolean.TRUE::equals)) return true;
+        return key_distinct != null && key_distinct.values().stream().anyMatch(Boolean.TRUE::equals);
     }
 
     public static int clampIngredientCount(int value) {

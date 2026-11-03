@@ -20,6 +20,7 @@ public final class VariantFilteredCraftingRecipe implements ICraftingRecipe {
     public VariantFilteredCraftingRecipe(ICraftingRecipe delegate, Set<String> blocked) { this.delegate = delegate; this.blocked = fr.zazac1.customrecipe.Java8.setCopy(blocked); }
     public ICraftingRecipe delegate() { return delegate; }
     public boolean blocksAny(java.util.Collection<String> materialIds) { return materialIds.stream().anyMatch(blocked::contains); }
+    public boolean blocksAll(java.util.Collection<String> materialIds) { return !materialIds.isEmpty() && materialIds.stream().allMatch(blocked::contains); }
     @Override public boolean matches(CraftingInventory input, World world) { if (!delegate.matches(input, world)) return false; for (int i=0;i<input.getContainerSize();i++) { ItemStack s=input.getItem(i); if(!s.isEmpty() && blocked.contains(Registry.ITEM.getKey(s.getItem()).toString())) return false; } return true; }
     @Override public ItemStack assemble(CraftingInventory input) { return delegate.assemble(input); }
     @Override public boolean canCraftInDimensions(int width, int height) { return delegate.canCraftInDimensions(width, height); }

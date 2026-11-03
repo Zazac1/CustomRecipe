@@ -34,9 +34,12 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
     private static final int SHAPELESS_ROW_H = 26;
     private static final int MAX_SHAPELESS_INGREDIENTS = 9;
     private static final int VISIBLE_SHAPELESS_ROWS = 5;
+    private static final int MAX_VISIBLE_PALETTE_ROWS = 2;
     // Mouse button values follow GLFW: left=0 and right=1.
     private static final int LEFT_MOUSE_BUTTON = GLFW.GLFW_MOUSE_BUTTON_LEFT;
     private static final int RIGHT_MOUSE_BUTTON = GLFW.GLFW_MOUSE_BUTTON_RIGHT;
+    /** Cursor-carried item/erase icon must remain above slots and item decorations. */
+    private static final float HELD_ITEM_LAYER_Z = 500.0F;
 
     private final ConfigScreen parent;
     /** Exact screen that opened this editor, retained for Cancel, Escape and Save. */
@@ -48,9 +51,13 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
     // ── persistent state (survives clearAndInit) ──────────────────────────
     private final String[] slotItems = new String[9]; // grid slots (0-8)
     private final int[] slotCounts = new int[9];
+    private final List<List<String>> slotAlternatives = new ArrayList<>(9);
+    private final boolean[] slotDistinct = new boolean[9];
     /** Ordered ingredient slots used only while the recipe is shapeless. */
     private final List<String> shapelessItems = new ArrayList<>();
     private final List<Integer> shapelessCounts = new ArrayList<>();
+    private final List<List<String>> shapelessAlternatives = new ArrayList<>();
+    private final List<Boolean> shapelessDistinct = new ArrayList<>();
     private String resultItemId   = "";
     private int    resultCount    = 1;
     private EditBox resultCountField;
@@ -66,8 +73,13 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
     /** Selected ingredient row in the shapeless list, or -1. */
     private int selectedShapelessSlot = -1;
     private int shapelessScroll;
+    private final Set<String> expandedPaletteGroups = new LinkedHashSet<>();
+    private int paletteScroll;
+    private boolean draggingPaletteScrollbar;
     /** null = no item picked; empty string = the permanent empty/erase item. */
     private String heldItemId;
+    private List<String> heldAlternatives = fr.zazac1.customrecipe.Java8.list();
+    private boolean heldDistinct;
 
     // text field state
     private String         itemFieldText = "";
@@ -101,6 +113,7 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
         this.editingEntry = editingIndex >= 0 ? source : null;
         Arrays.fill(slotItems, "");
         Arrays.fill(slotCounts, 1);
+        for (int i = 0; i < slotItems.length; i++) slotAlternatives.add(new ArrayList<>());
         if (source == null) {
             initialDraft = draftFingerprint();
             return;
@@ -117,7 +130,10 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                     if (itemId != null && !itemId.isEmpty() && shapelessItems.size() < MAX_SHAPELESS_INGREDIENTS)
                     {
                         shapelessItems.add(itemId);
-                        shapelessCounts.add(clampIngredientCount(itemId, source.ingredientCount(i)));
+                        List<String> alternatives = alternativesOnly(source.ingredientOptions(i), itemId);
+                        shapelessAlternatives.add(alternatives);
+                        shapelessCounts.add(clampIngredientCount(itemId, alternatives, source.ingredientCount(i)));
+                        shapelessDistinct.add(source.ingredientRequiresDistinct(i));
                     }
                 }
             }
@@ -134,7 +150,10 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                     int slot = row * 3 + column;
                     String itemId = source.keys.getOrDefault(String.valueOf(key), "");
                     slotItems[slot] = itemId;
-                    slotCounts[slot] = clampIngredientCount(itemId, source.keyCount(String.valueOf(key)));
+                    slotAlternatives.set(slot, alternativesOnly(source.keyOptions(String.valueOf(key)), itemId));
+                    slotCounts[slot] = clampIngredientCount(itemId, slotAlternatives.get(slot),
+                            source.keyCount(String.valueOf(key)));
+                    slotDistinct[slot] = source.keyRequiresDistinct(String.valueOf(key));
                 }
             }
         }
@@ -211,11 +230,22 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                 && mouseX >= suggestionScrollbarX() && mouseX < leftX() + leftW()
                 && mouseY >= suggestionRowsTop() && mouseY < suggestionRowsTop() + suggestionRowsH();
     }
-    private int paletteColumns() { return Math.max(8, Math.min(16, (rightW() - 16) / 24)); }
-    private int paletteRows() { return Math.max(1, (usedItems().size() + 1 + paletteColumns() - 1) / paletteColumns()); }
-    private int paletteH()   { return paletteRows() * 24 + 8; }
+    private int paletteColumns() { return Math.max(1, Math.min(16, (paletteW() - 20) / 24)); }
+    private int paletteRows() { return Math.max(1, (paletteEntries().size() + 1 + paletteColumns() - 1) / paletteColumns()); }
+    private int visiblePaletteRows() { return Math.min(MAX_VISIBLE_PALETTE_ROWS, paletteRows()); }
+    private int maxPaletteScroll() { return Math.max(0, paletteRows() - visiblePaletteRows()); }
+    private boolean hasPaletteScrollbar() { return maxPaletteScroll() > 0; }
+    private int paletteH()   { return visiblePaletteRows() * 24 + 8; }
     private int paletteW()   { return rightW() - 16; }
     private int paletteX()   { return rightX() + 8; }
+    private int paletteScrollbarX() { return paletteX() + paletteW() - 12; }
+    private int paletteScrollbarY() { return paletteY() + 4; }
+    private int paletteScrollbarH() { return paletteH() - 8; }
+    private boolean isOverPaletteScrollbar(double mouseX, double mouseY) {
+        return hasPaletteScrollbar()
+                && mouseX >= paletteScrollbarX() && mouseX < paletteScrollbarX() + 12
+                && mouseY >= paletteScrollbarY() && mouseY < paletteScrollbarY() + paletteScrollbarH();
+    }
 
     // ── init ─────────────────────────────────────────────────────────────
 
@@ -273,7 +303,7 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
         for (int i = suggestionScroll; i < suggestionScroll + visibleSuggestions(); i++) {
             String id = itemMatches.get(i);
             int ry = suggestionRowsTop() + (i - suggestionScroll) * SUGG_H;
-            MultiLineTextWidget suggestionLabel = makeLabel(leftX() + 22, ry + 4, id, 0xCCCCCC);
+            MultiLineTextWidget suggestionLabel = makeLabel(leftX() + 22, ry + 4, alternativeDisplayName(id), 0xCCCCCC);
             // Leave five characters of safety before the scrollbar instead of clipping the ellipsis.
             suggestionLabel.setMaxWidth(leftW() - 30);
             addRenderableWidget(suggestionLabel);
@@ -295,6 +325,11 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                     34, 18, fr.zazac1.customrecipe.Texts.translatable("customrecipe.builder.ingredient_count")));
             configureCountField(ingredientCountField, selectedIngredientCount(), selectedIngredientMaxCount(),
                     this::setSelectedIngredientCount);
+            addRenderableWidget(Button.builder(
+                    fr.zazac1.customrecipe.Texts.translatable("customrecipe.builder.alternatives", selectedIngredientAlternatives().size()),
+                    b -> minecraft.setScreen(new IngredientAlternativesScreen(this, selectedIngredientItemId(),
+                            selectedIngredientAlternatives()))
+            ).bounds(leftX() + leftW() - 120, panelY() + 2, 116, 18).build());
         } else {
             ingredientCountField = null;
         }
@@ -443,6 +478,8 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
 
     private void selectItem(String itemId) {
         heldItemId = itemId;
+        heldAlternatives = fr.zazac1.customrecipe.Java8.list();
+        heldDistinct = false;
         itemFieldText = shortId(itemId);
         itemMatches   = new ArrayList<>();
         suggestionScroll = 0;
@@ -454,6 +491,8 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
 
     private void selectEmptyItem() {
         heldItemId = "";
+        heldAlternatives = fr.zazac1.customrecipe.Java8.list();
+        heldDistinct = false;
         itemFieldText = "";
         itemMatches = new ArrayList<>();
         suggestionScroll = 0;
@@ -496,6 +535,9 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
         if (heldItemId == null) return;
         if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessItems.size()) {
             shapelessItems.set(selectedShapelessSlot, heldItemId);
+            shapelessAlternatives.get(selectedShapelessSlot).clear();
+            shapelessAlternatives.get(selectedShapelessSlot).addAll(heldAlternatives);
+            shapelessDistinct.set(selectedShapelessSlot, heldDistinct && !heldAlternatives.isEmpty());
             shapelessCounts.set(selectedShapelessSlot, 1);
             // Shapeless rows are one-shot targets: after placing an item, the
             // row returns to its normal, non-selected state.
@@ -504,6 +546,9 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
             resultItemId = heldItemId;
         } else if (selectedSlot >= 0 && selectedSlot < 9) {
             slotItems[selectedSlot] = heldItemId;
+            slotAlternatives.get(selectedSlot).clear();
+            slotAlternatives.get(selectedSlot).addAll(heldAlternatives);
+            slotDistinct[selectedSlot] = heldDistinct && !heldAlternatives.isEmpty();
             slotCounts[selectedSlot] = 1;
         }
     }
@@ -523,7 +568,7 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
     }
 
     private void setSelectedIngredientCount(int value) {
-        int normalized = clampIngredientCount(selectedIngredientItemId(), value);
+        int normalized = clampIngredientCount(selectedIngredientItemId(), selectedIngredientAlternatives(), value);
         if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessCounts.size()) {
             shapelessCounts.set(selectedShapelessSlot, normalized);
         } else if (selectedSlot >= 0 && selectedSlot < slotCounts.length) {
@@ -539,7 +584,36 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
     }
 
     private int selectedIngredientMaxCount() {
-        return maxIngredientCount(selectedIngredientItemId());
+        return maxIngredientCount(selectedIngredientItemId(), selectedIngredientAlternatives());
+    }
+
+    private List<String> selectedIngredientAlternatives() {
+        if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessAlternatives.size()) {
+            return shapelessAlternatives.get(selectedShapelessSlot);
+        }
+        if (selectedSlot >= 0 && selectedSlot < slotAlternatives.size()) return slotAlternatives.get(selectedSlot);
+        return new ArrayList<>();
+    }
+
+    boolean selectedIngredientRequiresDistinct() {
+        if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessDistinct.size()) {
+            return Boolean.TRUE.equals(shapelessDistinct.get(selectedShapelessSlot));
+        }
+        return selectedSlot >= 0 && selectedSlot < slotDistinct.length && slotDistinct[selectedSlot];
+    }
+
+    void setSelectedIngredientRequiresDistinct(boolean value) {
+        boolean normalized = value && !selectedIngredientAlternatives().isEmpty();
+        if (selectedShapelessSlot >= 0 && selectedShapelessSlot < shapelessDistinct.size()) {
+            shapelessDistinct.set(selectedShapelessSlot, normalized);
+        } else if (selectedSlot >= 0 && selectedSlot < slotDistinct.length) {
+            slotDistinct[selectedSlot] = normalized;
+        }
+    }
+
+    void alternativesChanged() {
+        setSelectedIngredientRequiresDistinct(selectedIngredientRequiresDistinct());
+        setSelectedIngredientCount(selectedIngredientCount());
     }
 
     private boolean heldItemDiffersFrom(String itemId) {
@@ -548,6 +622,8 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
 
     private void editIngredientCount(int slot, boolean shapeless) {
         heldItemId = null;
+        heldAlternatives = fr.zazac1.customrecipe.Java8.list();
+        heldDistinct = false;
         selectedSlot = shapeless ? -2 : slot;
         selectedShapelessSlot = shapeless ? slot : -1;
         restoreFocus = 0;
@@ -563,6 +639,8 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                 resultItemId = "";
             } else if (slot >= 0 && slot < 9) {
                 slotItems[slot] = "";
+                slotAlternatives.get(slot).clear();
+                slotDistinct[slot] = false;
                 slotCounts[slot] = 1;
             }
             selectedSlot = -2;
@@ -577,17 +655,89 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
         rebuildWidgets();
     }
 
-    /** Unique items already present in the draft, ordered result first. */
-    private List<String> usedItems() {
-        LinkedHashSet<String> items = new LinkedHashSet<>();
-        if (resultItemId != null && !resultItemId.trim().isEmpty()) items.add(resultItemId);
-        for (String item : slotItems) {
-            if (item != null && !item.trim().isEmpty()) items.add(item);
+    private List<PaletteGroup> paletteGroups() {
+        Map<String, LinkedHashSet<String>> grouped = new LinkedHashMap<>();
+        Set<String> distinctGroups = new LinkedHashSet<>();
+        addPaletteGroup(grouped, distinctGroups, resultItemId, fr.zazac1.customrecipe.Java8.list(), false);
+        for (int i = 0; i < slotItems.length; i++) {
+            addPaletteGroup(grouped, distinctGroups, slotItems[i], slotAlternatives.get(i), slotDistinct[i]);
         }
-        for (String item : shapelessItems) {
-            if (item != null && !item.trim().isEmpty()) items.add(item);
+        for (int i = 0; i < shapelessItems.size(); i++) addPaletteGroup(grouped, distinctGroups, shapelessItems.get(i),
+                i < shapelessAlternatives.size() ? shapelessAlternatives.get(i) : fr.zazac1.customrecipe.Java8.list(),
+                i < shapelessDistinct.size() && Boolean.TRUE.equals(shapelessDistinct.get(i)));
+        List<PaletteGroup> groups = new ArrayList<>();
+        grouped.forEach((primary, alternatives) -> groups.add(new PaletteGroup(primary,
+                new ArrayList<>(alternatives), distinctGroups.contains(primary))));
+        return groups;
+    }
+
+    private void addPaletteGroup(Map<String, LinkedHashSet<String>> groups, Set<String> distinctGroups,
+                                 String primary, List<String> alternatives, boolean distinct) {
+        if (primary == null || primary.trim().isEmpty()) return;
+        LinkedHashSet<String> values = groups.computeIfAbsent(primary, ignored -> new LinkedHashSet<>());
+        if (alternatives != null) alternatives.stream()
+                .filter(value -> value != null && !value.trim().isEmpty() && !value.equals(primary)).forEach(values::add);
+        if (distinct) distinctGroups.add(primary);
+    }
+
+    private List<PaletteEntry> paletteEntries() {
+        List<PaletteEntry> entries = new ArrayList<>();
+        for (PaletteGroup group : paletteGroups()) {
+            boolean expanded = !group.alternatives().isEmpty() && expandedPaletteGroups.contains(group.primary());
+            entries.add(new PaletteEntry(group.primary(), group.primary(), group.alternatives().size(),
+                    group.distinct(), true, expanded));
+            if (expanded) for (String alternative : group.alternatives())
+                entries.add(new PaletteEntry(alternative, group.primary(), 0, false, false, true));
         }
-        return new ArrayList<>(items);
+        return entries;
+    }
+
+    private PaletteEntry paletteEntryAtSlot(int slot) {
+        if (slot <= 0) return null;
+        List<PaletteEntry> entries = paletteEntries();
+        return slot - 1 < entries.size() ? entries.get(slot - 1) : null;
+    }
+
+    private int paletteSlotAt(double mouseX, double mouseY) {
+        if (mouseX < paletteX() + 8 || mouseX >= paletteX() + paletteW()
+                || mouseY < paletteY() + 6 || mouseY >= paletteY() + paletteH()) return -1;
+        int column = (int) (mouseX - paletteX() - 8) / 24;
+        int row = (int) (mouseY - paletteY() - 6) / 24;
+        if (column < 0 || column >= paletteColumns() || row < 0 || row >= visiblePaletteRows()) return -1;
+        int cellX = paletteX() + 8 + column * 24;
+        int cellY = paletteY() + 6 + row * 24;
+        if (mouseX >= cellX + 20 || mouseY >= cellY + 20) return -1;
+        int slot = paletteScroll * paletteColumns() + row * paletteColumns() + column;
+        return slot < paletteEntries().size() + 1 ? slot : -1;
+    }
+
+    private void activatePaletteEntry(PaletteEntry entry) {
+        if (entry.primary() && entry.alternativeCount() > 0) selectPaletteGroup(entry.groupId());
+        else selectUsedItem(entry.itemId());
+    }
+
+    private void selectPaletteGroup(String primary) {
+        for (PaletteGroup group : paletteGroups()) {
+            if (!Objects.equals(group.primary(), primary)) continue;
+            heldItemId = group.primary();
+            heldAlternatives = new ArrayList<>(group.alternatives());
+            heldDistinct = group.distinct();
+            itemFieldText = shortId(group.primary());
+            itemMatches = new ArrayList<>();
+            suggestionScroll = 0;
+            restoreFocus = 0;
+            setFocused(null);
+            applyNewHeldItemToSelectedSlot();
+            rebuildWidgets();
+            return;
+        }
+    }
+
+    private void togglePaletteGroup(String primary) {
+        if (primary == null || primary.trim().isEmpty()) return;
+        if (!expandedPaletteGroups.add(primary)) expandedPaletteGroups.remove(primary);
+        paletteScroll = Math.min(paletteScroll, maxPaletteScroll());
+        rebuildWidgets();
     }
 
     private void selectUsedItem(String itemId) {
@@ -597,6 +747,8 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
     private void selectShapelessSlot(int slot) {
         if (heldItemId != null && heldItemId.isEmpty()) {
             shapelessItems.set(slot, "");
+            shapelessAlternatives.get(slot).clear();
+            shapelessDistinct.set(slot, false);
             shapelessCounts.set(slot, 1);
             selectedShapelessSlot = -1;
             selectedSlot = -2;
@@ -613,7 +765,9 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
     private void addShapelessSlot() {
         if (shapelessItems.size() < MAX_SHAPELESS_INGREDIENTS) {
             shapelessItems.add("");
+            shapelessAlternatives.add(new ArrayList<>());
             shapelessCounts.add(1);
+            shapelessDistinct.add(false);
         }
         selectedShapelessSlot = -1;
         rebuildWidgets();
@@ -622,10 +776,14 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
     private void removeShapelessSlot(int slot) {
         if (shapelessItems.size() > 1) {
             shapelessItems.remove(slot);
+            shapelessAlternatives.remove(slot);
             shapelessCounts.remove(slot);
+            shapelessDistinct.remove(slot);
         } else {
             shapelessItems.set(0, "");
+            shapelessAlternatives.get(0).clear();
             shapelessCounts.set(0, 1);
+            shapelessDistinct.set(0, false);
         }
         selectedShapelessSlot = -1;
         rebuildWidgets();
@@ -633,7 +791,9 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
 
     private void clearFirstShapelessSlot() {
         shapelessItems.set(0, "");
+        shapelessAlternatives.get(0).clear();
         shapelessCounts.set(0, 1);
+        shapelessDistinct.set(0, false);
         selectedShapelessSlot = -1;
         rebuildWidgets();
     }
@@ -643,7 +803,8 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
         for (int i = 0; i < shapelessItems.size(); i++) {
             String itemId = shapelessItems.get(i);
             rows.add(new ShapelessRow(itemId == null ? "" : itemId, i,
-                    i < shapelessCounts.size() ? shapelessCounts.get(i) : 1));
+                    i < shapelessCounts.size() ? shapelessCounts.get(i) : 1,
+                    i < shapelessAlternatives.size() ? shapelessAlternatives.get(i).size() : 0));
         }
         return rows;
     }
@@ -670,44 +831,70 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
         private final String itemId;
         private final int slotIndex;
         private final int count;
-        public ShapelessRow(String itemId, int slotIndex, int count) { this.itemId=itemId; this.slotIndex=slotIndex; this.count=count; }
+        private final int alternativeCount;
+        public ShapelessRow(String itemId, int slotIndex, int count, int alternativeCount) { this.itemId=itemId; this.slotIndex=slotIndex; this.count=count; this.alternativeCount=alternativeCount; }
         public String itemId() { return itemId; }
         public int slotIndex() { return slotIndex; }
         public int count() { return count; }
-        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; ShapelessRow other=(ShapelessRow)obj; return java.util.Objects.equals(itemId, other.itemId) && java.util.Objects.equals(slotIndex, other.slotIndex) && java.util.Objects.equals(count, other.count); }
-        @Override public int hashCode() { return java.util.Objects.hash(itemId, slotIndex, count); }
+        public int alternativeCount() { return alternativeCount; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; ShapelessRow other=(ShapelessRow)obj; return java.util.Objects.equals(itemId, other.itemId) && slotIndex==other.slotIndex && count==other.count && alternativeCount==other.alternativeCount; }
+        @Override public int hashCode() { return java.util.Objects.hash(itemId, slotIndex, count, alternativeCount); }
 }
+    private static final class PaletteGroup {
+        private final String primary; private final List<String> alternatives; private final boolean distinct;
+        PaletteGroup(String primary, List<String> alternatives, boolean distinct) { this.primary=primary; this.alternatives=alternatives==null ? fr.zazac1.customrecipe.Java8.list() : new ArrayList<>(alternatives); this.distinct=distinct; }
+        String primary(){return primary;} List<String> alternatives(){return alternatives;} boolean distinct(){return distinct;}
+    }
+    private static final class PaletteEntry {
+        private final String itemId, groupId; private final int alternativeCount; private final boolean distinct, primary, expanded;
+        PaletteEntry(String itemId,String groupId,int alternativeCount,boolean distinct,boolean primary,boolean expanded){this.itemId=itemId;this.groupId=groupId;this.alternativeCount=alternativeCount;this.distinct=distinct;this.primary=primary;this.expanded=expanded;}
+        String itemId(){return itemId;} String groupId(){return groupId;} int alternativeCount(){return alternativeCount;} boolean distinct(){return distinct;} boolean primary(){return primary;} boolean expanded(){return expanded;}
+    }
     private static final class IngredientKey {
         private final String itemId;
+        private final List<String> alternatives;
         private final int count;
-        public IngredientKey(String itemId, int count) { this.itemId=itemId; this.count=count; }
+        private final boolean distinct;
+        public IngredientKey(String itemId, List<String> alternatives, int count, boolean distinct) { this.itemId=itemId; this.alternatives=alternatives==null ? fr.zazac1.customrecipe.Java8.list() : new ArrayList<>(alternatives); this.count=count; this.distinct=distinct; }
         public String itemId() { return itemId; }
+        public List<String> alternatives() { return alternatives; }
         public int count() { return count; }
-        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; IngredientKey other=(IngredientKey)obj; return java.util.Objects.equals(itemId, other.itemId) && java.util.Objects.equals(count, other.count); }
-        @Override public int hashCode() { return java.util.Objects.hash(itemId, count); }
+        public boolean distinct() { return distinct; }
+        @Override public boolean equals(Object obj) { if (this==obj) return true; if (obj==null || obj.getClass()!=getClass()) return false; IngredientKey other=(IngredientKey)obj; return java.util.Objects.equals(itemId, other.itemId) && java.util.Objects.equals(alternatives, other.alternatives) && count==other.count && distinct==other.distinct; }
+        @Override public int hashCode() { return java.util.Objects.hash(itemId, alternatives, count, distinct); }
 }
 
     private void toggleShapeMode() {
         if (shaped) {
             shapelessItems.clear();
             shapelessCounts.clear();
+            shapelessAlternatives.clear();
+            shapelessDistinct.clear();
             for (int i = 0; i < slotItems.length; i++) {
                 String itemId = slotItems[i];
                 if (itemId != null && !itemId.trim().isEmpty()) {
                     shapelessItems.add(itemId);
                     shapelessCounts.add(slotCounts[i]);
+                    shapelessAlternatives.add(new ArrayList<>(slotAlternatives.get(i)));
+                    shapelessDistinct.add(slotDistinct[i]);
                 }
             }
             if (shapelessItems.isEmpty()) {
                 shapelessItems.add("");
                 shapelessCounts.add(1);
+                shapelessAlternatives.add(new ArrayList<>());
+                shapelessDistinct.add(false);
             }
         } else {
             Arrays.fill(slotItems, "");
             Arrays.fill(slotCounts, 1);
+            Arrays.fill(slotDistinct, false);
+            slotAlternatives.forEach(List::clear);
             for (int i = 0; i < shapelessItems.size() && i < slotItems.length; i++) {
                 slotItems[i] = shapelessItems.get(i);
                 slotCounts[i] = shapelessCounts.get(i);
+                slotAlternatives.set(i, new ArrayList<>(shapelessAlternatives.get(i)));
+                slotDistinct[i] = i < shapelessDistinct.size() && Boolean.TRUE.equals(shapelessDistinct.get(i));
             }
         }
         shaped = !shaped;
@@ -715,6 +902,8 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
         selectedShapelessSlot = -1;
         shapelessScroll = 0;
         heldItemId = null;
+        heldAlternatives = fr.zazac1.customrecipe.Java8.list();
+        heldDistinct = false;
     }
 
     private void addShapelessListControls() {
@@ -770,7 +959,9 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                         if (!stack.isEmpty()) {
                             ctx.renderItem(stack, sx + 1, sy + 1);
                             ctx.renderItemDecorations(font, stack, sx + 1, sy + 1,
-                                    String.valueOf(slotCounts[slot]));
+                                    slotAlternatives.get(slot).isEmpty()
+                                            ? String.valueOf(slotCounts[slot])
+                                            : "+" + slotAlternatives.get(slot).size());
                         }
                     }
                 }
@@ -830,28 +1021,51 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
         int paletteW = paletteW();
         ctx.fill(paletteX + 1, paletteY + 1, paletteX + paletteW - 1, paletteY + paletteH - 1, 0xEE25313A);
         drawBox(ctx, paletteX, paletteY, paletteW, paletteH, 0xFF3E6B84);
-        // Reusable items only: the selected item already follows the cursor.
-        List<String> used = usedItems();
-        for (int i = 0; i <= used.size(); i++) {
-            int x = paletteX + 8 + (i % paletteColumns()) * 24;
-            int y = paletteY + 6 + (i / paletteColumns()) * 24;
+        // Reusable items only: alternative sets stay folded under their primary item.
+        List<PaletteEntry> entries = paletteEntries();
+        int columns = paletteColumns();
+        int firstSlot = paletteScroll * columns;
+        int lastSlot = Math.min(entries.size() + 1, firstSlot + visiblePaletteRows() * columns);
+        for (int slot = firstSlot; slot < lastSlot; slot++) {
+            int visibleIndex = slot - firstSlot;
+            int x = paletteX + 8 + (visibleIndex % columns) * 24;
+            int y = paletteY + 6 + (visibleIndex / columns) * 24;
             boolean hovered = mx >= x && mx < x + 20 && my >= y && my < y + 20;
-            boolean empty = i == 0;
+            boolean empty = slot == 0;
+            PaletteEntry entry = paletteEntryAtSlot(slot);
             ctx.fill(x + 1, y + 1, x + 19, y + 19,
                     hovered ? 0xFF315D7D : empty ? 0xFF242A30 : 0xFF303030);
-            drawBox(ctx, x, y, 20, 20, hovered ? 0xFF78C8FF : empty ? 0xFF9A6670 : 0xFF5C6D78);
+            int border = entry != null && !entry.primary() ? 0xFF6B8E9E : 0xFF5C6D78;
+            drawBox(ctx, x, y, 20, 20, hovered ? 0xFF78C8FF : empty ? 0xFF9A6670 : border);
             if (empty) {
                 CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, x + 1, y + 1, 18, 18);
-            } else {
-                ItemStack stack = stackFor(used.get(i - 1));
-                if (!stack.isEmpty()) ctx.renderItem(stack, x + 2, y + 2);
+            } else if (entry != null) {
+                ItemStack stack = stackFor(entry.itemId());
+                if (!stack.isEmpty()) {
+                    ctx.renderItem(stack, x + 2, y + 2);
+                    if (entry.primary() && entry.alternativeCount() > 0) {
+                        ctx.renderItemDecorations(font, stack, x + 2, y + 2,
+                                entry.expanded() ? "−" : "+" + entry.alternativeCount());
+                    }
+                }
             }
+        }
+        if (hasPaletteScrollbar()) {
+            int trackX = paletteScrollbarX();
+            int trackY = paletteScrollbarY();
+            int trackH = paletteScrollbarH();
+            int thumbH = 15;
+            int thumbY = trackY + (trackH - thumbH) * paletteScroll / maxPaletteScroll();
+            ctx.fill(trackX, trackY, trackX + 12, trackY + trackH, SCROLLBAR_TRACK_COLOR);
+            CustomRecipeSprites.draw(ctx,
+                    draggingPaletteScrollbar ? CustomRecipeSprites.SCROLLER_ACTIVE : CustomRecipeSprites.SCROLLER_IDLE,
+                    trackX, thumbY, 12, 15);
         }
     }
 
     @Override
     public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
+        renderBackground(ctx);
         super.render(ctx, mouseX, mouseY, delta);
         if (itemField != null)
             drawBox(ctx, leftX(), fieldY(), leftW(), SEARCH_H,
@@ -863,16 +1077,22 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                 && mouseY >= panelY() && mouseY < panelY() + workspaceH()) {
             int ghostX = mouseX - 8;
             int ghostY = mouseY - 8;
-            if (heldItemId.isEmpty()) {
-                CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, ghostX - 1, ghostY - 1, 18, 18);
-            } else {
-                ItemStack heldItem = stackFor(heldItemId);
-                if (!heldItem.isEmpty()) {
-                ctx.renderItem(heldItem, ghostX, ghostY);
-                // The 1.21.11 GUI item pipeline has no alpha overload. Its
-                // translucent veil keeps the cursor item at 80% visual weight.
-                ctx.fill(ghostX, ghostY, ghostX + 16, ghostY + 16, 0x33000000);
+            ctx.pose().pushPose();
+            ctx.pose().translate(0.0F, 0.0F, HELD_ITEM_LAYER_Z);
+            try {
+                if (heldItemId.isEmpty()) {
+                    CustomRecipeSprites.draw(ctx, CustomRecipeSprites.REJECT, ghostX - 1, ghostY - 1, 18, 18);
+                } else {
+                    ItemStack heldItem = stackFor(heldItemId);
+                    if (!heldItem.isEmpty()) {
+                        ctx.renderItem(heldItem, ghostX, ghostY);
+                        // The GUI item pipeline has no alpha overload. Its translucent
+                        // veil keeps the cursor item at 80% visual weight.
+                        ctx.fill(ghostX, ghostY, ghostX + 16, ghostY + 16, 0x33000000);
+                    }
                 }
+            } finally {
+                ctx.pose().popPose();
             }
         }
 
@@ -890,15 +1110,20 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
             }
         }
 
-        List<String> used = usedItems();
         int paletteY = paletteY();
         int paletteX = paletteX();
-        for (int i = 0; i <= used.size(); i++) {
-            int x = paletteX + 8 + (i % paletteColumns()) * 24;
-            int y = paletteY + 6 + (i / paletteColumns()) * 24;
+        int columns = paletteColumns();
+        int firstSlot = paletteScroll * columns;
+        int lastSlot = Math.min(paletteEntries().size() + 1, firstSlot + visiblePaletteRows() * columns);
+        for (int slot = firstSlot; slot < lastSlot; slot++) {
+            int visibleIndex = slot - firstSlot;
+            int x = paletteX + 8 + (visibleIndex % columns) * 24;
+            int y = paletteY + 6 + (visibleIndex / columns) * 24;
             if (mouseX >= x && mouseX < x + 20 && mouseY >= y && mouseY < y + 20) {
+                PaletteEntry entry = paletteEntryAtSlot(slot);
                 ctx.renderTooltip(font,
-                        i == 0 ? fr.zazac1.customrecipe.Texts.translatable("customrecipe.builder.empty_remove") : fr.zazac1.customrecipe.Texts.literal(used.get(i - 1)), mouseX, mouseY);
+                        slot == 0 ? fr.zazac1.customrecipe.Texts.translatable("customrecipe.builder.empty_remove")
+                                : fr.zazac1.customrecipe.Texts.literal(entry == null ? "" : entry.itemId()), mouseX, mouseY);
                 break;
             }
         }
@@ -926,12 +1151,24 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
             clearItemSearch();
             return true;
         }
+        // A group itself is selected with left click. Right click is reserved
+        // for unfolding/folding its individual alternatives.
+        if (button == RIGHT_MOUSE_BUTTON) {
+            int paletteSlot = paletteSlotAt(mx, my);
+            PaletteEntry entry = paletteEntryAtSlot(paletteSlot);
+            if (entry != null && entry.primary() && entry.alternativeCount() > 0) {
+                togglePaletteGroup(entry.groupId());
+                return true;
+            }
+        }
         // Right-clicking the preview area cancels the item currently carried
         // by the cursor; it never edits a recipe slot.
         if (button == RIGHT_MOUSE_BUTTON
                 && mx >= rightX() && mx < rightX() + rightW()
                 && my >= panelY() && my < panelY() + workspaceH()) {
             heldItemId = null;
+        heldAlternatives = fr.zazac1.customrecipe.Java8.list();
+        heldDistinct = false;
             selectedSlot = -2;
             selectedShapelessSlot = -1;
             rebuildWidgets();
@@ -956,6 +1193,11 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                             int amountX = sx + SLOT - font.width(amount) - 2;
                             if (mx >= amountX && my >= sy + SLOT - 9) {
                                 editIngredientCount(slot, false);
+                                return true;
+                            }
+                            if (heldItemId == null && selectedSlot == slot
+                                    && !slotAlternatives.get(slot).isEmpty()) {
+                                togglePaletteGroup(slotItems[slot]);
                                 return true;
                             }
                         }
@@ -986,6 +1228,11 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                 }
                 if (mx >= listX + 4 && mx < listX + 4 + SLOT
                         && my >= slotY + 4 && my < slotY + 4 + SLOT) {
+                    if (heldItemId == null && selectedShapelessSlot == row.slotIndex()
+                            && row.alternativeCount() > 0) {
+                        togglePaletteGroup(row.itemId());
+                        return true;
+                    }
                     selectShapelessSlot(row.slotIndex());
                     return true;
                 }
@@ -1036,15 +1283,27 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
         }
 
         {
-            List<String> used = usedItems();
             int paletteY = paletteY();
             int paletteX = paletteX();
-            for (int i = 0; i <= used.size(); i++) {
-                int x = paletteX + 8 + (i % paletteColumns()) * 24;
-                int y = paletteY + 6 + (i / paletteColumns()) * 24;
+            if (isOverPaletteScrollbar(mx, my)) {
+                draggingPaletteScrollbar = true;
+                updatePaletteScrollbar(my);
+                return true;
+            }
+            int columns = paletteColumns();
+            int firstSlot = paletteScroll * columns;
+            int lastSlot = Math.min(paletteEntries().size() + 1,
+                    firstSlot + visiblePaletteRows() * columns);
+            for (int slot = firstSlot; slot < lastSlot; slot++) {
+                int visibleIndex = slot - firstSlot;
+                int x = paletteX + 8 + (visibleIndex % columns) * 24;
+                int y = paletteY + 6 + (visibleIndex / columns) * 24;
                 if (mx >= x && mx < x + 20 && my >= y && my < y + 20) {
-                    if (i == 0) selectEmptyItem();
-                    else selectUsedItem(used.get(i - 1));
+                    if (slot == 0) selectEmptyItem();
+                    else {
+                        PaletteEntry entry = paletteEntryAtSlot(slot);
+                        if (entry != null) activatePaletteEntry(entry);
+                    }
                     return true;
                 }
             }
@@ -1055,6 +1314,18 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
 
     @Override
     public boolean mouseScrolled(double mx, double my, double verticalAmount) {
+        int countDelta = (int) Math.signum(verticalAmount);
+        if (countDelta != 0 && ingredientCountField != null && ingredientCountField.isMouseOver(mx, my)) {
+            int next = Math.max(1, Math.min(selectedIngredientMaxCount(), selectedIngredientCount() + countDelta));
+            setSelectedIngredientCount(next);
+            ingredientCountField.setValue(String.valueOf(next));
+            return true;
+        }
+        if (countDelta != 0 && resultCountField != null && resultCountField.isMouseOver(mx, my)) {
+            resultCount = Math.max(1, Math.min(64, resultCount + countDelta));
+            resultCountField.setValue(String.valueOf(resultCount));
+            return true;
+        }
         if (!shaped && hasShapelessScrollbar()
                 && mx >= shapelessScrollbarX() && mx < shapelessListX() + shapelessListW()
                 && my >= shapelessListY() && my < shapelessListY() + visibleShapelessRows() * SHAPELESS_ROW_H) {
@@ -1064,6 +1335,12 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                 shapelessScroll = next;
                 rebuildWidgets();
             }
+            return true;
+        }
+        if (mx >= paletteX() && mx < paletteX() + paletteW()
+                && my >= paletteY() && my < paletteY() + paletteH()) {
+            int direction = -(int) Math.signum(verticalAmount);
+            paletteScroll = Math.max(0, Math.min(maxPaletteScroll(), paletteScroll + direction));
             return true;
         }
         int sy = suggestionRowsTop();
@@ -1095,6 +1372,10 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
         }
         if (button == LEFT_MOUSE_BUTTON && draggingSuggestionScrollbar) {
             updateSuggestionScrollbar(my);
+            return true;
+        }
+        if (draggingPaletteScrollbar) {
+            updatePaletteScrollbar(my);
             return true;
         }
         return super.mouseDragged(mouseX, my, button, deltaX, deltaY);
@@ -1139,6 +1420,14 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
             shapelessScroll = next;
             rebuildWidgets();
         }
+    }
+
+    private void updatePaletteScrollbar(double mouseY) {
+        int maxScroll = maxPaletteScroll();
+        if (maxScroll <= 0) return;
+        double progress = Math.max(0.0, Math.min(1.0,
+                (mouseY - paletteScrollbarY()) / Math.max(1, paletteScrollbarH() - 1)));
+        paletteScroll = (int) Math.round(progress * maxScroll);
     }
 
     @Override
@@ -1193,7 +1482,9 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                         row.append(' ');
                     } else {
                         IngredientKey ingredient = new IngredientKey(id,
-                                clampIngredientCount(id, slotCounts[r * 3 + c]));
+                                slotAlternatives.get(r * 3 + c),
+                                clampIngredientCount(id, slotAlternatives.get(r * 3 + c), slotCounts[r * 3 + c]),
+                                slotDistinct[r * 3 + c]);
                         if (!itemToChar.containsKey(ingredient)) itemToChar.put(ingredient, next++);
                         row.append(itemToChar.get(ingredient));
                     }
@@ -1204,7 +1495,9 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
             for (Map.Entry<IngredientKey, Character> kv : itemToChar.entrySet()) {
                 String symbol = String.valueOf(kv.getValue());
                 entry.keys.put(symbol, kv.getKey().itemId());
+                entry.key_alternatives.put(symbol, new ArrayList<>(kv.getKey().alternatives()));
                 entry.key_counts.put(symbol, kv.getKey().count());
+                entry.key_distinct.put(symbol, kv.getKey().distinct());
             }
         } else {
             entry.type = "shapeless";
@@ -1212,7 +1505,11 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
                 String itemId = shapelessItems.get(i);
                 if (itemId != null && !itemId.isEmpty()) {
                     entry.ingredients.add(itemId);
-                    entry.ingredient_counts.add(clampIngredientCount(itemId, shapelessCounts.get(i)));
+                    entry.ingredient_alternatives.add(new ArrayList<>(shapelessAlternatives.get(i)));
+                    entry.ingredient_counts.add(clampIngredientCount(itemId, shapelessAlternatives.get(i),
+                            shapelessCounts.get(i)));
+                    entry.ingredient_distinct.add(i < shapelessDistinct.size()
+                            && Boolean.TRUE.equals(shapelessDistinct.get(i)));
                 }
             }
         }
@@ -1258,9 +1555,38 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
         return stack.isEmpty() ? 1 : Math.max(1, Math.min(64, stack.getMaxStackSize()));
     }
 
+    private int maxIngredientCount(String itemId, List<String> alternatives) {
+        int max = maxIngredientCount(itemId);
+        if (alternatives != null) {
+            for (String alternative : alternatives) max = Math.min(max, maxIngredientCount(alternative));
+        }
+        return max;
+    }
+
     private int clampIngredientCount(String itemId, int value) {
         return Math.max(1, Math.min(maxIngredientCount(itemId), value));
     }
+
+    private int clampIngredientCount(String itemId, List<String> alternatives, int value) {
+        return Math.max(1, Math.min(maxIngredientCount(itemId, alternatives), value));
+    }
+
+    private static List<String> alternativesOnly(List<String> options, String primary) {
+        List<String> alternatives = new ArrayList<>();
+        if (options != null) {
+            for (String option : options) {
+                if (option != null && !option.trim().isEmpty() && !Objects.equals(option, primary)
+                        && !alternatives.contains(option)) alternatives.add(option);
+            }
+        }
+        return alternatives;
+    }
+
+    List<String> alternativeMatches(String query) { return findItemMatches(query); }
+    String alternativeDisplayName(String itemId) {
+        return toDisplayName(itemId);
+    }
+    ItemStack alternativeStack(String itemId) { return stackFor(itemId); }
 
     @Override
     public void onClose() {
@@ -1274,7 +1600,9 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
     private String draftFingerprint() {
         return shaped + "|" + resultItemId + "|" + resultCount + "|" + knownByDefault + "|" + alsoSaveToLibrary
                 + "|" + Arrays.toString(slotItems) + "|" + Arrays.toString(slotCounts)
-                + "|" + String.join("\\u001F", shapelessItems) + "|" + shapelessCounts;
+                + "|" + slotAlternatives + "|" + Arrays.toString(slotDistinct)
+                + "|" + String.join("\\u001F", shapelessItems) + "|" + shapelessCounts
+                + "|" + shapelessAlternatives + "|" + shapelessDistinct;
     }
 
     private void renderShapelessIngredientList(GuiGraphics ctx, int mouseX, int mouseY) {
@@ -1300,7 +1628,8 @@ public class RecipeBuilderScreen extends fr.zazac1.customrecipe.client.compat.Le
             if (itemId != null && !itemId.isEmpty()) {
                 ItemStack stack = stackFor(itemId);
                 if (!stack.isEmpty()) ctx.renderItem(stack, x + 5, rowY + 5);
-                String name = font.plainSubstrByWidth(toDisplayName(itemId), Math.max(20, countX - x - 68));
+                String suffix = row.alternativeCount() == 0 ? "" : " (+" + row.alternativeCount() + ")";
+                String name = font.plainSubstrByWidth(toDisplayName(itemId) + suffix, Math.max(20, countX - x - 68));
                 ctx.drawString(font, name, x + 42, rowY + 8, 0xFFDDDDDD, false);
                 ctx.drawString(font, "×" + row.count(), countX, rowY + 7, 0xFFEECC77, false);
             }

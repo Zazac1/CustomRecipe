@@ -47,7 +47,11 @@ minecraft {
             mods { "${project.mod_id}" { source sourceSets.localDevelopment } }
             arg '-mixin.config=customrecipe.development.mixins.json'
         }
-        server { workingDirectory project.file('run/server'); args '--nogui' }
+        server {
+            workingDirectory project.file(project.hasProperty('basicValidation')
+                    ? 'validation/runtime/server' : 'run/server')
+            args '--nogui'
+        }
     }
 }
 

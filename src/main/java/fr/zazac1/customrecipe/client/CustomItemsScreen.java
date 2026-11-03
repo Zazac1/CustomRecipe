@@ -81,7 +81,7 @@ final class CustomItemsScreen extends fr.zazac1.customrecipe.client.compat.Legac
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        context.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
+        renderBackground(context);
         int rowWidth = rowWidth();
         int x = rowX();
         int top = 52;

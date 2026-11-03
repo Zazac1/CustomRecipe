@@ -55,7 +55,7 @@ public class ServerJsonScreen extends fr.zazac1.customrecipe.client.compat.Legac
 
     @Override
     public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
+        renderBackground(ctx);
         super.render(ctx, mouseX, mouseY, delta);
         if (!error.isEmpty()) ctx.drawString(font, error, 14, 66, 0xFF5555, false);
     }
