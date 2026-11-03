@@ -38,18 +38,20 @@ final class SaveChangesScreen extends Screen {
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         // Keep the editor visible: this screen behaves as a modal confirmation, not a new menu.
         returnTo.extractRenderState(context, mouseX, mouseY, delta);
-        context.fill(0, 0, width, height, 0x98000000);
+        // Start a new GUI layer so item models from the editor cannot bleed
+        // through the modal panel, its buttons, or its text.
+        context.nextStratum();
 
         int panelWidth = 250;
         int panelHeight = 92;
         int panelX = width / 2 - panelWidth / 2;
         int panelY = height / 2 - panelHeight / 2;
-        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF0181B1E);
+        context.fill(0, 0, width, height, 0x66000000);
+        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF8181B1E);
         drawBorder(context, panelX, panelY, panelWidth, panelHeight, 0xFF6E7678);
         context.horizontalLine(panelX + 8, panelX + panelWidth - 9, panelY + 52, 0xFF3E4749);
         super.extractRenderState(context, mouseX, mouseY, delta);
 
-        // Draw copy last so widgets or the underlying screen can never cover it.
         context.centeredText(font, Component.translatable("customrecipe.save.title"), width / 2, panelY + 12, 0xFFFFFFFF);
         context.centeredText(font, Component.translatable("customrecipe.save.line1"), width / 2, panelY + 28, 0xFFE0E6E3);
         context.centeredText(font, Component.translatable("customrecipe.save.line2"), width / 2, panelY + 40, 0xFFB8C7C1);
