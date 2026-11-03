@@ -226,13 +226,18 @@ public class ClientInit implements ClientModInitializer {
     }
 
     private static Path currentLocalWorldDirectory(MinecraftClient client) {
+        Path saves = client.getLevelStorage().getSavesDirectory().toAbsolutePath().normalize();
+        Path serverDirectory = client.getServer().getSavePath(WorldSavePath.ROOT)
+                .toAbsolutePath().normalize();
+        if (Files.isDirectory(serverDirectory) && saves.equals(serverDirectory.getParent())) {
+            return serverDirectory;
+        }
         String levelName = client.getServer().getSaveProperties().getLevelName();
         if (levelName != null && !levelName.isBlank()) {
-            Path saves = client.getLevelStorage().getSavesDirectory();
             Path worldDirectory = saves.resolve(levelName);
             if (Files.isDirectory(worldDirectory)) return worldDirectory;
         }
-        return client.getServer().getSavePath(WorldSavePath.ROOT);
+        return serverDirectory;
     }
 
     private record LocalMergeResult(int recipes, int customItems) {}
@@ -301,13 +306,29 @@ public class ClientInit implements ClientModInitializer {
         copy.ingredients = source.ingredients == null ? new java.util.ArrayList<>()
                 : source.ingredients.stream().map(value -> remap(value, referenceRemap))
                 .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+        copy.ingredient_alternatives = new java.util.ArrayList<>();
+        if (source.ingredient_alternatives != null) {
+            source.ingredient_alternatives.forEach(values -> copy.ingredient_alternatives.add(values == null
+                    ? new java.util.ArrayList<>()
+                    : values.stream().map(value -> remap(value, referenceRemap))
+                    .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new))));
+        }
         copy.ingredient_counts = source.ingredient_counts == null ? new java.util.ArrayList<>()
                 : new java.util.ArrayList<>(source.ingredient_counts);
+        copy.ingredient_distinct = source.ingredient_distinct == null ? new java.util.ArrayList<>()
+                : new java.util.ArrayList<>(source.ingredient_distinct);
         copy.pattern = source.pattern == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(source.pattern);
         copy.keys = new java.util.LinkedHashMap<>();
         if (source.keys != null) source.keys.forEach((key, value) -> copy.keys.put(key, remap(value, referenceRemap)));
+        copy.key_alternatives = new java.util.LinkedHashMap<>();
+        if (source.key_alternatives != null) source.key_alternatives.forEach((key, values) ->
+                copy.key_alternatives.put(key, values == null ? new java.util.ArrayList<>()
+                        : values.stream().map(value -> remap(value, referenceRemap))
+                        .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new))));
         copy.key_counts = source.key_counts == null ? new java.util.LinkedHashMap<>()
                 : new java.util.LinkedHashMap<>(source.key_counts);
+        copy.key_distinct = source.key_distinct == null ? new java.util.LinkedHashMap<>()
+                : new java.util.LinkedHashMap<>(source.key_distinct);
         copy.result = remap(source.result, referenceRemap);
         copy.count = source.count;
         copy.enabled = null;
