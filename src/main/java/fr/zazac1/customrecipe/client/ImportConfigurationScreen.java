@@ -43,7 +43,6 @@ final class ImportConfigurationScreen extends Screen {
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         // Render the parent background explicitly: the active modal's empty
         // background hook does not invoke it automatically.
-        returnTo.renderBackground(context, mouseX, mouseY, delta);
         // Keep the imported configuration's menu visible as the contextual
         // background, just as the Fabric editor does; the overlay below keeps
         // it non-interactive while the confirmation is pending.

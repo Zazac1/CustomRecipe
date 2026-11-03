@@ -46,7 +46,6 @@ final class ImportGlobalLibraryScreen extends Screen {
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         // The modal owns the active Screen background pass, so reproduce the
         // library screen's background before drawing its contextual contents.
-        returnTo.renderBackground(context, mouseX, mouseY, delta);
         returnTo.render(context, mouseX, mouseY, delta);
         // Keep the confirmation above deferred labels from the library table.
         context.pose().pushMatrix();

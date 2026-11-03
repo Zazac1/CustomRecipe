@@ -80,19 +80,27 @@ final class CustomItemsScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        context.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
+    public void renderBackground(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        super.renderBackground(context, mouseX, mouseY, delta);
         int rowWidth = rowWidth();
         int x = rowX();
         int top = 52;
         int pageSize = pageSize();
         int start = page * pageSize;
-        // Row backgrounds must be queued before widgets; otherwise their tint
-        // is painted over the buttons and makes active controls look disabled.
+        // Queue row backgrounds after the world blur and before widgets.
         for (int i = start; i < Math.min(parent.customItems.size(), start + pageSize); i++) {
             int rowY = top + (i - start) * 28;
             context.fill(x, rowY, x + rowWidth, rowY + 26, 0xAA202630);
         }
+    }
+
+    @Override
+    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        int rowWidth = rowWidth();
+        int x = rowX();
+        int top = 52;
+        int pageSize = pageSize();
+        int start = page * pageSize;
         super.render(context, mouseX, mouseY, delta);
         context.drawCenteredString(font, title, width / 2, 18, 0xFFFFFFFF);
         context.drawCenteredString(font, Component.translatable("customrecipe.custom_items.command_hint"), width / 2, 33, 0xFFAAAAAA);

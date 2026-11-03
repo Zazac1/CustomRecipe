@@ -110,12 +110,6 @@ final class WorldRecipesScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        super.renderBackground(context, mouseX, mouseY, delta);
-        context.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
-    }
-
-    @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
         context.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);

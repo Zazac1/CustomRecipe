@@ -272,7 +272,7 @@ public final class ServerConfigNetworking {
                         continue;
                     }
                     CraftingRecipe existing = unwrap(wrapped);
-                    if (!signature.equals(signatureOf(existing))) continue;
+                    if (!signaturesOverlap(signature, signatureOf(existing))) continue;
                     if (sameOutputItem(entry, existing, server)) conflicts.add(id.toString());
                     else sameShape.add(id.toString());
                 }
@@ -297,7 +297,7 @@ public final class ServerConfigNetworking {
             if (candidate == null || candidate == entry || sameRecipeId(entry, candidate)
                     || Boolean.TRUE.equals(candidate.corrupted)
                     || !WorldRecipeAssignments.isRecipeActive(candidate)
-                    || !signature.equals(signatureOf(candidate))) continue;
+                    || !signaturesOverlap(signature, signatureOf(candidate))) continue;
             if (sameOutputItem(entry, candidate)) conflicts.add(candidate.serverRecipeId().toString());
             else sameShape.add(candidate.serverRecipeId().toString());
         }
@@ -328,45 +328,45 @@ public final class ServerConfigNetworking {
         if ("shaped".equalsIgnoreCase(entry.type)) {
             if (entry.pattern == null || entry.pattern.isEmpty() || entry.keys == null) return null;
             int width = entry.pattern.stream().mapToInt(String::length).max().orElse(0);
-            List<String> slots = new ArrayList<>();
+            List<List<String>> slots = new ArrayList<>();
             for (String row : entry.pattern) {
                 for (int column = 0; column < width; column++) {
                     char symbol = column < row.length() ? row.charAt(column) : ' ';
                     String item = symbol == ' ' ? "" : entry.keys.get(String.valueOf(symbol));
                     if (symbol != ' ' && (item == null || item.isBlank())) return null;
-                    slots.add(item == null ? "" : item.trim());
+                    slots.add(symbol == ' ' ? List.of() : entry.keyOptions(String.valueOf(symbol)));
                 }
             }
             return trimSignature(true, width, entry.pattern.size(), slots);
         }
         if (entry.ingredients == null || entry.ingredients.isEmpty()) return null;
-        List<String> ingredients = new ArrayList<>();
-        for (String item : entry.ingredients) {
+        List<List<String>> ingredients = new ArrayList<>();
+        for (int index = 0; index < entry.ingredients.size(); index++) {
+            String item = entry.ingredients.get(index);
             if (item == null || item.isBlank()) return null;
-            ingredients.add(item.trim());
+            ingredients.add(entry.ingredientOptions(index));
         }
-        ingredients.sort(String::compareTo);
         return new RecipeSignature(false, ingredients.size(), 1, ingredients);
     }
 
     private static RecipeSignature signatureOf(CraftingRecipe recipe) {
         if (recipe instanceof ShapedRecipe shaped) {
-            List<String> slots = new ArrayList<>();
+            List<List<String>> slots = new ArrayList<>();
             for (java.util.Optional<Ingredient> ingredient : shaped.getIngredients()) {
-                slots.add(ingredient.map(ServerConfigNetworking::ingredientSignature).orElse(""));
+                slots.add(ingredient.map(ServerConfigNetworking::ingredientOptions).orElse(List.of()));
             }
             return trimSignature(true, shaped.getWidth(), shaped.getHeight(), slots);
         }
-        List<String> ingredients = recipe.placementInfo().ingredients().stream()
-                .map(ServerConfigNetworking::ingredientSignature).sorted().toList();
+        List<List<String>> ingredients = recipe.placementInfo().ingredients().stream()
+                .map(ServerConfigNetworking::ingredientOptions).toList();
         return new RecipeSignature(false, ingredients.size(), 1, ingredients);
     }
 
-    private static RecipeSignature trimSignature(boolean shaped, int sourceWidth, int sourceHeight, List<String> slots) {
+    private static RecipeSignature trimSignature(boolean shaped, int sourceWidth, int sourceHeight, List<List<String>> slots) {
         int left = sourceWidth, right = -1, top = sourceHeight, bottom = -1;
         for (int row = 0; row < sourceHeight; row++) {
             for (int column = 0; column < sourceWidth; column++) {
-                if (slots.get(row * sourceWidth + column).isBlank()) continue;
+                if (slots.get(row * sourceWidth + column).isEmpty()) continue;
                 left = Math.min(left, column);
                 right = Math.max(right, column);
                 top = Math.min(top, row);
@@ -374,7 +374,7 @@ public final class ServerConfigNetworking {
             }
         }
         if (right < left || bottom < top) return null;
-        List<String> trimmed = new ArrayList<>();
+        List<List<String>> trimmed = new ArrayList<>();
         for (int row = top; row <= bottom; row++) {
             for (int column = left; column <= right; column++) {
                 trimmed.add(slots.get(row * sourceWidth + column));
@@ -383,33 +383,43 @@ public final class ServerConfigNetworking {
         return new RecipeSignature(shaped, right - left + 1, bottom - top + 1, trimmed);
     }
 
-    private record RecipeSignature(boolean shaped, int width, int height, List<String> ingredients) {}
+    private record RecipeSignature(boolean shaped, int width, int height, List<List<String>> ingredients) {}
 
-    private static boolean sameExactInputs(CraftingRecipe first, CraftingRecipe second) {
-        boolean firstShaped = first instanceof ShapedRecipe;
-        boolean secondShaped = second instanceof ShapedRecipe;
-        if (firstShaped != secondShaped) return false;
-        if (firstShaped) {
-            ShapedRecipe a = (ShapedRecipe) first;
-            ShapedRecipe b = (ShapedRecipe) second;
-            if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) return false;
-            List<java.util.Optional<Ingredient>> ingredientsA = a.getIngredients();
-            List<java.util.Optional<Ingredient>> ingredientsB = b.getIngredients();
-            if (ingredientsA.size() != ingredientsB.size()) return false;
-            for (int i = 0; i < ingredientsA.size(); i++) {
-                if (!ingredientsA.get(i).map(ServerConfigNetworking::ingredientSignature).orElse("")
-                        .equals(ingredientsB.get(i).map(ServerConfigNetworking::ingredientSignature).orElse(""))) {
-                    return false;
-                }
+    private static boolean signaturesOverlap(RecipeSignature first, RecipeSignature second) {
+        if (first == null || second == null || first.ingredients().size() != second.ingredients().size()) return false;
+        if (first.shaped() && second.shaped()) {
+            if (first.width() != second.width() || first.height() != second.height()) return false;
+            for (int index = 0; index < first.ingredients().size(); index++) {
+                List<String> a = first.ingredients().get(index);
+                List<String> b = second.ingredients().get(index);
+                if (a.isEmpty() != b.isEmpty() || (!a.isEmpty() && !overlap(a, b))) return false;
             }
             return true;
         }
+        List<List<String>> firstItems = first.ingredients().stream().filter(values -> !values.isEmpty()).toList();
+        List<List<String>> secondItems = second.ingredients().stream().filter(values -> !values.isEmpty()).toList();
+        return firstItems.size() == secondItems.size()
+                && assignOptions(0, firstItems, secondItems, new boolean[secondItems.size()]);
+    }
 
-        List<String> firstIngredients = first.placementInfo().ingredients().stream()
-                .map(ServerConfigNetworking::ingredientSignature).sorted().toList();
-        List<String> secondIngredients = second.placementInfo().ingredients().stream()
-                .map(ServerConfigNetworking::ingredientSignature).sorted().toList();
-        return firstIngredients.equals(secondIngredients);
+    private static boolean assignOptions(int index, List<List<String>> first, List<List<String>> second,
+                                         boolean[] assigned) {
+        if (index == first.size()) return true;
+        for (int candidate = 0; candidate < second.size(); candidate++) {
+            if (assigned[candidate] || !overlap(first.get(index), second.get(candidate))) continue;
+            assigned[candidate] = true;
+            if (assignOptions(index + 1, first, second, assigned)) return true;
+            assigned[candidate] = false;
+        }
+        return false;
+    }
+
+    private static boolean overlap(List<String> first, List<String> second) {
+        return first.stream().anyMatch(second::contains);
+    }
+
+    private static boolean sameExactInputs(CraftingRecipe first, CraftingRecipe second) {
+        return signaturesOverlap(signatureOf(first), signatureOf(second));
     }
 
     /** The output count may differ; a different output item is safe for the recipe book. */
@@ -430,6 +440,13 @@ public final class ServerConfigNetworking {
                 .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
                 .sorted()
                 .collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private static List<String> ingredientOptions(Ingredient ingredient) {
+        if (ingredient == null || ingredient.isEmpty()) return List.of();
+        return ingredient.items().map(net.minecraft.core.Holder::value).map(ItemStack::new)
+                .map(stack -> BuiltInRegistries.ITEM.getKey(stack.getItem()).toString())
+                .distinct().sorted().toList();
     }
 
     /** Quietly adds enabled defaults to the recipe book without recipe toasts. */

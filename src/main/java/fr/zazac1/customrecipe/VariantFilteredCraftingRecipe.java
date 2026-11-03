@@ -27,6 +27,14 @@ public final class VariantFilteredCraftingRecipe implements CraftingRecipe {
 
     public CraftingRecipe delegate() { return delegate; }
 
+    public boolean blocksAny(java.util.Collection<String> materialIds) {
+        return materialIds.stream().anyMatch(blockedMaterials::contains);
+    }
+
+    public boolean blocksAll(java.util.Collection<String> materialIds) {
+        return !materialIds.isEmpty() && materialIds.stream().allMatch(blockedMaterials::contains);
+    }
+
     @Override
     public boolean matches(CraftingInput input, Level world) {
         if (!delegate.matches(input, world)) return false;

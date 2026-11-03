@@ -83,12 +83,6 @@ public final class VanillaRecipeDetailsScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        super.renderBackground(ctx, mouseX, mouseY, delta);
-        ctx.fillGradient(0, 0, width, height, 0xD0101010, 0xE0101010);
-    }
-
-    @Override
     public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
         super.render(ctx, mouseX, mouseY, delta);
 

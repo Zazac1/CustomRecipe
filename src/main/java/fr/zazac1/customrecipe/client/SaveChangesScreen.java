@@ -42,32 +42,25 @@ final class SaveChangesScreen extends Screen {
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        // renderWithTooltipAndSubtitles only renders this modal's background.
-        // Recreate the parent background before its widgets; otherwise the
-        // confirmation darkens the previous world frame instead of the
-        // editor's in-world menu texture and custom dark gradient.
-        returnTo.renderBackground(context, mouseX, mouseY, delta);
         // Keep the editor visible: this screen behaves as a modal confirmation, not a new menu.
         returnTo.render(context, mouseX, mouseY, delta);
-        // Parent screens use deferred drawables for their labels. Put every modal layer
-        // above that batch so a home-screen caption cannot bleed through the panel.
-        context.pose().pushMatrix();
-        context.fill(0, 0, width, height, 0x98000000);
 
         int panelWidth = 250;
         int panelHeight = 92;
         int panelX = width / 2 - panelWidth / 2;
         int panelY = height / 2 - panelHeight / 2;
-        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF0181B1E);
+        // Item models from the editor use a high render layer. Start a fresh
+        // layer so no slot icon can bleed through the modal.
+        context.nextStratum();
+        context.fill(0, 0, width, height, 0x66000000);
+        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF8181B1E);
         drawBorder(context, panelX, panelY, panelWidth, panelHeight, 0xFF6E7678);
         context.hLine(panelX + 8, panelX + panelWidth - 9, panelY + 52, 0xFF3E4749);
         super.render(context, mouseX, mouseY, delta);
 
-        // Draw copy last so widgets or the underlying screen can never cover it.
         context.drawCenteredString(font, Component.translatable("customrecipe.save.title"), width / 2, panelY + 12, 0xFFFFFFFF);
         context.drawCenteredString(font, Component.translatable("customrecipe.save.line1"), width / 2, panelY + 28, 0xFFE0E6E3);
         context.drawCenteredString(font, Component.translatable("customrecipe.save.line2"), width / 2, panelY + 40, 0xFFB8C7C1);
-        context.pose().popMatrix();
     }
 
     private void drawBorder(GuiGraphics context, int x, int y, int width, int height, int color) {
