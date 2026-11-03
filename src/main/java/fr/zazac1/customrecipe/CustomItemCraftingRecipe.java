@@ -18,8 +18,12 @@ import net.minecraft.util.collection.DefaultedList;
 import net.minecraft.world.World;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Adds exact component and per-slot quantity matching to a vanilla-compatible recipe. */
 public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCraftingRecipe {
@@ -59,7 +63,9 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
             for (int i = 0; i < definition.ingredients.size(); i++) {
                 String token = definition.ingredients.get(i);
                 if (token != null && !token.isBlank()) {
-                    expected.add(new Expected(token, definition.ingredientCount(i)));
+                    List<String> tokens = definition.ingredientOptions(i);
+                    expected.add(new Expected(tokens, definition.ingredientCount(i),
+                            definition.ingredientRequiresDistinct(i) ? distinctGroup(tokens) : null));
                 }
             }
         }
@@ -70,22 +76,30 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         }
         if (expected.size() != actual.size()) return new int[0];
         int[] required = new int[input.size()];
-        return assign(expected, actual, 0, new boolean[actual.size()], required, enforceAmounts)
+        return assign(expected, actual, 0, new boolean[actual.size()], required, enforceAmounts,
+                new HashMap<>())
                 ? required : new int[0];
     }
 
     private boolean assign(List<Expected> expected, List<Actual> actual, int index, boolean[] used,
-                           int[] required, boolean enforceAmounts) {
+                           int[] required, boolean enforceAmounts,
+                           Map<String, Set<String>> distinctItems) {
         if (index == expected.size()) return true;
         Expected ingredient = expected.get(index);
         for (int i = 0; i < actual.size(); i++) {
             Actual candidate = actual.get(i);
-            if (used[i] || !matchesToken(ingredient.token(), candidate.stack(), ingredient.count(), enforceAmounts)) continue;
+            if (used[i]) continue;
+            String matchedToken = matchingToken(ingredient.tokens(), candidate.stack(), ingredient.count(), enforceAmounts);
+            if (matchedToken == null) continue;
+            Set<String> usedByGroup = ingredient.distinctGroup() == null ? null
+                    : distinctItems.computeIfAbsent(ingredient.distinctGroup(), ignored -> new HashSet<>());
+            if (usedByGroup != null && !usedByGroup.add(matchedToken)) continue;
             used[i] = true;
             required[candidate.inputIndex()] = ingredient.count();
-            if (assign(expected, actual, index + 1, used, required, enforceAmounts)) return true;
+            if (assign(expected, actual, index + 1, used, required, enforceAmounts, distinctItems)) return true;
             required[candidate.inputIndex()] = 0;
             used[i] = false;
+            if (usedByGroup != null) usedByGroup.remove(matchedToken);
         }
         return false;
     }
@@ -103,16 +117,24 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
                                     boolean enforceAmounts) {
         int width = rows.getFirst().length();
         int[] required = new int[input.size()];
+        Map<String, Set<String>> distinctItems = new HashMap<>();
         for (int y = 0; y < rows.size(); y++) {
             for (int x = 0; x < width; x++) {
                 char symbol = rows.get(y).charAt(mirrored ? width - x - 1 : x);
-                String token = symbol == ' ' || definition.keys == null ? "" : definition.keys.get(symbol + "");
+                List<String> tokens = symbol == ' ' || definition.keys == null
+                        ? List.of() : definition.keyOptions(symbol + "");
                 ItemStack actual = input.getStackInSlot(x, y);
-                if (token == null || token.isBlank()) {
+                if (tokens.isEmpty()) {
                     if (!actual.isEmpty()) return new int[0];
                 } else {
                     int count = definition.keyCount(symbol + "");
-                    if (!matchesToken(token, actual, count, enforceAmounts)) return new int[0];
+                    String matchedToken = matchingToken(tokens, actual, count, enforceAmounts);
+                    if (matchedToken == null) return new int[0];
+                    if (definition.keyRequiresDistinct(symbol + "")) {
+                        Set<String> usedByGroup = distinctItems.computeIfAbsent(distinctGroup(tokens),
+                                ignored -> new HashSet<>());
+                        if (!usedByGroup.add(matchedToken)) return new int[0];
+                    }
                     required[y * width + x] = count;
                 }
             }
@@ -126,6 +148,23 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         if (custom != null) return CustomItemLibrary.exactMatch(actual, custom);
         Identifier id = Identifier.tryParse(token);
         return id != null && !actual.isEmpty() && Registries.ITEM.getId(actual.getItem()).equals(id);
+    }
+
+    private boolean matchesAnyToken(List<String> tokens, ItemStack actual, int count, boolean enforceAmount) {
+        return matchingToken(tokens, actual, count, enforceAmount) != null;
+    }
+
+    private String matchingToken(List<String> tokens, ItemStack actual, int count, boolean enforceAmount) {
+        for (String token : tokens) {
+            if (matchesToken(token, actual, count, enforceAmount)) return token;
+        }
+        return null;
+    }
+
+    private static String distinctGroup(List<String> tokens) {
+        List<String> normalized = new ArrayList<>(new LinkedHashSet<>(tokens));
+        normalized.sort(String::compareTo);
+        return String.join("\u001F", normalized);
     }
 
     private static List<String> shrink(List<String> pattern) {
@@ -180,8 +219,9 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
             for (String row : rows) {
                 for (int x = 0; x < shaped.width(); x++) {
                     String symbol = row.charAt(x) + "";
-                    String token = row.charAt(x) == ' ' || definition.keys == null ? "" : definition.keys.get(symbol);
-                    ingredients.add(countedDisplay(token, definition.keyCount(symbol)));
+                    List<String> tokens = row.charAt(x) == ' ' || definition.keys == null
+                            ? List.of() : definition.keyOptions(symbol);
+                    ingredients.add(countedDisplay(tokens, definition.keyCount(symbol)));
                 }
             }
             return new ShapedCraftingRecipeDisplay(shaped.width(), shaped.height(), ingredients,
@@ -190,7 +230,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         if (display instanceof ShapelessCraftingRecipeDisplay shapeless && definition.ingredients != null) {
             List<SlotDisplay> ingredients = new ArrayList<>(definition.ingredients.size());
             for (int i = 0; i < definition.ingredients.size(); i++) {
-                ingredients.add(countedDisplay(definition.ingredients.get(i), definition.ingredientCount(i)));
+                ingredients.add(countedDisplay(definition.ingredientOptions(i), definition.ingredientCount(i)));
             }
             return new ShapelessCraftingRecipeDisplay(ingredients, shapeless.result(), shapeless.craftingStation());
         }
@@ -205,8 +245,14 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         stack.setCount(Math.max(1, Math.min(count, stack.getMaxCount())));
         return new SlotDisplay.StackSlotDisplay(stack);
     }
+
+    private SlotDisplay countedDisplay(List<String> tokens, int count) {
+        List<SlotDisplay> choices = tokens.stream().map(token -> countedDisplay(token, count)).toList();
+        if (choices.isEmpty()) return SlotDisplay.EmptySlotDisplay.INSTANCE;
+        return choices.size() == 1 ? choices.getFirst() : new SlotDisplay.CompositeSlotDisplay(choices);
+    }
     @Override public RecipeBookCategory getRecipeBookCategory() { return delegate.getRecipeBookCategory(); }
 
-    private record Expected(String token, int count) {}
+    private record Expected(List<String> tokens, int count, String distinctGroup) {}
     private record Actual(int inputIndex, ItemStack stack) {}
 }
