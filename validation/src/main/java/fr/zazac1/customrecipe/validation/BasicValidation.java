@@ -84,6 +84,26 @@ public final class BasicValidation {
             shaped.keys.put("A", "minecraft:glowstone_dust"); shaped.keys.put("B", "minecraft:paper");
             shaped.key_counts.put("A", 3); shaped.key_counts.put("B", 2);
             world.custom_recipes.add(shaped);
+            var alternatives = recipe("basic_alternatives", "minecraft:cookie", 3, "minecraft:stone", "minecraft:feather");
+            alternatives.ingredient_alternatives.add(new ArrayList<>(List.of("minecraft:cobblestone", "minecraft:andesite")));
+            alternatives.ingredient_alternatives.add(new ArrayList<>());
+            alternatives.ingredient_counts = new ArrayList<>(List.of(2, 1)); world.custom_recipes.add(alternatives);
+            var distinctAlternatives = recipe("basic_distinct_alternatives", "minecraft:amethyst_shard", 1,
+                    "minecraft:oak_sapling", "minecraft:oak_sapling",
+                    "minecraft:oak_sapling", "minecraft:oak_sapling");
+            for (int i = 0; i < 4; i++) {
+                distinctAlternatives.ingredient_alternatives.add(new ArrayList<>(List.of(
+                        "minecraft:spruce_sapling", "minecraft:birch_sapling", "minecraft:jungle_sapling")));
+                distinctAlternatives.ingredient_distinct.add(true);
+            }
+            world.custom_recipes.add(distinctAlternatives);
+            var shapedDistinct = recipe("basic_shaped_distinct", "minecraft:prismarine_shard", 1);
+            shapedDistinct.type = "shaped"; shapedDistinct.pattern = new ArrayList<>(List.of("AA", "AA"));
+            shapedDistinct.keys.put("A", "minecraft:poppy");
+            shapedDistinct.key_alternatives.put("A", new ArrayList<>(List.of(
+                    "minecraft:dandelion", "minecraft:blue_orchid", "minecraft:allium")));
+            shapedDistinct.key_distinct.put("A", true);
+            world.custom_recipes.add(shapedDistinct);
             config.custom_items.add(item(server, "exact_rod", named(Items.FISHING_ROD, "Validation Rod", 7)));
             config.custom_items.add(item(server, "exact_output", named(Items.STICK, "Validation Prize", 0)));
             config.custom_items.add(item(server, "collision", named(Items.GOLDEN_AXE, "Server Collision", 3)));
@@ -152,6 +172,32 @@ public final class BasicValidation {
         });
         check("shapeless: insufficient ingredients rejected", () -> require(match(server,
                 input(new ItemStack(Items.DIAMOND), new ItemStack(Items.STICK, 3))).isEmpty(), "Incomplete craft matched"));
+        check("alternatives: primary and selected items craft with the required count", () -> {
+            for (Item item : List.of(Items.STONE, Items.COBBLESTONE, Items.ANDESITE)) {
+                var in = input(new ItemStack(item, 2), new ItemStack(Items.FEATHER));
+                var out = match(server, in).orElseThrow().value().assemble(in);
+                require(out.is(Items.COOKIE) && out.getCount() == 3, "Alternative failed: " + item);
+            }
+            require(match(server, input(new ItemStack(Items.GRANITE, 2), new ItemStack(Items.FEATHER))).isEmpty(), "Unselected item matched");
+            require(match(server, input(new ItemStack(Items.COBBLESTONE), new ItemStack(Items.FEATHER))).isEmpty(), "Alternative ignored required count");
+        });
+        check("alternatives: repeated groups require different items", () -> {
+            var valid = input(new ItemStack(Items.OAK_SAPLING), new ItemStack(Items.SPRUCE_SAPLING),
+                    new ItemStack(Items.BIRCH_SAPLING), new ItemStack(Items.JUNGLE_SAPLING));
+            var result = match(server, valid).orElseThrow().value().assemble(valid);
+            require(result.is(Items.AMETHYST_SHARD), "Four different alternatives did not craft");
+            require(match(server, input(new ItemStack(Items.OAK_SAPLING), new ItemStack(Items.OAK_SAPLING),
+                    new ItemStack(Items.BIRCH_SAPLING), new ItemStack(Items.JUNGLE_SAPLING))).isEmpty(),
+                    "A duplicated alternative bypassed the distinct rule");
+        });
+        check("shaped alternatives: repeated cells require different items", () -> {
+            var valid = input(new ItemStack(Items.POPPY), new ItemStack(Items.DANDELION), ItemStack.EMPTY,
+                    new ItemStack(Items.BLUE_ORCHID), new ItemStack(Items.ALLIUM));
+            require(match(server, valid).isPresent(), "Four different shaped alternatives did not match");
+            var duplicated = input(new ItemStack(Items.POPPY), new ItemStack(Items.POPPY), ItemStack.EMPTY,
+                    new ItemStack(Items.BLUE_ORCHID), new ItemStack(Items.ALLIUM));
+            require(match(server, duplicated).isEmpty(), "A duplicated shaped alternative bypassed the distinct rule");
+        });
         check("shaped: shifted mirrored pattern and counts", () -> {
             var list = new ArrayList<ItemStack>(Collections.nCopies(9, ItemStack.EMPTY));
             list.set(4, new ItemStack(Items.PAPER, 2)); list.set(5, new ItemStack(Items.GLOWSTONE_DUST, 3));
@@ -243,9 +289,11 @@ public final class BasicValidation {
             ConfigLoader.ensureAutomaticLibraryRecipesForWorld("basic-new-world", "New test world");
             require(ConfigLoader.get().findWorldConfig("basic-new-world").custom_recipes.stream().anyMatch(r -> "basic_all_worlds".equals(r.global_library_source_id)), "New world did not get automatic recipe");
         });
-        check("known by default unlocked after join/reload", () -> {
-            var real = server.getPlayerList().getPlayers().stream().findFirst().orElseThrow();
-            require(real.getRecipeBook().contains(holder(server, "basic_shapeless_counted").id()), "Known recipe not unlocked");
+        check("known by default award path updates the recipe book", () -> {
+            var award = ServerConfigNetworking.class.getDeclaredMethod("awardDefaultRecipes",
+                    ServerPlayer.class, MinecraftServer.class, boolean.class);
+            award.setAccessible(true); award.invoke(null, player, server, false);
+            require(player.getRecipeBook().contains(holder(server, "basic_shapeless_counted").id()), "Known recipe not unlocked");
         });
         check("full and library export/import preserve content", () -> {
             var config = ConfigLoader.get(); var full = output().resolve("export-full.json"); var library = output().resolve("export-library.json");

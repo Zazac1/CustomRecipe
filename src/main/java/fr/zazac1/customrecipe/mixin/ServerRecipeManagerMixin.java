@@ -139,11 +139,18 @@ public abstract class ServerRecipeManagerMixin {
     }
 
     private boolean usesExactOrCountedIngredient(CustomRecipeEntry entry) {
-        if (entry.hasCountedIngredients()) return true;
-        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
-                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
-                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
-        return values.anyMatch(fr.zazac1.customrecipe.CustomItemLibrary::isReference);
+        if (entry.hasCountedIngredients() || entry.hasDistinctIngredients()) return true;
+        return allInputValues(entry).anyMatch(fr.zazac1.customrecipe.CustomItemLibrary::isReference);
+    }
+
+    private java.util.stream.Stream<String> allInputValues(CustomRecipeEntry entry) {
+        if ("shaped".equalsIgnoreCase(entry.type)) {
+            return entry.keys == null ? java.util.stream.Stream.empty()
+                    : entry.keys.keySet().stream().flatMap(key -> entry.keyOptions(key).stream());
+        }
+        return entry.ingredients == null ? java.util.stream.Stream.empty()
+                : java.util.stream.IntStream.range(0, entry.ingredients.size())
+                        .boxed().flatMap(index -> entry.ingredientOptions(index).stream());
     }
 
     // ── dispatch ─────────────────────────────────────────────────────────
@@ -194,14 +201,11 @@ public abstract class ServerRecipeManagerMixin {
     private CraftingRecipe exactWrapper(CraftingRecipe recipe, CustomRecipeEntry entry,
                                         List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
         Map<String, net.minecraft.world.item.ItemStack> stacks = new HashMap<>();
-        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
-                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
-                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
-        values.filter(fr.zazac1.customrecipe.CustomItemLibrary::isReference).distinct().forEach(reference -> {
+        allInputValues(entry).filter(fr.zazac1.customrecipe.CustomItemLibrary::isReference).distinct().forEach(reference -> {
             net.minecraft.world.item.ItemStack stack = resolveStack(reference, customItems);
             if (!stack.isEmpty()) stacks.put(reference, stack.copyWithCount(1));
         });
-        return stacks.isEmpty() && !entry.hasCountedIngredients()
+        return stacks.isEmpty() && !entry.hasCountedIngredients() && !entry.hasDistinctIngredients()
                 ? recipe : new fr.zazac1.customrecipe.CustomItemCraftingRecipe(recipe, entry, stacks);
     }
 
@@ -212,12 +216,14 @@ public abstract class ServerRecipeManagerMixin {
 
     private String recipeInputSignature(CustomRecipeEntry entry) {
         if ("shaped".equalsIgnoreCase(entry.type)) {
-            return "shaped:" + entry.pattern + ":" + entry.keys + ":" + entry.key_counts;
+            Map<String, List<String>> options = new LinkedHashMap<>();
+            if (entry.keys != null) entry.keys.keySet().forEach(key -> options.put(key, entry.keyOptions(key)));
+            return "shaped:" + entry.pattern + ":" + options + ":" + entry.key_counts;
         }
         List<String> ingredients = new ArrayList<>();
         if (entry.ingredients != null) {
             for (int i = 0; i < entry.ingredients.size(); i++) {
-                ingredients.add(entry.ingredients.get(i) + "×" + entry.ingredientCount(i));
+                ingredients.add(entry.ingredientOptions(i) + "×" + entry.ingredientCount(i));
             }
         }
         java.util.Collections.sort(ingredients);
@@ -233,14 +239,16 @@ public abstract class ServerRecipeManagerMixin {
         if (rawIngredients == null || rawIngredients.isEmpty()) return null;
 
         List<Ingredient> ingredients = new ArrayList<>();
-        for (String itemId : rawIngredients) {
+        for (int index = 0; index < rawIngredients.size(); index++) {
+            String itemId = rawIngredients.get(index);
             if (itemId == null || itemId.isBlank()) continue;
-            Identifier id = Identifier.tryParse(ingredientBaseId(itemId.trim(), customItems));
-            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) {
-                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shapeless ingredient not found: {}", itemId);
+            Ingredient ingredient = resolveIngredient(entry.ingredientOptions(index), customItems);
+            if (ingredient == null) {
+                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shapeless ingredient option not found: {}",
+                        entry.ingredientOptions(index));
                 return null;
             }
-            ingredients.add(Ingredient.of(BuiltInRegistries.ITEM.getValue(id)));
+            ingredients.add(ingredient);
         }
         if (ingredients.isEmpty()) return null;
 
@@ -268,12 +276,13 @@ public abstract class ServerRecipeManagerMixin {
         for (Map.Entry<String, String> kv : keysMap.entrySet()) {
             if (kv.getKey() == null || kv.getKey().isEmpty()) continue;
             char sym = kv.getKey().charAt(0);
-            Identifier itemId = Identifier.tryParse(ingredientBaseId(kv.getValue(), customItems));
-            if (itemId == null || !BuiltInRegistries.ITEM.containsKey(itemId)) {
-                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shaped key item not found: {}", kv.getValue());
+            Ingredient ingredient = resolveIngredient(entry.keyOptions(kv.getKey()), customItems);
+            if (ingredient == null) {
+                CustomRecipeMod.LOGGER.warn("[CustomRecipe] Shaped key option not found: {}",
+                        entry.keyOptions(kv.getKey()));
                 return null;
             }
-            symbols.put(sym, Ingredient.of(BuiltInRegistries.ITEM.getValue(itemId)));
+            symbols.put(sym, ingredient);
         }
 
         ShapedRecipePattern rawRecipe;
@@ -292,5 +301,18 @@ public abstract class ServerRecipeManagerMixin {
                 result
         );
         return new RecipeHolder<>(key, exactWrapper(recipe, entry, customItems));
+    }
+
+    private Ingredient resolveIngredient(List<String> options,
+                                         List<fr.zazac1.customrecipe.CustomItemEntry> customItems) {
+        List<net.minecraft.world.item.Item> items = new ArrayList<>();
+        for (String option : options) {
+            String baseId = ingredientBaseId(option, customItems);
+            Identifier id = Identifier.tryParse(baseId);
+            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return null;
+            net.minecraft.world.item.Item item = BuiltInRegistries.ITEM.getValue(id);
+            if (!items.contains(item)) items.add(item);
+        }
+        return items.isEmpty() ? null : Ingredient.of(items.stream());
     }
 }

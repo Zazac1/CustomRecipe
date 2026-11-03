@@ -662,6 +662,17 @@ public final class ConfigLoader {
         if (recipe.ingredients == null) recipe.ingredients = new ArrayList<>();
         if (recipe.pattern == null) recipe.pattern = new ArrayList<>();
         if (recipe.keys == null) recipe.keys = new LinkedHashMap<>();
+        if (recipe.ingredient_alternatives == null) recipe.ingredient_alternatives = new ArrayList<>();
+        while (recipe.ingredient_alternatives.size() < recipe.ingredients.size()) {
+            recipe.ingredient_alternatives.add(new ArrayList<>());
+        }
+        while (recipe.ingredient_alternatives.size() > recipe.ingredients.size()) {
+            recipe.ingredient_alternatives.remove(recipe.ingredient_alternatives.size() - 1);
+        }
+        for (int i = 0; i < recipe.ingredient_alternatives.size(); i++) {
+            recipe.ingredient_alternatives.set(i,
+                    normalizeAlternatives(recipe.ingredients.get(i), recipe.ingredient_alternatives.get(i)));
+        }
         if (recipe.ingredient_counts == null) recipe.ingredient_counts = new ArrayList<>();
         while (recipe.ingredient_counts.size() < recipe.ingredients.size()) recipe.ingredient_counts.add(1);
         while (recipe.ingredient_counts.size() > recipe.ingredients.size()) {
@@ -671,23 +682,61 @@ public final class ConfigLoader {
             Integer value = recipe.ingredient_counts.get(i);
             recipe.ingredient_counts.set(i, CustomRecipeEntry.clampIngredientCount(value == null ? 1 : value));
         }
+        if (recipe.ingredient_distinct == null) recipe.ingredient_distinct = new ArrayList<>();
+        while (recipe.ingredient_distinct.size() < recipe.ingredients.size()) {
+            recipe.ingredient_distinct.add(Boolean.FALSE);
+        }
+        while (recipe.ingredient_distinct.size() > recipe.ingredients.size()) {
+            recipe.ingredient_distinct.remove(recipe.ingredient_distinct.size() - 1);
+        }
+        for (int i = 0; i < recipe.ingredient_distinct.size(); i++) {
+            recipe.ingredient_distinct.set(i, Boolean.TRUE.equals(recipe.ingredient_distinct.get(i)));
+        }
         if (recipe.key_counts == null) recipe.key_counts = new LinkedHashMap<>();
+        if (recipe.key_alternatives == null) recipe.key_alternatives = new LinkedHashMap<>();
+        recipe.key_alternatives.keySet().removeIf(key -> !recipe.keys.containsKey(key));
+        for (String key : recipe.keys.keySet()) {
+            recipe.key_alternatives.put(key,
+                    normalizeAlternatives(recipe.keys.get(key), recipe.key_alternatives.get(key)));
+        }
         recipe.key_counts.keySet().removeIf(key -> !recipe.keys.containsKey(key));
         for (String key : recipe.keys.keySet()) {
             Integer value = recipe.key_counts.get(key);
             recipe.key_counts.put(key, CustomRecipeEntry.clampIngredientCount(value == null ? 1 : value));
         }
+        if (recipe.key_distinct == null) recipe.key_distinct = new LinkedHashMap<>();
+        recipe.key_distinct.keySet().removeIf(key -> !recipe.keys.containsKey(key));
+        for (String key : recipe.keys.keySet()) {
+            recipe.key_distinct.put(key, Boolean.TRUE.equals(recipe.key_distinct.get(key)));
+        }
         recipe.count = CustomRecipeEntry.clampIngredientCount(recipe.count);
+    }
+
+    private static List<String> normalizeAlternatives(String primary, List<String> alternatives) {
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        String normalizedPrimary = primary == null ? "" : primary.trim();
+        if (alternatives != null) {
+            for (String alternative : alternatives) {
+                if (alternative == null || alternative.trim().isEmpty()) continue;
+                String value = alternative.trim();
+                if (!value.equals(normalizedPrimary)) normalized.add(value);
+            }
+        }
+        return new ArrayList<>(normalized);
     }
 
     private static String recipeFingerprint(CustomRecipeEntry recipe) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("type", recipe.type);
         data.put("ingredients", recipe.ingredients);
+        data.put("ingredient_alternatives", recipe.ingredient_alternatives);
         data.put("ingredient_counts", recipe.ingredient_counts);
+        data.put("ingredient_distinct", recipe.ingredient_distinct);
         data.put("pattern", recipe.pattern);
         data.put("keys", recipe.keys);
+        data.put("key_alternatives", recipe.key_alternatives);
         data.put("key_counts", recipe.key_counts);
+        data.put("key_distinct", recipe.key_distinct);
         data.put("result", recipe.result);
         data.put("count", recipe.count);
         return GSON.toJson(data);

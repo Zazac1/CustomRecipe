@@ -586,8 +586,18 @@ public class ConfigScreen extends Screen {
             if (recipe.ingredients != null) {
                 recipe.ingredients.replaceAll(value -> oldReference.equals(value) ? newReference : value);
             }
+            if (recipe.ingredient_alternatives != null) {
+                recipe.ingredient_alternatives.forEach(values -> {
+                    if (values != null) values.replaceAll(value -> oldReference.equals(value) ? newReference : value);
+                });
+            }
             if (recipe.keys != null) {
                 recipe.keys.replaceAll((key, value) -> oldReference.equals(value) ? newReference : value);
+            }
+            if (recipe.key_alternatives != null) {
+                recipe.key_alternatives.values().forEach(values -> {
+                    if (values != null) values.replaceAll(value -> oldReference.equals(value) ? newReference : value);
+                });
             }
             if (oldReference.equals(recipe.result)) recipe.result = newReference;
             if (recipe.missing_items != null) {
