@@ -1,8 +1,12 @@
 package fr.zazac1.customrecipe;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import net.minecraft.inventory.RecipeInputInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.recipe.CraftingRecipe;
@@ -47,27 +51,39 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         List<Expected> expected = new ArrayList<>();
         if (definition.ingredients != null) for (int i = 0; i < definition.ingredients.size(); i++) {
             String token = definition.ingredients.get(i);
-            if (token != null && !token.isBlank()) expected.add(new Expected(token, definition.ingredientCount(i)));
+            if (token != null && !token.isBlank()) {
+                List<String> tokens = definition.ingredientOptions(i);
+                expected.add(new Expected(tokens, definition.ingredientCount(i),
+                        definition.ingredientRequiresDistinct(i) ? distinctGroup(tokens) : null));
+            }
         }
         List<Actual> actual = new ArrayList<>();
         for (int i = 0; i < input.size(); i++) if (!input.getStack(i).isEmpty()) actual.add(new Actual(i, input.getStack(i)));
         if (expected.size() != actual.size()) return new int[0];
         int[] required = new int[input.size()];
-        return assign(expected, actual, 0, new boolean[actual.size()], required, enforceAmounts) ? required : new int[0];
+        return assign(expected, actual, 0, new boolean[actual.size()], required, enforceAmounts,
+                new HashMap<>()) ? required : new int[0];
     }
 
     private boolean assign(List<Expected> expected, List<Actual> actual, int index, boolean[] used,
-                           int[] required, boolean enforceAmounts) {
+                           int[] required, boolean enforceAmounts,
+                           Map<String, Set<String>> distinctItems) {
         if (index == expected.size()) return true;
         Expected ingredient = expected.get(index);
         for (int i = 0; i < actual.size(); i++) {
             Actual candidate = actual.get(i);
-            if (used[i] || !matchesToken(ingredient.token(), candidate.stack(), ingredient.count(), enforceAmounts)) continue;
+            if (used[i]) continue;
+            String matchedToken = matchingToken(ingredient.tokens(), candidate.stack(), ingredient.count(), enforceAmounts);
+            if (matchedToken == null) continue;
+            Set<String> usedByGroup = ingredient.distinctGroup() == null ? null
+                    : distinctItems.computeIfAbsent(ingredient.distinctGroup(), ignored -> new HashSet<>());
+            if (usedByGroup != null && !usedByGroup.add(matchedToken)) continue;
             used[i] = true;
             required[candidate.inputIndex()] = ingredient.count();
-            if (assign(expected, actual, index + 1, used, required, enforceAmounts)) return true;
+            if (assign(expected, actual, index + 1, used, required, enforceAmounts, distinctItems)) return true;
             required[candidate.inputIndex()] = 0;
             used[i] = false;
+            if (usedByGroup != null) usedByGroup.remove(matchedToken);
         }
         return false;
     }
@@ -93,6 +109,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
                                     boolean mirrored, boolean enforceAmounts) {
         int patternWidth = rows.getFirst().length();
         int[] required = new int[input.size()];
+        Map<String, Set<String>> distinctItems = new HashMap<>();
         for (int y = 0; y < input.getHeight(); y++) for (int x = 0; x < input.getWidth(); x++) {
             boolean inside = x >= offsetX && x < offsetX + patternWidth
                     && y >= offsetY && y < offsetY + rows.size();
@@ -101,14 +118,21 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
                 int patternX = x - offsetX;
                 symbol = rows.get(y - offsetY).charAt(mirrored ? patternWidth - patternX - 1 : patternX);
             }
-            String token = symbol == ' ' || definition.keys == null ? "" : definition.keys.get(symbol + "");
+            List<String> tokens = symbol == ' ' || definition.keys == null
+                    ? List.of() : definition.keyOptions(symbol + "");
             int inputIndex = y * input.getWidth() + x;
             ItemStack actual = input.getStack(inputIndex);
-            if (token == null || token.isBlank()) {
+            if (tokens.isEmpty()) {
                 if (!actual.isEmpty()) return new int[0];
             } else {
                 int count = definition.keyCount(symbol + "");
-                if (!matchesToken(token, actual, count, enforceAmounts)) return new int[0];
+                String matchedToken = matchingToken(tokens, actual, count, enforceAmounts);
+                if (matchedToken == null) return new int[0];
+                if (definition.keyRequiresDistinct(symbol + "")) {
+                    Set<String> usedByGroup = distinctItems.computeIfAbsent(distinctGroup(tokens),
+                            ignored -> new HashSet<>());
+                    if (!usedByGroup.add(matchedToken)) return new int[0];
+                }
                 required[inputIndex] = count;
             }
         }
@@ -121,6 +145,23 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         if (custom != null) return CustomItemLibrary.exactMatch(actual, custom);
         Identifier id = Identifier.tryParse(token);
         return id != null && Registries.ITEM.getId(actual.getItem()).equals(id);
+    }
+
+    private boolean matchesAnyToken(List<String> tokens, ItemStack actual, int count, boolean enforceAmount) {
+        return matchingToken(tokens, actual, count, enforceAmount) != null;
+    }
+
+    private String matchingToken(List<String> tokens, ItemStack actual, int count, boolean enforceAmount) {
+        for (String token : tokens) {
+            if (matchesToken(token, actual, count, enforceAmount)) return token;
+        }
+        return null;
+    }
+
+    private static String distinctGroup(List<String> tokens) {
+        List<String> normalized = new ArrayList<>(new LinkedHashSet<>(tokens));
+        normalized.sort(String::compareTo);
+        return String.join("\u001F", normalized);
     }
 
     public static List<String> shrinkPattern(List<String> pattern) {
@@ -158,6 +199,6 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
     @Override public String getGroup() { return delegate.getGroup(); }
     @Override public boolean showNotification() { return delegate.showNotification(); }
 
-    private record Expected(String token, int count) {}
+    private record Expected(List<String> tokens, int count, String distinctGroup) {}
     private record Actual(int inputIndex, ItemStack stack) {}
 }

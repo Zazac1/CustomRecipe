@@ -39,11 +39,12 @@ public abstract class ServerRecipeManagerMixin {
         ConfigLoader.invalidate();
         ModConfig rootConfig = ConfigLoader.get();
         WorldRecipeConfig config = ConfigLoader.activeWorldConfig(rootConfig);
+        List<String> disabledRecipes = ConfigLoader.effectiveDisabledRecipes(rootConfig, config);
         List<Recipe<?>> recipes = new ArrayList<>(values());
         // Bundled JSON files are templates only; Quick Add creates independent custom copies.
         recipes.removeIf(recipe -> recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID)
                 && BuiltinRecipeTemplates.contains(recipe.getId().getPath()));
-        recipes.removeIf(recipe -> config.disabled_recipes.contains(recipe.getId().toString())
+        recipes.removeIf(recipe -> disabledRecipes.contains(recipe.getId().toString())
                 && !(recipe instanceof CraftingRecipe));
 
         boolean recipeStateChanged = false;
@@ -66,11 +67,18 @@ public abstract class ServerRecipeManagerMixin {
     }
 
     private boolean usesExactOrCountedIngredient(CustomRecipeEntry entry) {
-        if (entry.hasCountedIngredients()) return true;
-        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
-                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
-                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
-        return values.anyMatch(CustomItemLibrary::isReference);
+        if (entry.hasCountedIngredients() || entry.hasDistinctIngredients()) return true;
+        return allInputValues(entry).anyMatch(CustomItemLibrary::isReference);
+    }
+
+    private java.util.stream.Stream<String> allInputValues(CustomRecipeEntry entry) {
+        if ("shaped".equalsIgnoreCase(entry.type)) {
+            return entry.keys == null ? java.util.stream.Stream.empty()
+                    : entry.keys.keySet().stream().flatMap(key -> entry.keyOptions(key).stream());
+        }
+        return entry.ingredients == null ? java.util.stream.Stream.empty()
+                : java.util.stream.IntStream.range(0, entry.ingredients.size())
+                        .boxed().flatMap(index -> entry.ingredientOptions(index).stream());
     }
 
     private Recipe<?> build(CustomRecipeEntry entry, String recipeGroup, List<CustomItemEntry> customItems) {
@@ -84,10 +92,9 @@ public abstract class ServerRecipeManagerMixin {
             if (entry.ingredients == null) return null;
             for (int i = 0; i < entry.ingredients.size(); i++) {
                 String raw = entry.ingredients.get(i);
-                ItemStack stack = resolveStack(raw, customItems);
-                if (stack.isEmpty()) return null;
-                stack.setCount(Math.max(1, Math.min(entry.ingredientCount(i), stack.getMaxCount())));
-                list.add(Ingredient.ofStacks(stack));
+                Ingredient ingredient = resolveIngredient(entry.ingredientOptions(i), entry.ingredientCount(i), customItems);
+                if (ingredient == null) return null;
+                list.add(ingredient);
             }
             if (list.isEmpty()) return null;
             CraftingRecipe recipe = new ShapelessRecipe(id, recipeGroup, CraftingRecipeCategory.MISC, result,
@@ -103,11 +110,10 @@ public abstract class ServerRecipeManagerMixin {
         for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
             char symbol = x < pattern.get(y).length() ? pattern.get(y).charAt(x) : ' ';
             if (symbol == ' ') continue;
-            String raw = entry.keys.get(String.valueOf(symbol));
-            ItemStack stack = raw == null ? ItemStack.EMPTY : resolveStack(raw, customItems);
-            if (stack.isEmpty()) return null;
-            stack.setCount(Math.max(1, Math.min(entry.keyCount(String.valueOf(symbol)), stack.getMaxCount())));
-            input.set(y * width + x, Ingredient.ofStacks(stack));
+            String key = String.valueOf(symbol);
+            Ingredient ingredient = resolveIngredient(entry.keyOptions(key), entry.keyCount(key), customItems);
+            if (ingredient == null) return null;
+            input.set(y * width + x, ingredient);
         }
         CraftingRecipe recipe = new ShapedRecipe(id, recipeGroup, CraftingRecipeCategory.MISC,
                 width, height, input, result);
@@ -127,13 +133,21 @@ public abstract class ServerRecipeManagerMixin {
         return CustomItemLibrary.baseItemId(CustomItemLibrary.find(customItems, value));
     }
 
+    private Ingredient resolveIngredient(List<String> options, int count, List<CustomItemEntry> customItems) {
+        List<ItemStack> stacks = new ArrayList<>();
+        for (String option : options) {
+            ItemStack stack = resolveStack(option, customItems);
+            if (stack.isEmpty()) return null;
+            stack.setCount(Math.max(1, Math.min(count, stack.getMaxCount())));
+            stacks.add(stack);
+        }
+        return stacks.isEmpty() ? null : Ingredient.ofStacks(stacks.toArray(ItemStack[]::new));
+    }
+
     private CraftingRecipe exactWrapper(CraftingRecipe recipe, ItemStack result, CustomRecipeEntry entry,
                                         List<CustomItemEntry> customItems) {
         Map<String, ItemStack> stacks = new HashMap<>();
-        java.util.stream.Stream<String> values = "shaped".equalsIgnoreCase(entry.type)
-                ? (entry.keys == null ? java.util.stream.Stream.empty() : entry.keys.values().stream())
-                : (entry.ingredients == null ? java.util.stream.Stream.empty() : entry.ingredients.stream());
-        values.filter(CustomItemLibrary::isReference).distinct().forEach(reference -> {
+        allInputValues(entry).filter(CustomItemLibrary::isReference).distinct().forEach(reference -> {
             ItemStack stack = resolveStack(reference, customItems);
             if (!stack.isEmpty()) {
                 ItemStack one = stack.copy();
@@ -141,7 +155,7 @@ public abstract class ServerRecipeManagerMixin {
                 stacks.put(reference, one);
             }
         });
-        if (stacks.isEmpty() && !entry.hasCountedIngredients()) return recipe;
+        if (stacks.isEmpty() && !entry.hasCountedIngredients() && !entry.hasDistinctIngredients()) return recipe;
         if (recipe instanceof ShapedRecipe shaped) {
             return new CustomItemShapedRecipe(shaped, result, entry, stacks);
         }
@@ -154,13 +168,15 @@ public abstract class ServerRecipeManagerMixin {
     private String recipeBookGroup(CustomRecipeEntry entry) {
         String signature;
         if ("shaped".equalsIgnoreCase(entry.type)) {
+            Map<String, List<String>> options = new TreeMap<>();
+            if (entry.keys != null) entry.keys.keySet().forEach(key -> options.put(key, entry.keyOptions(key)));
             signature = "shaped:" + String.join("/", entry.pattern == null ? List.of() : entry.pattern)
-                    + ":" + (entry.keys == null ? Map.of() : new TreeMap<>(entry.keys))
+                    + ":" + options
                     + ":" + (entry.key_counts == null ? Map.of() : new TreeMap<>(entry.key_counts));
         } else {
             List<String> ingredients = new ArrayList<>();
             if (entry.ingredients != null) for (int i = 0; i < entry.ingredients.size(); i++) {
-                ingredients.add(entry.ingredients.get(i) + "×" + entry.ingredientCount(i));
+                ingredients.add(entry.ingredientOptions(i) + "×" + entry.ingredientCount(i));
             }
             Collections.sort(ingredients);
             signature = "shapeless:" + String.join(",", ingredients);

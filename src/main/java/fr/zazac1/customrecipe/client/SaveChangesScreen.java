@@ -38,21 +38,24 @@ final class SaveChangesScreen extends Screen {
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         // Keep the editor visible: this screen behaves as a modal confirmation, not a new menu.
         returnTo.render(context, mouseX, mouseY, delta);
-        context.fill(0, 0, width, height, 0x98000000);
 
         int panelWidth = 250;
         int panelHeight = 92;
         int panelX = width / 2 - panelWidth / 2;
         int panelY = height / 2 - panelHeight / 2;
-        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF0181B1E);
+        // Item models from the editor use a high render layer. Raise the whole
+        // modal above that layer so no slot icon can bleed through its panel or text.
+        context.getMatrices().push();
+        context.getMatrices().translate(0.0F, 0.0F, 400.0F);
+        context.fill(0, 0, width, height, 0x66000000);
+        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xF8181B1E);
         drawBorder(context, panelX, panelY, panelWidth, panelHeight, 0xFF6E7678);
         context.drawHorizontalLine(panelX + 8, panelX + panelWidth - 9, panelY + 52, 0xFF3E4749);
         super.render(context, mouseX, mouseY, delta);
-
-        // Draw copy last so widgets or the underlying screen can never cover it.
         context.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.save.title"), width / 2, panelY + 12, 0xFFFFFFFF);
         context.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.save.line1"), width / 2, panelY + 28, 0xFFE0E6E3);
         context.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.save.line2"), width / 2, panelY + 40, 0xFFB8C7C1);
+        context.getMatrices().pop();
     }
 
     private void drawBorder(DrawContext context, int x, int y, int width, int height, int color) {
