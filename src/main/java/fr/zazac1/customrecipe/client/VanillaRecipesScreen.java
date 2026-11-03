@@ -51,7 +51,9 @@ public class VanillaRecipesScreen extends Screen {
     private static Map<String, String> localRecipeJsonCache = Map.of();
     private static net.minecraft.server.MinecraftServer localRecipeCacheServer;
     private static int localRecipeCacheFingerprint;
-    private static boolean startupPreloadStarted;
+    /** Archive caches work both in the menu and in ForgeGradle worlds with an incomplete recipe manager. */
+    private static boolean localRecipeCacheUsesServerRecipes;
+    private static boolean startupPreloadInProgress;
     private static final int ROW = 20;
     private static final int HEADER_Y = 34;
     private static final int SEARCH_Y = 52;
@@ -102,6 +104,8 @@ public class VanillaRecipesScreen extends Screen {
     private int localScanProcessed;
     private boolean localScanCanPopulateCache;
     private Map<String, String> localScanJsonById = Map.of();
+    /** JSON captured by the synchronous startup scan for ingredient searches served from cache. */
+    private Map<String, String> collectedLocalRecipeJsonById;
 
     private int recipeContentX() { return recipeBoxX() + 2; }
     private int recipeContentRight() { return recipeBoxX() + recipeBoxW() - 2; }
@@ -150,7 +154,7 @@ public class VanillaRecipesScreen extends Screen {
 
         List<VanillaRecipePage.VanillaRecipeInfo> filtered = new ArrayList<>();
         for (VanillaRecipePage.VanillaRecipeInfo recipe : recipes) {
-            boolean disabled = parent.disabledRecipes.contains(recipe.id());
+            boolean disabled = parent.isDefaultRecipeDisabled(recipe.id());
             if ((statusFilter == StatusFilter.DISABLED && disabled && !recipe.special())
                     || (statusFilter == StatusFilter.ENABLED && !disabled && !recipe.special())
                     || (statusFilter == StatusFilter.SPECIAL && recipe.special())) {
@@ -214,19 +218,38 @@ public class VanillaRecipesScreen extends Screen {
      * registries are not thread-safe; users can disable it in settings.
      */
     static void preloadAtStartup(net.minecraft.client.Minecraft client) {
-        if (startupPreloadStarted || !localRecipeCache.isEmpty()) return;
-        startupPreloadStarted = true;
+        net.minecraft.server.MinecraftServer server = client.getSingleplayerServer();
+        VanillaRecipesScreen scanner = new VanillaRecipesScreen(new ConfigScreen(null), true);
+        scanner.minecraft = client;
+        boolean completeServerRecipeSet = server != null && scanner.hasCompleteCraftingRecipeSet(server);
+        int fingerprint = completeServerRecipeSet ? scanner.localRecipeFingerprint(server) : 0;
+        if (startupPreloadInProgress || isLocalRecipeCacheValid(server, fingerprint, completeServerRecipeSet)) return;
+
+        startupPreloadInProgress = true;
         try {
-            VanillaRecipesScreen scanner = new VanillaRecipesScreen(new ConfigScreen(null), true);
-            scanner.minecraft = client;
+            scanner.collectedLocalRecipeJsonById = new HashMap<>();
             VanillaRecipePage page = scanner.findLocalRecipes();
             localRecipeCache = List.copyOf(page.recipes());
-            localRecipeCacheServer = client.getSingleplayerServer();
-            localRecipeCacheFingerprint = scanner.localRecipeFingerprint(localRecipeCacheServer);
-            CustomRecipeMod.LOGGER.info("[Custom Recipe] Preloaded {} recipes at startup.", localRecipeCache.size());
+            localRecipeJsonCache = Map.copyOf(scanner.collectedLocalRecipeJsonById);
+            localRecipeCacheServer = completeServerRecipeSet ? server : null;
+            localRecipeCacheFingerprint = fingerprint;
+            localRecipeCacheUsesServerRecipes = completeServerRecipeSet;
+            CustomRecipeMod.LOGGER.info("[Custom Recipe] Preloaded {} recipes for {}.", localRecipeCache.size(),
+                    completeServerRecipeSet ? "the current world" : "the local archive cache");
         } catch (RuntimeException exception) {
             CustomRecipeMod.LOGGER.warn("[Custom Recipe] Startup recipe preload was skipped: {}", exception.getMessage());
+        } finally {
+            // A failed early attempt must be allowed to retry once resources are ready.
+            startupPreloadInProgress = false;
         }
+    }
+
+    private static boolean isLocalRecipeCacheValid(net.minecraft.server.MinecraftServer server,
+                                                   int fingerprint, boolean completeServerRecipeSet) {
+        if (localRecipeCache.isEmpty()) return false;
+        if (!completeServerRecipeSet) return !localRecipeCacheUsesServerRecipes;
+        return localRecipeCacheUsesServerRecipes && localRecipeCacheServer == server
+                && localRecipeCacheFingerprint == fingerprint;
     }
 
     ConfigScreen configScreen() { return parent; }
@@ -272,7 +295,7 @@ public class VanillaRecipesScreen extends Screen {
         for (int i = 0; i < visibleRows && scroll + i < shownRecipes.size(); i++) {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
             int y = ROWS_Y + i * ROW;
-            boolean disabled = parent.disabledRecipes.contains(recipe.id());
+            boolean disabled = parent.isDefaultRecipeDisabled(recipe.id());
             addRenderableWidget(Button.builder(recipeLabel(recipe), b -> selectRecipe(recipe))
                     .bounds(recipeLabelX(), y, recipeLabelW(), ROW).build());
             addRenderableWidget(Button.builder(disabled ? Component.translatable("customrecipe.state.disabled").setStyle(net.minecraft.network.chat.Style.EMPTY.withColor(0xFF5555))
@@ -351,7 +374,7 @@ public class VanillaRecipesScreen extends Screen {
             return;
         }
         ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput,
-                statusFilter.name(), sourceFilter.name(), parent.disabledRecipes, 0);
+                statusFilter.name(), sourceFilter.name(), parent.effectiveDisabledRecipes(), 0);
     }
 
     /** Refresh after a short pause so typing does not scan or query once per key. */
@@ -374,7 +397,7 @@ public class VanillaRecipesScreen extends Screen {
         if (localMode || loading || recipes.size() >= total) return;
         loading = true;
         ClientServerConfigNetworking.searchVanilla(query, matchIngredients, matchOutput,
-                statusFilter.name(), sourceFilter.name(), parent.disabledRecipes, nextPage);
+                statusFilter.name(), sourceFilter.name(), parent.effectiveDisabledRecipes(), nextPage);
     }
 
     private VanillaRecipePage findLocalRecipes() {
@@ -436,9 +459,9 @@ public class VanillaRecipesScreen extends Screen {
         localScanQuery = query.trim().toLowerCase(Locale.ROOT);
         localScanProcessed = 0;
         localScanServer = minecraft.getSingleplayerServer();
-        int fingerprint = localRecipeFingerprint(localScanServer);
-        if (localRecipeCacheServer == localScanServer && localRecipeCacheFingerprint == fingerprint
-                && !localRecipeCache.isEmpty()) {
+        boolean completeServerRecipeSet = localScanServer != null && hasCompleteCraftingRecipeSet(localScanServer);
+        int fingerprint = completeServerRecipeSet ? localRecipeFingerprint(localScanServer) : 0;
+        if (isLocalRecipeCacheValid(localScanServer, fingerprint, completeServerRecipeSet)) {
             recipes.addAll(filterCachedLocalRecipes(localRecipeCache));
             total = recipes.size();
             nextPage = 1;
@@ -451,7 +474,7 @@ public class VanillaRecipesScreen extends Screen {
         localScanCanPopulateCache = true;
         localScanJsonById = new HashMap<>();
 
-        if (localScanServer != null && hasCompleteCraftingRecipeSet(localScanServer)) {
+        if (completeServerRecipeSet) {
             for (net.minecraft.world.item.crafting.Recipe<?> recipe : localScanServer.getRecipeManager().getRecipes()) {
                 if (recipe instanceof CraftingRecipe && !recipe.getId().getNamespace().equals(CustomRecipeMod.MOD_ID)) {
                     localScanQueue.add(LocalRecipeSource.loaded(recipe));
@@ -475,11 +498,18 @@ public class VanillaRecipesScreen extends Screen {
 
     private int localRecipeFingerprint(net.minecraft.server.MinecraftServer server) {
         if (server == null) return 0;
-        int fingerprint = 1;
+        // RecipeManager does not promise a stable iteration order. Keep the
+        // fingerprint order-independent so an unchanged world keeps its cache.
+        int count = 0;
+        int sum = 0;
+        int rotatedXor = 0;
         for (net.minecraft.world.item.crafting.Recipe<?> recipe : server.getRecipeManager().getRecipes()) {
-            fingerprint = 31 * fingerprint + recipe.getId().hashCode();
+            int hash = recipe.getId().hashCode();
+            count++;
+            sum += hash;
+            rotatedXor ^= Integer.rotateLeft(hash, hash & 31);
         }
-        return fingerprint;
+        return 31 * (31 * count + sum) + rotatedXor;
     }
 
     /** Cached recipes are complete; query/source/status filters are reapplied instantly in memory. */
@@ -491,7 +521,7 @@ public class VanillaRecipesScreen extends Screen {
             boolean sourceMatch = sourceFilter == SourceFilter.ALL
                     || sourceFilter == SourceFilter.VANILLA && recipe.id().startsWith("minecraft:")
                     || sourceFilter == SourceFilter.MODDED && !recipe.id().startsWith("minecraft:");
-            boolean disabled = parent.disabledRecipes.contains(recipe.id());
+            boolean disabled = parent.isDefaultRecipeDisabled(recipe.id());
             boolean statusMatch = switch (statusFilter) {
                 case ALL -> true;
                 case ENABLED -> !disabled && !recipe.special();
@@ -585,8 +615,11 @@ public class VanillaRecipesScreen extends Screen {
                 localScanCacheMatches.sort(java.util.Comparator.comparing(VanillaRecipePage.VanillaRecipeInfo::id));
                 localRecipeCache = List.copyOf(localScanCacheMatches);
                 localRecipeJsonCache = Map.copyOf(localScanJsonById);
-                localRecipeCacheServer = localScanServer;
-                localRecipeCacheFingerprint = localRecipeFingerprint(localScanServer);
+                localRecipeCacheUsesServerRecipes = localScanServer != null
+                        && hasCompleteCraftingRecipeSet(localScanServer);
+                localRecipeCacheServer = localRecipeCacheUsesServerRecipes ? localScanServer : null;
+                localRecipeCacheFingerprint = localRecipeCacheUsesServerRecipes
+                        ? localRecipeFingerprint(localScanServer) : 0;
             }
             nextPage = 1;
             loading = false;
@@ -656,7 +689,7 @@ public class VanillaRecipesScreen extends Screen {
         boolean outputMatch = matchOutput && itemMatchesQuery(resultId, loweredQuery);
         boolean ingredientMatch = matchIngredients && recipe.getIngredients().stream()
                 .anyMatch(ingredient -> ingredientMatchesQuery(ingredient, loweredQuery));
-        boolean disabled = parent.disabledRecipes.contains(entry.getId().toString());
+        boolean disabled = parent.isDefaultRecipeDisabled(entry.getId().toString());
         boolean statusMatch = switch (statusFilter) {
             case ENABLED -> !disabled && !special;
             case DISABLED -> disabled && !special;
@@ -743,7 +776,7 @@ public class VanillaRecipesScreen extends Screen {
             boolean outputMatch = matchOutput && itemMatchesQuery(resultId, loweredQuery);
             boolean ingredientMatch = matchIngredients && recipe.getIngredients().stream()
                     .anyMatch(ingredient -> ingredientMatchesQuery(ingredient, loweredQuery));
-            boolean disabled = parent.disabledRecipes.contains(entry.getId().toString());
+            boolean disabled = parent.isDefaultRecipeDisabled(entry.getId().toString());
             boolean statusMatch = switch (statusFilter) {
                 case ENABLED -> !disabled && !special;
                 case DISABLED -> disabled && !special;
@@ -790,6 +823,7 @@ public class VanillaRecipesScreen extends Screen {
     private void addLocalRecipe(List<VanillaRecipePage.VanillaRecipeInfo> matches, Set<String> matchedIds,
                                 String recipeId, String json, String loweredQuery) {
         if (!json.contains("crafting_")) return;
+        if (collectedLocalRecipeJsonById != null) collectedLocalRecipeJsonById.putIfAbsent(recipeId, json);
         boolean vanillaRecipe = recipeId.startsWith("minecraft:");
         if ((sourceFilter == SourceFilter.VANILLA && !vanillaRecipe)
                 || (sourceFilter == SourceFilter.MODDED && vanillaRecipe)) return;
@@ -975,7 +1009,7 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     private void toggle(String recipeId) {
-        if (!parent.disabledRecipes.remove(recipeId)) parent.disabledRecipes.add(recipeId);
+        parent.toggleDefaultRecipe(recipeId);
         scroll = Math.min(scroll, maxScroll(filteredRecipes()));
         // The staged state changes only the currently rendered rows; do not
         // restart a complete paginated server query.
@@ -1253,21 +1287,14 @@ public class VanillaRecipesScreen extends Screen {
     }
 
     boolean isVariantDisabled(String recipeId, String materialId) {
-        return parent.disabledRecipeVariants.stream().anyMatch(rule -> recipeId.equals(rule.recipe_id) && materialId.equals(rule.material_id));
+        return parent.isDefaultRecipeVariantDisabled(recipeId, materialId);
     }
 
     void toggleVariant(String recipeId, String materialId) {
-        for (int i = 0; i < parent.disabledRecipeVariants.size(); i++) {
-            var rule = parent.disabledRecipeVariants.get(i);
-            if (recipeId.equals(rule.recipe_id) && materialId.equals(rule.material_id)) {
-                parent.disabledRecipeVariants.remove(i);
-                return;
-            }
-        }
-        parent.disabledRecipeVariants.add(new fr.zazac1.customrecipe.RecipeVariantRule(recipeId, materialId));
+        parent.toggleDefaultRecipeVariant(recipeId, materialId);
     }
 
-    boolean isRecipeDisabled(String recipeId) { return parent.disabledRecipes.contains(recipeId); }
+    boolean isRecipeDisabled(String recipeId) { return parent.isDefaultRecipeDisabled(recipeId); }
 
     void toggleAllVariants(String recipeId) { toggle(recipeId); }
 
@@ -1302,7 +1329,7 @@ public class VanillaRecipesScreen extends Screen {
 
     @Override
     public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
+        renderBackground(ctx);
         renderPanels(ctx);
         super.render(ctx, mouseX, mouseY, delta);
         if (localMode && loading) {
@@ -1334,7 +1361,7 @@ public class VanillaRecipesScreen extends Screen {
             VanillaRecipePage.VanillaRecipeInfo recipe = shownRecipes.get(scroll + i);
             int y = ROWS_Y + i * ROW;
             int rowColor = recipe.special() ? 0x22335566
-                    : parent.disabledRecipes.contains(recipe.id()) ? 0x44550000 : 0x22005500;
+                    : parent.isDefaultRecipeDisabled(recipe.id()) ? 0x44550000 : 0x22005500;
             ctx.fill(recipeListX(), y, recipeScrollbarX() - 4, y + ROW, rowColor);
             var item = BuiltInRegistries.ITEM.get(ResourceLocation.tryParse(recipe.result()));
             if (item != null && item != Items.AIR) ctx.renderItem(new ItemStack(item), recipeListX() + 2, y + 2);
