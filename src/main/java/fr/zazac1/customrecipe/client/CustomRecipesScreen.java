@@ -536,6 +536,7 @@ public class CustomRecipesScreen extends Screen {
                         shaped ? CustomRecipeSprites.LOCKED_BUTTON : CustomRecipeSprites.UNLOCKED_BUTTON,
                         typeX, detailActionY(), 20, 20));
                 boolean known = Boolean.TRUE.equals(e.known_by_default);
+
                 addDrawableChild(ButtonWidget.builder(Text.empty(),
                         b -> {
                             CustomRecipeEntry recipe = recipes.get(selected);
@@ -649,6 +650,16 @@ public class CustomRecipesScreen extends Screen {
             drawRecipeStatusIcon(ctx, PAD + 24, dy + 2, isCorrupted(e), firstEnabledConflict(e) != null);
         }
         boolean known = Boolean.TRUE.equals(e.known_by_default);
+        // In library/Quick Add previews these controls are read-only, but the
+        // same visual markers as the normal recipe editor must still be shown.
+        if (libraryPicker || quickAddPreview) {
+            CustomRecipeSprites.draw(ctx,
+                    shapedDetail ? CustomRecipeSprites.LOCKED_BUTTON : CustomRecipeSprites.UNLOCKED_BUTTON,
+                    detailActionX(), detailActionY(), 20, 20);
+            CustomRecipeSprites.draw(ctx,
+                    known ? CustomRecipeSprites.KNOWN_BY_DEFAULT : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT,
+                    detailKnownX(), detailActionY(), 20, 20);
+        }
         ctx.text(textRenderer, Text.translatable(shapedDetail ? "customrecipe.recipe.shaped" : "customrecipe.recipe.shapeless"), detailActionX() + 24, detailActionY() + 6,
                 shapedDetail ? 0xFFFFD700 : 0xFF88FFFF, false);
         ctx.text(textRenderer, Text.translatable("customrecipe.recipe.known", Text.translatable(known ? "customrecipe.recipe.on" : "customrecipe.recipe.off")), detailKnownX() + 24,
@@ -698,7 +709,12 @@ public class CustomRecipesScreen extends Screen {
     }
 
     /** Reconstruit la grille 3×3 d'affichage depuis un CustomRecipeEntry. */
-    private record ShapelessIngredient(String itemId, int count) {}
+    private record ShapelessIngredient(String itemId, List<String> alternatives, int count) {}
+    private record IngredientGroup(String itemId, List<String> alternatives) {
+        private IngredientGroup {
+            alternatives = alternatives == null ? List.of() : List.copyOf(alternatives);
+        }
+    }
 
     private int detailIngredientCount(CustomRecipeEntry e) {
         if (!"shaped".equalsIgnoreCase(e.type)) return e.ingredients == null ? 0 : e.ingredients.size();
@@ -710,34 +726,37 @@ public class CustomRecipesScreen extends Screen {
     }
 
     private List<ShapelessIngredient> shapelessIngredientRows(CustomRecipeEntry e) {
-        Map<String, Integer> counts = new LinkedHashMap<>();
+        List<ShapelessIngredient> rows = new ArrayList<>();
         if (e.ingredients != null) {
             for (int i = 0; i < e.ingredients.size(); i++) {
                 String itemId = e.ingredients.get(i);
-                if (itemId != null && !itemId.isEmpty()) counts.merge(itemId, e.ingredientCount(i), Integer::sum);
+                if (itemId != null && !itemId.isEmpty()) rows.add(new ShapelessIngredient(itemId,
+                        alternativesOnly(e.ingredientOptions(i), itemId), e.ingredientCount(i)));
             }
         }
-        return ingredientRows(counts);
+        return rows;
     }
 
     private List<ShapelessIngredient> shapedIngredientRows(CustomRecipeEntry e) {
-        Map<String, Integer> counts = new LinkedHashMap<>();
+        Map<IngredientGroup, Integer> counts = new LinkedHashMap<>();
         if (e.pattern != null && e.keys != null) {
             for (String row : e.pattern) {
                 if (row == null) continue;
                 for (int i = 0; i < row.length(); i++) {
                     String symbol = String.valueOf(row.charAt(i));
                     String itemId = e.keys.get(symbol);
-                    if (itemId != null && !itemId.isEmpty()) counts.merge(itemId, e.keyCount(symbol), Integer::sum);
+                    if (itemId != null && !itemId.isEmpty()) counts.merge(new IngredientGroup(itemId,
+                            alternativesOnly(e.keyOptions(symbol), itemId)), e.keyCount(symbol), Integer::sum);
                 }
             }
         }
         return ingredientRows(counts);
     }
 
-    private List<ShapelessIngredient> ingredientRows(Map<String, Integer> counts) {
+    private List<ShapelessIngredient> ingredientRows(Map<IngredientGroup, Integer> counts) {
         List<ShapelessIngredient> rows = new ArrayList<>();
-        counts.forEach((itemId, count) -> rows.add(new ShapelessIngredient(itemId, count)));
+        counts.forEach((ingredient, count) -> rows.add(new ShapelessIngredient(
+                ingredient.itemId(), ingredient.alternatives(), count)));
         return rows;
     }
 
@@ -766,7 +785,7 @@ public class CustomRecipesScreen extends Screen {
             int rowY = y + i * MINI;
             ItemStack stack = stackFor(row.itemId());
             if (!stack.isEmpty()) ctx.item(stack, x, rowY + 1);
-            String name = textRenderer.plainSubstrByWidth(toName(row.itemId()), 104);
+            String name = textRenderer.plainSubstrByWidth(ingredientDisplayName(row), 104);
             ctx.text(textRenderer, name, x + 20, rowY + 5, 0xFFDDDDDD, false);
             ctx.text(textRenderer, "x" + row.count(), x + 126, rowY + 5, 0xFFEECC77, false);
         }
@@ -792,9 +811,19 @@ public class CustomRecipesScreen extends Screen {
     private void renderIngredientRow(GuiGraphicsExtractor ctx, ShapelessIngredient row, int x, int y) {
         ItemStack stack = stackFor(row.itemId());
         if (!stack.isEmpty()) ctx.item(stack, x, y + 1);
-        String name = textRenderer.plainSubstrByWidth(toName(row.itemId()), 104);
+        String name = textRenderer.plainSubstrByWidth(ingredientDisplayName(row), 104);
         ctx.text(textRenderer, name, x + 20, y + 5, 0xFFDDDDDD, false);
         ctx.text(textRenderer, "x" + row.count(), x + 126, y + 5, 0xFFEECC77, false);
+    }
+
+    private String ingredientDisplayName(ShapelessIngredient ingredient) {
+        return toName(ingredient.itemId()) + (ingredient.alternatives().isEmpty()
+                ? "" : " (+" + ingredient.alternatives().size() + ")");
+    }
+
+    private static List<String> alternativesOnly(List<String> options, String primary) {
+        if (options == null) return List.of();
+        return options.stream().filter(value -> value != null && !value.isBlank() && !value.equals(primary)).toList();
     }
 
     private String[][] buildDisplayGrid(CustomRecipeEntry e) {
@@ -840,24 +869,78 @@ public class CustomRecipesScreen extends Screen {
         return counts;
     }
 
+    @SuppressWarnings("unchecked")
+    private List<String>[][] buildDisplayAlternativesGrid(CustomRecipeEntry e) {
+        List<String>[][] alternatives = (List<String>[][]) new List<?>[3][3];
+        for (int row = 0; row < 3; row++) for (int column = 0; column < 3; column++) {
+            alternatives[row][column] = List.of();
+        }
+        if ("shaped".equalsIgnoreCase(e.type)) {
+            if (e.pattern == null || e.keys == null) return alternatives;
+            for (int row = 0; row < 3 && row < e.pattern.size(); row++) {
+                String patternRow = e.pattern.get(row);
+                if (patternRow == null) continue;
+                for (int column = 0; column < 3 && column < patternRow.length(); column++) {
+                    char symbol = patternRow.charAt(column);
+                    if (symbol != ' ') alternatives[row][column] = alternativesOnly(
+                            e.keyOptions(String.valueOf(symbol)), e.keys.get(String.valueOf(symbol)));
+                }
+            }
+        } else if (e.ingredients != null) {
+            for (int i = 0; i < e.ingredients.size() && i < 9; i++) {
+                alternatives[i / 3][i % 3] = alternativesOnly(e.ingredientOptions(i), e.ingredients.get(i));
+            }
+        }
+        return alternatives;
+    }
+
+    private boolean[][] buildDisplayDistinctGrid(CustomRecipeEntry e) {
+        boolean[][] distinct = new boolean[3][3];
+        if ("shaped".equalsIgnoreCase(e.type)) {
+            if (e.pattern == null) return distinct;
+            for (int row = 0; row < 3 && row < e.pattern.size(); row++) {
+                String patternRow = e.pattern.get(row);
+                if (patternRow == null) continue;
+                for (int column = 0; column < 3 && column < patternRow.length(); column++) {
+                    char symbol = patternRow.charAt(column);
+                    if (symbol != ' ') distinct[row][column] = e.keyRequiresDistinct(String.valueOf(symbol));
+                }
+            }
+        } else if (e.ingredients != null) {
+            for (int i = 0; i < e.ingredients.size() && i < 9; i++) {
+                distinct[i / 3][i % 3] = e.ingredientRequiresDistinct(i);
+            }
+        }
+        return distinct;
+    }
+
     /** Switches between fixed shaped slots and free shapeless ingredients. */
     private void toggleRecipeType(CustomRecipeEntry e) {
         String[][] grid = buildDisplayGrid(e);
         int[][] countGrid = buildDisplayCountGrid(e);
+        List<String>[][] alternativeGrid = buildDisplayAlternativesGrid(e);
+        boolean[][] distinctGrid = buildDisplayDistinctGrid(e);
         if ("shaped".equalsIgnoreCase(e.type)) {
-            shapedLayouts.put(e, new ShapedLayout(e.pattern, e.keys, e.key_counts));
+            shapedLayouts.put(e, new ShapedLayout(e.pattern, e.keys, e.key_alternatives, e.key_counts,
+                    e.key_distinct));
             e.type = "shapeless";
             e.ingredients = new ArrayList<>();
+            e.ingredient_alternatives = new ArrayList<>();
             e.ingredient_counts = new ArrayList<>();
+            e.ingredient_distinct = new ArrayList<>();
             for (int row = 0; row < 3; row++)
                 for (int column = 0; column < 3; column++)
                     if (grid[row][column] != null && !grid[row][column].isEmpty()) {
                         e.ingredients.add(grid[row][column]);
+                        e.ingredient_alternatives.add(new ArrayList<>(alternativeGrid[row][column]));
                         e.ingredient_counts.add(countGrid[row][column]);
+                        e.ingredient_distinct.add(distinctGrid[row][column]);
                     }
             e.pattern = new ArrayList<>();
             e.keys = new LinkedHashMap<>();
+            e.key_alternatives = new LinkedHashMap<>();
             e.key_counts = new LinkedHashMap<>();
+            e.key_distinct = new LinkedHashMap<>();
             return;
         }
 
@@ -866,14 +949,20 @@ public class CustomRecipesScreen extends Screen {
         if (original != null) {
             e.pattern = new ArrayList<>(original.pattern());
             e.keys = new LinkedHashMap<>(original.keys());
+            e.key_alternatives = deepCopyAlternatives(original.keyAlternatives());
             e.key_counts = new LinkedHashMap<>(original.keyCounts());
+            e.key_distinct = new LinkedHashMap<>(original.keyDistinct());
             e.ingredients = new ArrayList<>();
+            e.ingredient_alternatives = new ArrayList<>();
             e.ingredient_counts = new ArrayList<>();
+            e.ingredient_distinct = new ArrayList<>();
             return;
         }
         e.pattern = new ArrayList<>();
         e.keys = new LinkedHashMap<>();
+        e.key_alternatives = new LinkedHashMap<>();
         e.key_counts = new LinkedHashMap<>();
+        e.key_distinct = new LinkedHashMap<>();
         Map<CountedIngredient, Character> letters = new LinkedHashMap<>();
         char nextLetter = 'A';
         for (int row = 0; row < 3; row++) {
@@ -884,30 +973,52 @@ public class CustomRecipesScreen extends Screen {
                     patternRow.append(' ');
                     continue;
                 }
-                CountedIngredient ingredient = new CountedIngredient(itemId, countGrid[row][column]);
+                CountedIngredient ingredient = new CountedIngredient(itemId, alternativeGrid[row][column],
+                        countGrid[row][column], distinctGrid[row][column]);
                 Character letter = letters.get(ingredient);
                 if (letter == null) {
                     letter = nextLetter++;
                     letters.put(ingredient, letter);
                     e.keys.put(String.valueOf(letter), itemId);
+                    e.key_alternatives.put(String.valueOf(letter), new ArrayList<>(ingredient.alternatives()));
                     e.key_counts.put(String.valueOf(letter), ingredient.count());
+                    e.key_distinct.put(String.valueOf(letter), ingredient.distinct());
                 }
                 patternRow.append(letter);
             }
             e.pattern.add(patternRow.toString());
         }
         e.ingredients = new ArrayList<>();
+        e.ingredient_alternatives = new ArrayList<>();
         e.ingredient_counts = new ArrayList<>();
+        e.ingredient_distinct = new ArrayList<>();
     }
 
-    private record CountedIngredient(String itemId, int count) {}
+    private record CountedIngredient(String itemId, List<String> alternatives, int count, boolean distinct) {
+        private CountedIngredient {
+            alternatives = alternatives == null ? List.of() : List.copyOf(alternatives);
+        }
+    }
 
-    private record ShapedLayout(List<String> pattern, Map<String, String> keys, Map<String, Integer> keyCounts) {
-        private ShapedLayout(List<String> pattern, Map<String, String> keys, Map<String, Integer> keyCounts) {
+    private record ShapedLayout(List<String> pattern, Map<String, String> keys,
+                                Map<String, List<String>> keyAlternatives, Map<String, Integer> keyCounts,
+                                Map<String, Boolean> keyDistinct) {
+        private ShapedLayout(List<String> pattern, Map<String, String> keys,
+                             Map<String, List<String>> keyAlternatives, Map<String, Integer> keyCounts,
+                             Map<String, Boolean> keyDistinct) {
             this.pattern = pattern == null ? List.of() : new ArrayList<>(pattern);
             this.keys = keys == null ? Map.of() : new LinkedHashMap<>(keys);
+            this.keyAlternatives = deepCopyAlternatives(keyAlternatives);
             this.keyCounts = keyCounts == null ? Map.of() : new LinkedHashMap<>(keyCounts);
+            this.keyDistinct = keyDistinct == null ? Map.of() : new LinkedHashMap<>(keyDistinct);
         }
+    }
+
+    private static Map<String, List<String>> deepCopyAlternatives(Map<String, List<String>> source) {
+        Map<String, List<String>> copy = new LinkedHashMap<>();
+        if (source != null) source.forEach((key, values) -> copy.put(key,
+                values == null ? new ArrayList<>() : new ArrayList<>(values)));
+        return copy;
     }
 
     @Override

@@ -85,7 +85,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
-        ctx.fillGradient(0, 0, width, height, 0xD0101010, 0xE0101010);
+        ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
         super.extractRenderState(ctx, mouseX, mouseY, delta);
 
         int left = width / 2 - 86;

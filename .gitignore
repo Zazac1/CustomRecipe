@@ -18,6 +18,8 @@ hs_err_pid*.log
 replay_pid*.log
 *.log
 logs/
+validation/runtime/
+validation/logs/
 
 # Loom generated files
 remappedSrc/
