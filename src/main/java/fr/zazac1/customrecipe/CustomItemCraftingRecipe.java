@@ -37,6 +37,10 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         this.customStacks = Map.copyOf(customStacks);
     }
 
+    public CraftingRecipe delegate() {
+        return delegate;
+    }
+
     @Override
     public boolean matches(CraftingInput input, Level level) {
         if (!delegate.matches(input, level)) return false;

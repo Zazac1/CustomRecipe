@@ -151,7 +151,8 @@ public final class ServerConfigNetworking {
 
             validateProposedConfig(context.server(), config);
             String json = ConfigLoader.toJson(config);
-            if (json.length() <= MAX_JSON_CHARS) {
+            if (json.length() <= MAX_JSON_CHARS
+                    && ServerPlayNetworking.canSend(player, ValidatedServerConfigPayload.ID)) {
                 ServerPlayNetworking.send(player, new ValidatedServerConfigPayload(json));
             }
         });
@@ -164,7 +165,8 @@ public final class ServerConfigNetworking {
             if (query == null) return;
             VanillaRecipePage page = findVanillaRecipes(context.server(), query);
             String json = GSON.toJson(page);
-            if (json.length() <= MAX_JSON_CHARS) {
+            if (json.length() <= MAX_JSON_CHARS
+                    && ServerPlayNetworking.canSend(context.player(), VanillaRecipePagePayload.ID)) {
                 ServerPlayNetworking.send(context.player(), new VanillaRecipePagePayload(json));
             }
         });
@@ -173,7 +175,8 @@ public final class ServerConfigNetworking {
             if (!context.player().permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS))) return;
             VanillaRecipeDetails details = findVanillaRecipeDetails(context.server(), payload.recipeId());
             String json = GSON.toJson(details);
-            if (json.length() <= MAX_JSON_CHARS) {
+            if (json.length() <= MAX_JSON_CHARS
+                    && ServerPlayNetworking.canSend(context.player(), VanillaRecipeDetailsPayload.ID)) {
                 ServerPlayNetworking.send(context.player(), new VanillaRecipeDetailsPayload(json));
             }
         });
@@ -343,7 +346,9 @@ public final class ServerConfigNetworking {
             player.sendSystemMessage(Component.translatable("customrecipe.chat.server_send_too_large"));
             return;
         }
-        ServerPlayNetworking.send(player, new ServerConfigPayload(json));
+        if (ServerPlayNetworking.canSend(player, ServerConfigPayload.ID)) {
+            ServerPlayNetworking.send(player, new ServerConfigPayload(json));
+        }
     }
 
     private static VanillaRecipePage findVanillaRecipes(net.minecraft.server.MinecraftServer server, RecipeQuery request) {
@@ -516,6 +521,7 @@ public final class ServerConfigNetworking {
     }
 
     private static void sendSaveResult(ServerPlayer player, boolean saved, String code, String message) {
+        if (!ServerPlayNetworking.canSend(player, ServerConfigSaveResultPayload.ID)) return;
         ServerPlayNetworking.send(player, new ServerConfigSaveResultPayload(
                 GSON.toJson(new SaveResult(saved, code, message))));
     }
