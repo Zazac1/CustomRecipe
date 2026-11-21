@@ -19,7 +19,8 @@ import java.util.function.Supplier;
 public final class ModNetworking {
     private static final String PROTOCOL = "1";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
-            new ResourceLocation(CustomRecipeMod.MOD_ID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
+            new ResourceLocation(CustomRecipeMod.MOD_ID, "main"), () -> PROTOCOL,
+            ModNetworking::acceptsRemote, ModNetworking::acceptsRemote);
     private static int nextId;
 
     public static void initialize() {
@@ -49,14 +50,22 @@ public final class ModNetworking {
     public static void sendVanillaDetailsQuery(String id) { CHANNEL.sendToServer(new VanillaDetailsQueryPacket(id)); }
     /** Mirrors Fabric's canSend guard before any server-to-client editor packet. */
     public static boolean canSend(ServerPlayer player) {
-        return player != null && CHANNEL.isRemotePresent(player.connection.connection);
+        return player != null && player.connection != null && player.connection.connection != null
+                && player.connection.connection.channel() != null
+                && CHANNEL.isRemotePresent(player.connection.connection);
     }
     public static void sendServerConfig(ServerPlayer player, String json) { send(player, new ServerConfigPacket(json)); }
     public static void sendValidatedConfig(ServerPlayer player, String json) { send(player, new ValidatedConfigPacket(json)); }
     public static void sendVanillaPage(ServerPlayer player, String json) { send(player, new VanillaPagePacket(json)); }
     public static void sendVanillaDetails(ServerPlayer player, String json) { send(player, new VanillaDetailsPacket(json)); }
     public static void sendSaveResult(ServerPlayer player, boolean saved, String reason) { send(player, new SaveResultPacket(saved, reason)); }
-    private static void send(ServerPlayer player, Object packet) { CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet); }
+    private static boolean acceptsRemote(String version) {
+        return PROTOCOL.equals(version) || NetworkRegistry.ABSENT.equals(version)
+                || NetworkRegistry.ACCEPTVANILLA.equals(version);
+    }
+    private static void send(ServerPlayer player, Object packet) {
+        if (canSend(player)) CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
+    }
 
     private interface StringPacket {
         String value();

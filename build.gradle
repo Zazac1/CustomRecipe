@@ -16,6 +16,7 @@ apply plugin: 'org.spongepowered.mixin'
 
 if (project.hasProperty('basicValidation')) { sourceSets.main.java.srcDir 'validation/src/main/java' }
 
+if (project.hasProperty('clientStartupValidation')) { sourceSets.main.java.srcDir '../validation/client-smoke/src/main/java' }
 version = project.mod_version
 group = project.maven_group
 base { archivesName = project.mod_id }
@@ -33,7 +34,8 @@ minecraft {
             arg '-mixin.config=customrecipe.mixins.json'
             mods { "${project.mod_id}" { source sourceSets.main } }
         }
-        client { workingDirectory project.file('run/client') }
+        client { workingDirectory project.file(project.hasProperty('clientStartupValidation')
+                ? 'validation/runtime/client-startup' : 'run/client') }
         server {
             workingDirectory project.file(project.hasProperty('basicValidation')
                     ? 'validation/runtime/server' : 'run/server')

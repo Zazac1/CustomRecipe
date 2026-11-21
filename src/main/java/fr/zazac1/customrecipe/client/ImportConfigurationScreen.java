@@ -35,7 +35,9 @@ final class ImportConfigurationScreen extends fr.zazac1.customrecipe.client.comp
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        returnTo.render(context, mouseX, mouseY, delta);
+        returnTo.render(context, -10_000, -10_000, delta);
+        context.pose().pushPose();
+        context.pose().translate(0.0F, 0.0F, 400.0F);
         context.fill(0, 0, width, height, 0x98000000);
         int panelWidth = 340;
         int panelHeight = 136;
@@ -48,6 +50,7 @@ final class ImportConfigurationScreen extends fr.zazac1.customrecipe.client.comp
         context.drawCenteredString(font, "Custom recipes: " + recipeCount, width / 2, panelY + 38, 0xFFE0E6E3);
         context.drawCenteredString(font, "Vanilla settings: " + vanillaCount, width / 2, panelY + 54, 0xFFE0E6E3);
         context.drawCenteredString(font, "Save will apply the import.", width / 2, panelY + 78, 0xFFB8C7C1);
+        context.pose().popPose();
     }
 
     private static void border(GuiGraphics context, int x, int y, int width, int height) {
