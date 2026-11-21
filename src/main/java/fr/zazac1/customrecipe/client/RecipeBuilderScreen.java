@@ -28,14 +28,13 @@ public class RecipeBuilderScreen extends Screen {
     private static final int SLOT  = 18;
     private static final int OUTPUT_SLOT = 26;
     private static final int ITEM_BATCH_SIZE = 20;
-    private static final int VISIBLE_S = 10;
     private static final int SUGG_H = 16; // suggestion row height
     private static final int SEARCH_H = 18;
     private static final int SEARCH_TEXT_Y_OFFSET = 6;
     private static final int SCROLLBAR_TRACK_COLOR = 0xFF5A5A5A;
     private static final int SHAPELESS_ROW_H = 26;
     private static final int MAX_SHAPELESS_INGREDIENTS = 9;
-    private static final int VISIBLE_SHAPELESS_ROWS = 5;
+    private static final int VISIBLE_SHAPELESS_ROWS = 4;
     private static final int MAX_VISIBLE_PALETTE_ROWS = 2;
     // 1.21.10's Click uses GLFW button values: left=0 and right=1.
     private static final int LEFT_MOUSE_BUTTON = 0;
@@ -179,9 +178,13 @@ public class RecipeBuilderScreen extends Screen {
     private int resX()  { return shaped ? craftingTableX() + 119 : shapelessListX() + shapelessListW() + 36; }
     private int resY()     {
         if (shaped) return gridY() + 14;
-        return shapelessListY() + Math.max(0, (visibleShapelessRows() * SHAPELESS_ROW_H - OUTPUT_SLOT) / 2);
+        return shapelessListY() + Math.max(SHAPELESS_ROW_H,
+                (visibleShapelessRows() * SHAPELESS_ROW_H - OUTPUT_SLOT) / 2);
     }
-    private int settingsX() { return shaped ? craftingTableX() + 34 : shapelessListX() + 34; }
+    private int ingredientCountLabelX() { return shaped ? craftingTableX() + 184 : resX() + 36; }
+    private int ingredientCountFieldX() { return shaped ? ingredientCountLabelX() + 88 : resX() - 4; }
+    private int resultCountLabelX() { return shaped ? craftingTableX() + 184 : resX() + 36; }
+    private int resultCountFieldX() { return shaped ? resultCountLabelX() + 70 : resX() - 4; }
     private int shapelessListW() { return 176; }
     private int shapelessListX() { return rightX() + 16; }
     private int shapelessHeaderY() { return panelY() + 62; }
@@ -204,9 +207,8 @@ public class RecipeBuilderScreen extends Screen {
     private int shapedIngredientCount() {
         return (int) Arrays.stream(slotItems).filter(item -> item != null && !item.isEmpty()).count();
     }
-    private int recipeBottom() { return shaped ? craftingTableY() + 86 : shapelessListY() + visibleShapelessRows() * SHAPELESS_ROW_H; }
-    private int ingredientCountY() { return recipeBottom() + 10; }
-    private int countY() { return ingredientCountY() + 22; }
+    private int ingredientCountY() { return shaped ? craftingTableY() + 18 : resY() - 22; }
+    private int countY() { return shaped ? craftingTableY() + 46 : resY() + OUTPUT_SLOT + 8; }
     private int modeY() { return countY() + 18; }
     private int knownY() { return modeY() + 24; }
 
@@ -218,10 +220,24 @@ public class RecipeBuilderScreen extends Screen {
     private int paletteY() {
         // In shapeless mode, let new ingredient rows use the empty workspace first.
         // The reusable-item strip only moves once the result controls reach it.
-        return Math.max(panelY() + 174, countY() + 24);
+        int controlsBottom = countY() + 24;
+        if (!shaped) {
+            int listBottom = shapelessListY() + visibleShapelessRows() * SHAPELESS_ROW_H;
+            if (shapelessItems.size() < MAX_SHAPELESS_INGREDIENTS) listBottom += 26;
+            controlsBottom = Math.max(controlsBottom, listBottom + 4);
+        }
+        return Math.max(panelY() + 174, controlsBottom);
     }
     private int loadedSuggestions() { return Math.min(loadedSuggestionLimit, itemMatches.size()); }
-    private int visibleSuggestions() { return Math.min(VISIBLE_S, Math.max(0, loadedSuggestions() - suggestionScroll)); }
+    private int suggestionBottomLimit() {
+        return height - (parent.target().isWorld() ? 54 : 30);
+    }
+    private int maxVisibleSuggestions() {
+        return Math.max(1, (suggestionBottomLimit() - suggestionRowsTop() - 2) / SUGG_H);
+    }
+    private int visibleSuggestions() {
+        return Math.min(maxVisibleSuggestions(), Math.max(0, loadedSuggestions() - suggestionScroll));
+    }
     private int clearSearchX() { return leftX() + leftW() - 18; }
     private int suggestionScrollbarX() { return leftX() + leftW() - 12; }
     private int suggestionRowsTop() { return suggY() + 1; }
@@ -321,9 +337,9 @@ public class RecipeBuilderScreen extends Screen {
 
         if (hasSelectedIngredient()) {
             int ingredientY = ingredientCountY();
-            addDrawableChild(makeRightLabel(settingsX(), ingredientY + 3,
+            addDrawableChild(makeRightLabel(ingredientCountLabelX(), ingredientY + 3,
                     Text.translatable("customrecipe.builder.ingredient_count").getString(), 0xCCCCCC));
-            ingredientCountField = addDrawableChild(new TextFieldWidget(textRenderer, settingsX() + 88, ingredientY - 2,
+            ingredientCountField = addDrawableChild(new TextFieldWidget(textRenderer, ingredientCountFieldX(), ingredientY - 2,
                     34, 18, Text.translatable("customrecipe.builder.ingredient_count")));
             configureCountField(ingredientCountField, selectedIngredientCount(), selectedIngredientMaxCount(),
                     this::setSelectedIngredientCount);
@@ -338,9 +354,9 @@ public class RecipeBuilderScreen extends Screen {
 
         // Result count: type a stack size directly instead of clicking through 64 values.
         int countY = countY();
-        addDrawableChild(makeRightLabel(settingsX(), countY + 3,
+        addDrawableChild(makeRightLabel(resultCountLabelX(), countY + 3,
                 Text.translatable("customrecipe.builder.result_count").getString(), 0xCCCCCC));
-        resultCountField = addDrawableChild(new TextFieldWidget(textRenderer, settingsX() + 70, countY - 2,
+        resultCountField = addDrawableChild(new TextFieldWidget(textRenderer, resultCountFieldX(), countY - 2,
                 34, 18, Text.translatable("customrecipe.builder.result_count")));
         // Permit a three-digit attempt so values above a stack are immediately
         // normalized to 64 instead of silently rejecting the latest key press.
@@ -352,9 +368,10 @@ public class RecipeBuilderScreen extends Screen {
         addDrawableChild(ButtonWidget.builder(Text.empty(),
                 b -> { toggleShapeMode(); clearAndInit(); }
         ).dimensions(modeX, modeY, 20, 20).build());
-        addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+        addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.drawToggle(ctx,
                 shaped ? CustomRecipeSprites.LOCKED_BUTTON : CustomRecipeSprites.UNLOCKED_BUTTON,
-                modeX, modeY, 20, 20));
+                modeX, modeY, 20, 20,
+                mx >= modeX && mx < modeX + 20 && my >= modeY && my < modeY + 20));
         addDrawableChild(makeRightLabel(modeX + 24, modeY + 6,
                 shaped ? "Shaped" : "Shapeless", shaped ? 0xFFD700 : 0x88FFFF));
 
@@ -363,9 +380,10 @@ public class RecipeBuilderScreen extends Screen {
         addDrawableChild(ButtonWidget.builder(Text.empty(),
                 b -> { knownByDefault = !knownByDefault; clearAndInit(); }
         ).dimensions(knownX, knownY, 20, 20).build());
-        addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+        addDrawable((ctx, mx, my, d) -> CustomRecipeSprites.drawToggle(ctx,
                 knownByDefault ? CustomRecipeSprites.KNOWN_BY_DEFAULT : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT,
-                knownX, knownY, 20, 20));
+                knownX, knownY, 20, 20,
+                mx >= knownX && mx < knownX + 20 && my >= knownY && my < knownY + 20));
         addDrawableChild(makeRightLabel(knownX + 24, knownY + 6,
                 "Known by default: " + (knownByDefault ? "ON" : "OFF"),
                 knownByDefault ? 0xFF55FF55 : 0xFFFF7777));
@@ -1024,7 +1042,7 @@ public class RecipeBuilderScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        renderBackground(ctx, mouseX, mouseY, delta);
+        ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
         super.render(ctx, mouseX, mouseY, delta);
         if (itemField != null)
             drawBox(ctx, leftX(), fieldY(), leftW(), SEARCH_H,
@@ -1043,10 +1061,14 @@ public class RecipeBuilderScreen extends Screen {
             } else {
                 ItemStack heldItem = stackFor(heldItemId);
                 if (!heldItem.isEmpty()) {
-                ctx.drawItem(heldItem, ghostX, ghostY);
+                        ctx.drawItem(heldItem, ghostX, ghostY);
                 // This GUI item pipeline has no alpha overload. Its
                 // translucent veil keeps the cursor item at 80% visual weight.
-                ctx.fill(ghostX, ghostY, ghostX + 16, ghostY + 16, 0x33000000);
+                        ctx.fill(ghostX, ghostY, ghostX + 16, ghostY + 16, 0x33000000);
+                        if (!heldAlternatives.isEmpty()) {
+                            ctx.drawStackOverlay(textRenderer, heldItem, ghostX, ghostY,
+                                    "+" + heldAlternatives.size());
+                        }
                 }
             }
         }
@@ -1087,7 +1109,8 @@ public class RecipeBuilderScreen extends Screen {
                         tooltip.add(Text.translatable("customrecipe.builder.group_use",
                                 entry.alternativeCount()).asOrderedText());
                         tooltip.add(Text.translatable(entry.expanded()
-                                ? "customrecipe.builder.group_collapse" : "customrecipe.builder.group_expand")
+                                ? "customrecipe.builder.group_collapse" : "customrecipe.builder.group_expand",
+                                entry.alternativeCount())
                                 .asOrderedText());
                         if (entry.distinct()) tooltip.add(Text.translatable(
                                 "customrecipe.builder.group_distinct").asOrderedText());
@@ -1594,10 +1617,19 @@ public class RecipeBuilderScreen extends Screen {
             ctx.drawText(textRenderer, (i + 1) + ")", x + 26, rowY + 8, 0xFF3F3F3F, false);
             if (itemId != null && !itemId.isEmpty()) {
                 ItemStack stack = stackFor(itemId);
-                if (!stack.isEmpty()) ctx.drawItem(stack, x + 5, rowY + 5);
-                String suffix = row.alternativeCount() == 0 ? "" : " (+" + row.alternativeCount() + ")";
-                String name = textRenderer.trimToWidth(toDisplayName(itemId) + suffix, Math.max(20, countX - x - 46));
-                ctx.drawText(textRenderer, name, x + 42, rowY + 8, 0xFFDDDDDD, false);
+                if (!stack.isEmpty()) {
+                    ctx.drawItem(stack, x + 5, rowY + 5);
+                    if (row.alternativeCount() > 0) {
+                        ctx.drawStackOverlay(textRenderer, stack, x + 5, rowY + 5, "+" + row.alternativeCount());
+                    }
+                }
+                String name = textRenderer.trimToWidth(toDisplayName(itemId), Math.max(20, countX - x - 46));
+                int nameY = row.alternativeCount() > 0 ? rowY + 3 : rowY + 8;
+                ctx.drawText(textRenderer, name, x + 42, nameY, 0xFFDDDDDD, false);
+                if (row.alternativeCount() > 0) {
+                    ctx.drawText(textRenderer, "Alt: " + row.alternativeCount(), x + 42, rowY + 14,
+                            0xFF8FC7E8, false);
+                }
                 ctx.drawText(textRenderer, "×" + row.count(), countX, rowY + 7,
                         selectedShapelessSlot == row.slotIndex() ? 0xFFFFFFFF : 0xFFEECC77, false);
             }

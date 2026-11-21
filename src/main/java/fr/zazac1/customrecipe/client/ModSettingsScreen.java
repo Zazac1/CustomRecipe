@@ -72,6 +72,7 @@ final class ModSettingsScreen extends Screen {
     private void setDefaultTarget(RecipeTarget target) { config.default_editor_target_id = target.id(); config.default_editor_target_name = target.displayName(); save(); }
     private void save() { ConfigLoader.saveIntegrityState(config); }
     @Override public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        context.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
         context.drawCenteredTextWithShadow(textRenderer, title, width / 2, height / 2 - 86, 0xFFFFFF);
         context.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.settings.preload_hint"), width / 2, height / 2 + 26, 0xAAAAAA);
         super.render(context, mouseX, mouseY, delta);
