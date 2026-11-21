@@ -32,6 +32,8 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         this.customStacks = Map.copyOf(customStacks);
     }
 
+    public CraftingRecipe delegate() { return delegate; }
+
     @Override public boolean matches(CraftingContainer input, Level world) {
         int[] required = requiredCounts(input);
         return required.length > 0 && required.length == input.getContainerSize();

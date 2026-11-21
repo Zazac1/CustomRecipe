@@ -14,6 +14,7 @@ plugins {
 
 apply plugin: 'org.spongepowered.mixin'
 
+if (project.hasProperty('clientStartupValidation')) { sourceSets.main.java.srcDir '../validation/client-smoke/src/main/java' }
 version = project.mod_version
 group = project.maven_group
 base { archivesName = project.mod_id }
@@ -31,7 +32,8 @@ minecraft {
             arg '-mixin.config=customrecipe.mixins.json'
             mods { "${project.mod_id}" { source sourceSets.main } }
         }
-        client { }
+        client { workingDirectory project.file(project.hasProperty('clientStartupValidation')
+                ? 'validation/runtime/client-startup' : 'run') }
         server { args '--nogui' }
     }
 }
@@ -116,6 +118,7 @@ tasks.configureEach {
 java { toolchain.languageVersion = JavaLanguageVersion.of(17) }
 
 jar {
+    exclude 'fr/zazac1/customrecipe/validation/**'
     manifest { attributes([
         'Specification-Title': project.mod_id,
         'Specification-Vendor': 'zazac1',

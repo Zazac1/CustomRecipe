@@ -181,7 +181,9 @@ public class ConfigScreen extends Screen {
         addRenderableWidget(Button.builder(Component.empty(), b -> save())
                 .bounds(x, saveY, buttonWidth, buttonHeight).build());
         addHomeSaveButton(saveY, buttonWidth);
-        addRenderableWidget(Button.builder(Component.literal("Export"), b -> exportAll()).bounds(width / 2 - 104, saveY + 32, 100, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Export"),
+                b -> minecraft.setScreen(new ExportFormatScreen(this)))
+                .bounds(width / 2 - 104, saveY + 32, 100, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Import"), b -> importAll()).bounds(width / 2 + 4, saveY + 32, 100, 20).build());
     }
 
@@ -286,7 +288,7 @@ public class ConfigScreen extends Screen {
         ).bounds(cx, cy + (serverManaged ? 104 : 80), btnW, btnH).build());
     }
 
-    private void exportAll() {
+    void exportShareFile() {
         WindowsFileDialogs.saveJson(exportFileName(), path -> {
             try {
                 ConfigLoader.exportTo(currentConfig(), path);
@@ -297,9 +299,12 @@ public class ConfigScreen extends Screen {
     }
 
     private String exportFileName() {
-        String worldName = target.isWorld() ? target.displayName().replaceFirst("^Current\\s+", "") : "global-library";
-        String safeName = worldName.replaceAll("[\\\\/:*?\"<>|]", "_").trim().replaceAll("\\s+", "_");
-        return "customrecipe-backup-" + (safeName.isBlank() ? "world" : safeName) + ".json";
+        String targetName = target.isWorld()
+                ? target.displayName().replaceFirst("^Current\\s+", "")
+                : "Global Library";
+        String safeName = targetName.replaceAll("[\\\\/:*?\"<>|]", "-").trim()
+                .replaceAll("\\s+", "-").replaceAll("-+", "-");
+        return (safeName.trim().isEmpty() ? "World" : safeName) + "-custom-recipes.json";
     }
 
     private void importAll() {

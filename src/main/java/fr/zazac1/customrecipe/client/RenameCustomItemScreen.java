@@ -63,7 +63,11 @@ final class RenameCustomItemScreen extends Screen {
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        parent.render(context, mouseX, mouseY, delta);
+        parent.render(context, -10_000, -10_000, delta);
+        // The item list queues some labels and icons. Keep the rename form
+        // above that deferred parent batch and suppress parent hover states.
+        context.pose().pushPose();
+        context.pose().translate(0.0F, 0.0F, 400.0F);
         context.fill(0, 0, width, height, 0x98000000);
 
         int panelWidth = Math.min(360, width - 32);
@@ -80,6 +84,7 @@ final class RenameCustomItemScreen extends Screen {
         if (!idField.getValue().isBlank() && !parent.canUseId(entry, idField.getValue())) {
             context.drawCenteredString(font, Component.translatable("customrecipe.custom_items.id_invalid"), width / 2, panelY + 101, 0xFFFF7777);
         }
+        context.pose().popPose();
     }
 
     private void drawBorder(GuiGraphics context, int x, int y, int width, int height, int color) {

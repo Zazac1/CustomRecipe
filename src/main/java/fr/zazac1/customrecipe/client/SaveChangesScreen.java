@@ -36,7 +36,7 @@ final class SaveChangesScreen extends Screen {
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        returnTo.render(context, mouseX, mouseY, delta);
+        returnTo.render(context, -10_000, -10_000, delta);
 
         int panelWidth = 250;
         int panelHeight = 92;
