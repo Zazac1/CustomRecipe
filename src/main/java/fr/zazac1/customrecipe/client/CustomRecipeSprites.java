@@ -48,5 +48,16 @@ final class CustomRecipeSprites {
         context.drawTexture(sprite, x, y, 0, 0, width, height, width, height);
     }
 
+    static void drawToggle(DrawContext context, Identifier sprite,
+                           int x, int y, int width, int height, boolean highlighted) {
+        draw(context, sprite, x, y, width, height);
+        if (!highlighted) return;
+        int color = 0xFF78C8FF;
+        context.fill(x, y, x + width, y + 1, color);
+        context.fill(x, y + height - 1, x + width, y + height, color);
+        context.fill(x, y + 1, x + 1, y + height - 1, color);
+        context.fill(x + width - 1, y + 1, x + width, y + height - 1, color);
+    }
+
     private CustomRecipeSprites() {}
 }

@@ -142,7 +142,8 @@ public final class ServerConfigNetworking {
          if (config == null) return;
          validateProposedConfig(context.server(), config);
          String json = ConfigLoader.toJson(config);
-         if (json.length() <= MAX_JSON_CHARS) {
+         if (json.length() <= MAX_JSON_CHARS
+               && ServerPlayNetworking.canSend(player, ValidatedServerConfigPayload.ID)) {
             ServerPlayNetworking.send(player, new ValidatedServerConfigPayload(json));
          }
       });
@@ -152,7 +153,8 @@ public final class ServerConfigNetworking {
          RecipeQuery query = GSON.fromJson(payload.json(), RecipeQuery.class);
          if (query == null) return;
          String json = GSON.toJson(findVanillaRecipes(context.server(), query));
-         if (json.length() <= MAX_JSON_CHARS) {
+         if (json.length() <= MAX_JSON_CHARS
+               && ServerPlayNetworking.canSend(context.player(), VanillaRecipePagePayload.ID)) {
             ServerPlayNetworking.send(context.player(), new VanillaRecipePagePayload(json));
          }
       });
@@ -160,7 +162,8 @@ public final class ServerConfigNetworking {
       ServerPlayNetworking.registerGlobalReceiver(VanillaRecipeDetailsQueryPayload.ID, (payload, context) -> {
          if (!context.player().hasPermissionLevel(2)) return;
          String json = GSON.toJson(findVanillaRecipeDetails(context.server(), payload.recipeId()));
-         if (json.length() <= MAX_JSON_CHARS) {
+         if (json.length() <= MAX_JSON_CHARS
+               && ServerPlayNetworking.canSend(context.player(), VanillaRecipeDetailsPayload.ID)) {
             ServerPlayNetworking.send(context.player(), new VanillaRecipeDetailsPayload(json));
          }
       });
@@ -560,7 +563,7 @@ public final class ServerConfigNetworking {
       config.editor_world_name = "";
       if (json.length() > MAX_JSON_CHARS) {
             player.sendMessage(Text.translatable("customrecipe.chat.server_send_too_large"), false);
-      } else {
+      } else if (ServerPlayNetworking.canSend(player, ServerConfigPayload.ID)) {
          ServerPlayNetworking.send(player, new ServerConfigPayload(json));
       }
    }
@@ -739,6 +742,7 @@ public final class ServerConfigNetworking {
    }
 
    private static void sendSaveResult(ServerPlayerEntity player, boolean saved, String code, String message) {
+      if (!ServerPlayNetworking.canSend(player, ServerConfigSaveResultPayload.ID)) return;
       ServerPlayNetworking.send(player, new ServerConfigSaveResultPayload(
          GSON.toJson(new SaveResult(saved, code, message))
       ));

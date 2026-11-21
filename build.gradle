@@ -3,6 +3,7 @@ plugins {
     id 'maven-publish'
 }
 
+if (project.hasProperty('clientStartupValidation')) { sourceSets.main.java.srcDir '../validation/client-smoke/src/main/java' }
 version = project.mod_version
 group = project.maven_group
 
@@ -35,7 +36,7 @@ loom {
 
     runs {
         client {
-            runDir = "run-client"
+            runDir = providers.gradleProperty("client_run_dir").getOrElse("run-client")
         }
         server {
             runDir = project.hasProperty('basicValidation') ? "validation/runtime/server" : "run-server"
@@ -50,7 +51,7 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-    modImplementation "com.terraformersmc:modmenu:${project.modmenu_version}"
+    modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
 }
 
 processResources {
