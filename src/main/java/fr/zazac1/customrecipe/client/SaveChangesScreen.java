@@ -36,7 +36,7 @@ final class SaveChangesScreen extends fr.zazac1.customrecipe.client.compat.Legac
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        returnTo.render(context.pose(), mouseX, mouseY, delta);
+        returnTo.render(context.pose(), -10_000, -10_000, delta);
 
         int panelWidth = 250;
         int panelHeight = 92;

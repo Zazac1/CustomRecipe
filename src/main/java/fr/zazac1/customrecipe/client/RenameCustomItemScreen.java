@@ -63,7 +63,9 @@ final class RenameCustomItemScreen extends fr.zazac1.customrecipe.client.compat.
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        parent.render(context, mouseX, mouseY, delta);
+        parent.render(context, -10_000, -10_000, delta);
+        context.pose().pushPose();
+        context.pose().translate(0.0F, 0.0F, 400.0F);
         context.fill(0, 0, width, height, 0x98000000);
 
         int panelWidth = Math.min(360, width - 32);
@@ -80,6 +82,7 @@ final class RenameCustomItemScreen extends fr.zazac1.customrecipe.client.compat.
         if (!idField.getValue().trim().isEmpty() && !parent.canUseId(entry, idField.getValue())) {
             context.drawCenteredString(font, fr.zazac1.customrecipe.Texts.translatable("customrecipe.custom_items.id_invalid"), width / 2, panelY + 101, 0xFFFF7777);
         }
+        context.pose().popPose();
     }
 
     private void drawBorder(GuiGraphics context, int x, int y, int width, int height, int color) {

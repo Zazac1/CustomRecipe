@@ -32,6 +32,8 @@ public final class CustomItemCraftingRecipe implements ICraftingRecipe, CountedC
         this.customStacks = fr.zazac1.customrecipe.Java8.mapCopy(customStacks);
     }
 
+    public ICraftingRecipe delegate() { return delegate; }
+
     @Override public boolean matches(CraftingInventory input, World world) {
         int[] required = requiredCounts(input);
         return required.length > 0 && required.length == input.getContainerSize();

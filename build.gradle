@@ -25,6 +25,7 @@ sourceSets {
     }
 }
 
+if (project.hasProperty('clientStartupValidation')) { sourceSets.main.java.srcDir '../validation/client-smoke/src/main/java' }
 version = project.mod_version
 group = project.maven_group
 base { archivesName = project.mod_id }
@@ -43,7 +44,8 @@ minecraft {
             mods { "${project.mod_id}" { source sourceSets.main } }
         }
         client {
-            workingDirectory project.file('run/client')
+            workingDirectory project.file(project.hasProperty('clientStartupValidation')
+                    ? 'validation/runtime/client-startup' : 'run/client')
             mods { "${project.mod_id}" { source sourceSets.localDevelopment } }
             arg '-mixin.config=customrecipe.development.mixins.json'
         }

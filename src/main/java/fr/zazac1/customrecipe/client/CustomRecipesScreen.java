@@ -494,9 +494,11 @@ public class CustomRecipesScreen extends fr.zazac1.customrecipe.client.compat.Le
                     toggleRecipeType(recipes.get(selected));
                     rebuildWidgets();
                 }).bounds(typeX, detailActionY(), 20, 20).build());
-                addLegacyRenderable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+                addLegacyRenderable((ctx, mx, my, d) -> CustomRecipeSprites.drawToggle(ctx,
                         shaped ? CustomRecipeSprites.LOCKED_BUTTON : CustomRecipeSprites.UNLOCKED_BUTTON,
-                        typeX, detailActionY(), 20, 20));
+                        typeX, detailActionY(), 20, 20,
+                        mx >= typeX && mx < typeX + 20
+                                && my >= detailActionY() && my < detailActionY() + 20));
                 boolean known = Boolean.TRUE.equals(e.known_by_default);
 
                 addRenderableWidget(Button.builder(fr.zazac1.customrecipe.Texts.empty(),
@@ -506,9 +508,11 @@ public class CustomRecipesScreen extends fr.zazac1.customrecipe.client.compat.Le
                             rebuildWidgets();
                         }
                 ).bounds(knownX, detailActionY(), 20, 20).build());
-                addLegacyRenderable((ctx, mx, my, d) -> CustomRecipeSprites.draw(ctx,
+                addLegacyRenderable((ctx, mx, my, d) -> CustomRecipeSprites.drawToggle(ctx,
                         known ? CustomRecipeSprites.KNOWN_BY_DEFAULT : CustomRecipeSprites.NOT_KNOWN_BY_DEFAULT,
-                        knownX, detailActionY(), 20, 20));
+                        knownX, detailActionY(), 20, 20,
+                        mx >= knownX && mx < knownX + 20
+                                && my >= detailActionY() && my < detailActionY() + 20));
                 String conflict = firstEnabledConflict(e);
                 if (conflict != null) {
                     MultiLineTextWidget warning = new MultiLineTextWidget(PAD + 4, detailMessageY(),
