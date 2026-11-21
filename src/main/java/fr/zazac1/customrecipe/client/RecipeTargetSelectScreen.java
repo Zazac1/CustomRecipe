@@ -210,6 +210,7 @@ final class RecipeTargetSelectScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        context.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
         // Since 1.21.11 Screen#render owns the blurred background. Calling
         // renderBackground here as well crashes when a world is loaded.
         super.render(context, mouseX, mouseY, delta);
