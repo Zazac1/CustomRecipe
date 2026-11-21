@@ -47,6 +47,7 @@ public class ClientInit implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        registerVisualValidationIfRequested();
         // Used only by the clickable local-world tip; it never reaches a server.
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
                 literal("customrecipe_solo")
@@ -153,6 +154,21 @@ public class ClientInit implements ClientModInitializer {
                 screen.applyDetails(details);
             }
         });
+    }
+
+    /**
+     * Loads the screenshot runner only from the validation-only source set.
+     * Normal builds contain neither the class nor a hard reference to it.
+     */
+    private static void registerVisualValidationIfRequested() {
+        if (!Boolean.getBoolean("customrecipe.visualValidation")) return;
+        try {
+            Class.forName("fr.zazac1.customrecipe.client.VisualValidationRunner")
+                    .getMethod("register")
+                    .invoke(null);
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Unable to start Custom Recipe visual validation", error);
+        }
     }
 
     private record SaveResult(boolean saved, String code, String message) {}

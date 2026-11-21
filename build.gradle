@@ -3,6 +3,8 @@ plugins {
     id 'maven-publish'
 }
 
+if (project.hasProperty('clientStartupValidation')) { sourceSets.main.java.srcDir '../validation/client-smoke/src/main/java' }
+if (project.hasProperty('recipeSyncValidation')) { sourceSets.main.java.srcDir '../validation/recipe-sync/mojang/src/main/java' }
 version = project.mod_version
 group = project.maven_group
 
@@ -31,7 +33,7 @@ loom {
 
     runs {
         client {
-            runDir = "run-client"
+            runDir = providers.gradleProperty("client_run_dir").getOrElse("run-client")
             // Match the stable memory/stack settings used by the working
             // Modrinth 26.3 profile. This affects the dev client only.
             vmArgs "-Xmx4096M", "-XX:StackShadowPages=32"
@@ -43,10 +45,24 @@ loom {
             runDir = "run-client-clean"
             vmArgs "-Xmx4096M", "-XX:StackShadowPages=32"
         }
+        // Deterministic client-side visual validation. The runner source is
+        // included only when -PvisualValidation is present, so it can never be
+        // shipped in a normal release JAR.
+        visualValidationClient {
+            client()
+            runDir = "../validation/runtime/Fabric_26.3-client"
+            vmArgs "-Xmx4096M", "-XX:StackShadowPages=32",
+                    "-Dcustomrecipe.visualValidation=true"
+            programArgs "--width", "1920", "--height", "1080"
+        }
         server {
-            runDir = "run-server"
+            runDir = providers.gradleProperty("server_run_dir").getOrElse("run-server")
         }
     }
+}
+
+if (project.hasProperty("visualValidation")) {
+    sourceSets.main.java.srcDir "validation/src/client/java"
 }
 
 // Gradle and compilation stay on the project JDK.  Only the local Fabric client
@@ -56,7 +72,7 @@ def modrinthAppData = System.getenv("APPDATA")
 if (modrinthAppData != null) {
     def modrinthClientJava = file("${modrinthAppData}/ModrinthApp/meta/java_versions/zulu25.36.205-ca-jre25.0.4.1-win_x64/bin/java.exe")
     if (modrinthClientJava.isFile()) {
-        ["runClient", "runClientClean"].each { taskName ->
+        ["runClient", "runClientClean", "runVisualValidationClient"].each { taskName ->
             tasks.named(taskName, JavaExec).configure {
                 executable = modrinthClientJava.absolutePath
             }
@@ -68,7 +84,7 @@ dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-    implementation "com.terraformersmc:modmenu:${project.modmenu_version}"
+    compileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
 }
 
 processResources {
@@ -87,7 +103,24 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(25)
 }
 
+tasks.register("testDatapackExport", JavaExec) {
+    group = "verification"
+    description = "Generates and validates representative Custom Recipe datapack exports."
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "fr.zazac1.customrecipe.client.DatapackExporterSmoke"
+}
+
+tasks.named("test") {
+    failOnNoDiscoveredTests = false
+}
+
+tasks.named("check") {
+    dependsOn tasks.named("testDatapackExport")
+}
+
 jar {
+    exclude 'fr/zazac1/customrecipe/validation/**'
     from('LICENSE') {
         rename { "${it}_${project.mod_id}" }
     }

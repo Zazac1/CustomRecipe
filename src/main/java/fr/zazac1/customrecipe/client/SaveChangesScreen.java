@@ -37,7 +37,9 @@ final class SaveChangesScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         // Keep the editor visible: this screen behaves as a modal confirmation, not a new menu.
-        returnTo.extractRenderState(context, mouseX, mouseY, delta);
+        // Render it with an off-screen pointer so widgets behind the modal cannot
+        // retain or acquire a hover highlight while interaction is blocked.
+        returnTo.extractRenderState(context, -10_000, -10_000, delta);
         // Start a new GUI layer so item models from the editor cannot bleed
         // through the modal panel, its buttons, or its text.
         context.nextStratum();
