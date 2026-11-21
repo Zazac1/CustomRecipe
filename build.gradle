@@ -4,6 +4,7 @@ plugins {
     id 'maven-publish'
 }
 
+if (project.hasProperty('clientStartupValidation')) { sourceSets.main.java.srcDir '../validation/client-smoke/src/main/java' }
 version = project.mod_version
 group = project.maven_group
 base { archivesName = project.mod_id }
@@ -20,8 +21,10 @@ runs {
     configureEach {
         systemProperty 'forge.logging.markers', 'REGISTRIES'
         systemProperty 'forge.logging.console.level', 'info'
-        workingDirectory project.layout.projectDirectory
-                .dir(project.hasProperty('basicValidation') ? 'validation/runtime' : 'run').dir(name)
+        workingDirectory project.layout.projectDirectory.dir(
+                project.hasProperty('clientStartupValidation') && name == 'client'
+                        ? 'validation/runtime/client-startup'
+                        : "${project.hasProperty('basicValidation') ? 'validation/runtime' : 'run'}/${name}")
         modSource project.sourceSets.main
     }
     client { }

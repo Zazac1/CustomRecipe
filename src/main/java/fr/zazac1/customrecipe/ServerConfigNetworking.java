@@ -12,7 +12,6 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -161,7 +160,7 @@ public final class ServerConfigNetworking {
             validateProposedConfig(player.level().getServer(), config);
             String json = ConfigLoader.toJson(config);
             if (json.length() <= MAX_JSON_CHARS) {
-                PacketDistributor.sendToPlayer(player, new ValidatedServerConfigPayload(json));
+                ModNetworking.send(player, new ValidatedServerConfigPayload(json));
             }
     }
 
@@ -175,7 +174,7 @@ public final class ServerConfigNetworking {
             VanillaRecipePage page = findVanillaRecipes(player.level().getServer(), query);
             String json = GSON.toJson(page);
             if (json.length() <= MAX_JSON_CHARS) {
-                PacketDistributor.sendToPlayer(player, new VanillaRecipePagePayload(json));
+                ModNetworking.send(player, new VanillaRecipePagePayload(json));
             }
     }
 
@@ -185,7 +184,7 @@ public final class ServerConfigNetworking {
             VanillaRecipeDetails details = findVanillaRecipeDetails(player.level().getServer(), payload.recipeId());
             String json = GSON.toJson(details);
             if (json.length() <= MAX_JSON_CHARS) {
-                PacketDistributor.sendToPlayer(player, new VanillaRecipeDetailsPayload(json));
+                ModNetworking.send(player, new VanillaRecipeDetailsPayload(json));
             }
     }
 
@@ -352,7 +351,7 @@ public final class ServerConfigNetworking {
             player.sendSystemMessage(Component.translatable("customrecipe.chat.server_send_too_large"));
             return;
         }
-        PacketDistributor.sendToPlayer(player, new ServerConfigPayload(json));
+        ModNetworking.send(player, new ServerConfigPayload(json));
     }
 
     private static VanillaRecipePage findVanillaRecipes(net.minecraft.server.MinecraftServer server, RecipeQuery request) {
@@ -525,7 +524,7 @@ public final class ServerConfigNetworking {
     }
 
     private static void sendSaveResult(ServerPlayer player, boolean saved, String code, String message) {
-        PacketDistributor.sendToPlayer(player, new ServerConfigSaveResultPayload(
+        ModNetworking.send(player, new ServerConfigSaveResultPayload(
                 GSON.toJson(new SaveResult(saved, code, message))));
     }
 
