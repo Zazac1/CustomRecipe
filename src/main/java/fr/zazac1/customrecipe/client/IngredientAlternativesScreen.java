@@ -208,6 +208,7 @@ final class IngredientAlternativesScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        context.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
         context.fill(0, 0, width, height, 0xFF080C12);
         context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 12, 0xFFFFFF);
         Text primaryLabel = Text.translatable("customrecipe.alternatives.primary",

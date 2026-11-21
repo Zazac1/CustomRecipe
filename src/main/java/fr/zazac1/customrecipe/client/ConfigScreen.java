@@ -182,7 +182,9 @@ public class ConfigScreen extends Screen {
         addDrawableChild(ButtonWidget.builder(Text.empty(), b -> save())
                 .dimensions(x, saveY, buttonWidth, buttonHeight).build());
         addHomeSaveButton(saveY, buttonWidth);
-        addDrawableChild(ButtonWidget.builder(Text.literal("Export"), b -> exportAll()).dimensions(width / 2 - 104, saveY + 32, 100, 20).build());
+        addDrawableChild(ButtonWidget.builder(Text.literal("Export"),
+                b -> client.setScreen(new ExportFormatScreen(this)))
+                .dimensions(width / 2 - 104, saveY + 32, 100, 20).build());
         addDrawableChild(ButtonWidget.builder(Text.literal("Import"), b -> importAll()).dimensions(width / 2 + 4, saveY + 32, 100, 20).build());
     }
 
@@ -287,7 +289,7 @@ public class ConfigScreen extends Screen {
         ).dimensions(cx, cy + (serverManaged ? 104 : 80), btnW, btnH).build());
     }
 
-    private void exportAll() {
+    void exportShareFile() {
         WindowsFileDialogs.saveJson(exportFileName(), path -> {
             try {
                 ConfigLoader.exportTo(currentConfig(), path);
@@ -298,9 +300,12 @@ public class ConfigScreen extends Screen {
     }
 
     private String exportFileName() {
-        String worldName = target.isWorld() ? target.displayName().replaceFirst("^Current\\s+", "") : "global-library";
-        String safeName = worldName.replaceAll("[\\\\/:*?\"<>|]", "_").trim().replaceAll("\\s+", "_");
-        return "customrecipe-backup-" + (safeName.isBlank() ? "world" : safeName) + ".json";
+        String targetName = target.isWorld()
+                ? target.displayName().replaceFirst("^Current\\s+", "")
+                : "Global Library";
+        String safeName = targetName.replaceAll("[\\\\/:*?\"<>|]", "-").trim()
+                .replaceAll("\\s+", "-").replaceAll("-+", "-");
+        return (safeName.trim().isEmpty() ? "World" : safeName) + "-custom-recipes.json";
     }
 
     private void importAll() {
@@ -718,7 +723,7 @@ public class ConfigScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        renderBackground(ctx, mouseX, mouseY, delta);
+        ctx.fillGradient(0, 0, width, height, 0xC0101010, 0xD0101010);
         super.render(ctx, mouseX, mouseY, delta);
     }
 
