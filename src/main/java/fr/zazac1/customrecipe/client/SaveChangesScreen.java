@@ -43,7 +43,7 @@ final class SaveChangesScreen extends Screen {
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         // Keep the editor visible: this screen behaves as a modal confirmation, not a new menu.
-        returnTo.render(context, mouseX, mouseY, delta);
+        returnTo.render(context, -10_000, -10_000, delta);
         // Parent screens use deferred drawables for their labels. Put every modal layer
         // above that batch so a home-screen caption cannot bleed through the panel.
         context.pose().pushPose();

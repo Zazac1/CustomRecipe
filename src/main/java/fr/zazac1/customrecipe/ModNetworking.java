@@ -16,7 +16,7 @@ public final class ModNetworking {
 
     public static void initialize(IEventBus modBus) { modBus.addListener(ModNetworking::register); }
     private static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("1");
+        var registrar = event.registrar("1").optional();
         registrar.playToServer(C2SPayload.TYPE, C2SPayload.STREAM_CODEC, ModNetworking::handleServer);
         registrar.playToClient(S2CPayload.TYPE, S2CPayload.STREAM_CODEC, fr.zazac1.customrecipe.client.ClientNetworking::handle);
     }
