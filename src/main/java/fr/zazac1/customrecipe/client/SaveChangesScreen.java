@@ -43,7 +43,7 @@ final class SaveChangesScreen extends Screen {
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         // Keep the editor visible: this screen behaves as a modal confirmation, not a new menu.
-        returnTo.render(context, mouseX, mouseY, delta);
+        returnTo.render(context, -10_000, -10_000, delta);
 
         int panelWidth = 250;
         int panelHeight = 92;
