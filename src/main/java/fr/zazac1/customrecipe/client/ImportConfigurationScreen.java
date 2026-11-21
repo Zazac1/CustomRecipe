@@ -38,7 +38,9 @@ final class ImportConfigurationScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        returnTo.render(context, mouseX, mouseY, delta);
+        returnTo.render(context, -10_000, -10_000, delta);
+        context.getMatrices().push();
+        context.getMatrices().translate(0.0F, 0.0F, 400.0F);
         context.fill(0, 0, width, height, 0x98000000);
         int panelWidth = 340;
         int panelHeight = 136;
@@ -51,6 +53,7 @@ final class ImportConfigurationScreen extends Screen {
         context.drawCenteredTextWithShadow(textRenderer, "Custom recipes: " + recipeCount, width / 2, panelY + 38, 0xFFE0E6E3);
         context.drawCenteredTextWithShadow(textRenderer, "Vanilla settings: " + vanillaCount, width / 2, panelY + 54, 0xFFE0E6E3);
         context.drawCenteredTextWithShadow(textRenderer, "Save will apply the import.", width / 2, panelY + 78, 0xFFB8C7C1);
+        context.getMatrices().pop();
     }
 
     private static void border(DrawContext context, int x, int y, int width, int height) {

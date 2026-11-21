@@ -4,6 +4,7 @@ import fr.zazac1.customrecipe.CustomRecipeMod;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.resource.language.I18n;
 import org.lwjgl.PointerBuffer;
+import org.lwjgl.glfw.GLFW;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.util.tinyfd.TinyFileDialogs;
 
@@ -14,27 +15,38 @@ import java.util.function.Consumer;
 /** Opens the operating system's native file chooser through Minecraft's bundled LWJGL runtime. */
 final class WindowsFileDialogs {
     private static final String JSON_PATTERN = "*.json";
+    private static final String ZIP_PATTERN = "*.zip";
 
     static void openJson(Consumer<Path> selected, Consumer<String> failed) {
-        run(I18n.translate("customrecipe.file_dialog.open_title"), initialDirectory(), false, selected, failed);
+        run(I18n.translate("customrecipe.file_dialog.open_title"), initialDirectory(), false,
+                JSON_PATTERN, I18n.translate("customrecipe.file_dialog.filter"), selected, failed);
     }
 
     static void saveJson(String filename, Consumer<Path> selected, Consumer<String> failed) {
-        run(I18n.translate("customrecipe.file_dialog.save_title"), Path.of(initialDirectory(), filename).toString(), true, selected, failed);
+        run(I18n.translate("customrecipe.file_dialog.save_title"), Path.of(initialDirectory(), filename).toString(), true,
+                JSON_PATTERN, I18n.translate("customrecipe.file_dialog.filter"), selected, failed);
     }
 
-    private static void run(String title, String defaultPath, boolean save, Consumer<Path> selected, Consumer<String> failed) {
-        String filterDescription = I18n.translate("customrecipe.file_dialog.filter");
+    static void saveZip(String filename, Consumer<Path> selected, Consumer<String> failed) {
+        run(I18n.translate("customrecipe.file_dialog.save_title"), Path.of(initialDirectory(), filename).toString(), true,
+                ZIP_PATTERN, I18n.translate("customrecipe.file_dialog.datapack_filter"), selected, failed);
+    }
+
+    private static void run(String title, String defaultPath, boolean save, String pattern,
+                            String filterDescription, Consumer<Path> selected, Consumer<String> failed) {
         Thread dialogThread = new Thread(() -> {
             try (MemoryStack stack = MemoryStack.stackPush()) {
-                PointerBuffer filters = stack.pointers(stack.UTF8(JSON_PATTERN));
+                PointerBuffer filters = stack.pointers(stack.UTF8(pattern));
                 String result = save
                         ? TinyFileDialogs.tinyfd_saveFileDialog(title, defaultPath, filters, filterDescription)
                         : TinyFileDialogs.tinyfd_openFileDialog(title, defaultPath, filters, filterDescription, false);
                 if (result == null || result.isBlank()) return; // The player cancelled the dialog.
 
                 Path path = Path.of(result);
-                MinecraftClient.getInstance().execute(() -> selected.accept(path));
+                MinecraftClient.getInstance().execute(() -> {
+                    restoreMinecraftFocus();
+                    selected.accept(path);
+                });
             } catch (Throwable error) {
                 CustomRecipeMod.LOGGER.error("[Custom Recipe] Native file chooser failed.", error);
                 MinecraftClient.getInstance().execute(() ->
@@ -43,6 +55,17 @@ final class WindowsFileDialogs {
         }, "CustomRecipe-NativeFileDialog");
         dialogThread.setDaemon(true);
         dialogThread.start();
+    }
+
+    private static void restoreMinecraftFocus() {
+        try {
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client != null && client.getWindow() != null) {
+                GLFW.glfwShowWindow(client.getWindow().getHandle());
+                GLFW.glfwFocusWindow(client.getWindow().getHandle());
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private static String initialDirectory() {

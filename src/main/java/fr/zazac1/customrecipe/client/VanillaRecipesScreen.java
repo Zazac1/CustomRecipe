@@ -529,7 +529,7 @@ public class VanillaRecipesScreen extends Screen {
 
     private String firstLocalIngredientId(JsonElement element) {
         List<String> choices = localIngredientChoices(element);
-        return choices.isEmpty() ? "" : choices.getFirst();
+        return choices.isEmpty() ? "" : choices.get(0);
     }
 
     private void collectIngredientIds(JsonElement element, List<String> ingredients) {
@@ -644,7 +644,7 @@ public class VanillaRecipesScreen extends Screen {
             List<fr.zazac1.customrecipe.VanillaRecipeDetails.VariantPreview> previews = new ArrayList<>();
             for (String material : variants.stream().limit(48).toList()) {
                 List<String> slots = new ArrayList<>(9);
-                for (List<String> choice : choices) slots.add(choice.contains(material) ? material : (choice.isEmpty() ? "" : choice.getFirst()));
+                for (List<String> choice : choices) slots.add(choice.contains(material) ? material : (choice.isEmpty() ? "" : choice.get(0)));
                 previews.add(new fr.zazac1.customrecipe.VanillaRecipeDetails.VariantPreview(material, slots));
             }
             return new fr.zazac1.customrecipe.VanillaRecipeDetails(recipeId, previews);

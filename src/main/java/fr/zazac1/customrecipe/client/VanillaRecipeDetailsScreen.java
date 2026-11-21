@@ -59,7 +59,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
                 button.setTooltip(Tooltip.of(Text.literal(itemName(variant.materialId()))));
             }
             if (!details.variants().isEmpty()) {
-                String material = selectedVariant == null ? details.variants().getFirst().materialId() : selectedVariant.materialId();
+                String material = selectedVariant == null ? details.variants().get(0).materialId() : selectedVariant.materialId();
                 boolean blocked = parent.isVariantDisabled(recipe.id(), material);
                 int actionsY = variantActionsY();
                 addDrawableChild(ButtonWidget.builder(blocked ? Text.translatable("customrecipe.details.variant_disabled").setStyle(net.minecraft.text.Style.EMPTY.withColor(0xFF5555))
@@ -82,7 +82,7 @@ public final class VanillaRecipeDetailsScreen extends Screen {
     void applyDetails(VanillaRecipeDetails details) {
         if (!recipe.id().equals(details.recipeId())) return;
         this.details = details;
-        if (!details.variants().isEmpty() && selectedVariant == null) selectedVariant = details.variants().getFirst();
+        if (!details.variants().isEmpty() && selectedVariant == null) selectedVariant = details.variants().get(0);
         clearAndInit();
     }
 

@@ -66,7 +66,9 @@ final class RenameCustomItemScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        parent.render(context, mouseX, mouseY, delta);
+        parent.render(context, -10_000, -10_000, delta);
+        context.getMatrices().push();
+        context.getMatrices().translate(0.0F, 0.0F, 400.0F);
         context.fill(0, 0, width, height, 0x98000000);
 
         int panelWidth = Math.min(360, width - 32);
@@ -83,6 +85,7 @@ final class RenameCustomItemScreen extends Screen {
         if (!idField.getText().isBlank() && !parent.canUseId(entry, idField.getText())) {
             context.drawCenteredTextWithShadow(textRenderer, Text.translatable("customrecipe.custom_items.id_invalid"), width / 2, panelY + 101, 0xFFFF7777);
         }
+        context.getMatrices().pop();
     }
 
     private void drawBorder(DrawContext context, int x, int y, int width, int height, int color) {

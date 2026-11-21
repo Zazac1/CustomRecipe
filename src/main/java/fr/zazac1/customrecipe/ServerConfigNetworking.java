@@ -128,7 +128,8 @@ public final class ServerConfigNetworking {
                 }
                 RecipeConflictChecker.validate(server, config);
                 String checkedJson = ConfigLoader.toJson(config);
-                if (checkedJson.length() <= MAX_JSON_CHARS) {
+                if (checkedJson.length() <= MAX_JSON_CHARS
+                        && ServerPlayNetworking.canSend(player, ValidatedServerConfigPayload.ID)) {
                     ServerPlayNetworking.send(player, ValidatedServerConfigPayload.ID,
                             PacketByteBufs.create().writeString(checkedJson, MAX_JSON_CHARS));
                 }
@@ -140,7 +141,8 @@ public final class ServerConfigNetworking {
             server.execute(() -> {
                 if (!player.getCommandSource().hasPermissionLevel(2) || query == null) return;
                 String json = GSON.toJson(findVanillaRecipes(server, query));
-                if (json.length() <= MAX_JSON_CHARS) {
+                if (json.length() <= MAX_JSON_CHARS
+                        && ServerPlayNetworking.canSend(player, VanillaRecipePagePayload.ID)) {
                     ServerPlayNetworking.send(player, VanillaRecipePagePayload.ID, PacketByteBufs.create().writeString(json));
                 }
             });
@@ -151,7 +153,8 @@ public final class ServerConfigNetworking {
             server.execute(() -> {
                 if (!player.getCommandSource().hasPermissionLevel(2)) return;
                 String json = GSON.toJson(findVanillaRecipeDetails(server, id));
-                if (json.length() <= MAX_JSON_CHARS) {
+                if (json.length() <= MAX_JSON_CHARS
+                        && ServerPlayNetworking.canSend(player, VanillaRecipeDetailsPayload.ID)) {
                     ServerPlayNetworking.send(player, VanillaRecipeDetailsPayload.ID, PacketByteBufs.create().writeString(json));
                 }
             });
@@ -285,8 +288,10 @@ public final class ServerConfigNetworking {
             player.sendMessage(Text.translatable("customrecipe.chat.server_send_too_large"), false);
             return;
         }
-        ServerPlayNetworking.send(player, ServerConfigPayload.ID,
-                PacketByteBufs.create().writeString(json, MAX_JSON_CHARS));
+        if (ServerPlayNetworking.canSend(player, ServerConfigPayload.ID)) {
+            ServerPlayNetworking.send(player, ServerConfigPayload.ID,
+                    PacketByteBufs.create().writeString(json, MAX_JSON_CHARS));
+        }
     }
 
     private static void sendSaveResult(ServerPlayerEntity player, boolean saved, String reason) {
@@ -400,7 +405,7 @@ public final class ServerConfigNetworking {
         List<VanillaRecipeDetails.VariantPreview> previews = new ArrayList<>();
         for (String material : variants.stream().limit(48).toList()) {
             List<String> slots = new ArrayList<>(9);
-            for (List<String> choice : choices) slots.add(choice.contains(material) ? material : (choice.isEmpty() ? "" : choice.getFirst()));
+            for (List<String> choice : choices) slots.add(choice.contains(material) ? material : (choice.isEmpty() ? "" : choice.get(0)));
             previews.add(new VanillaRecipeDetails.VariantPreview(material, slots));
         }
         return new VanillaRecipeDetails(rawId, previews);

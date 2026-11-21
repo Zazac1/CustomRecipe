@@ -32,6 +32,8 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
         this.customStacks = Map.copyOf(customStacks);
     }
 
+    public CraftingRecipe delegate() { return delegate; }
+
     @Override public boolean matches(RecipeInputInventory input, World world) {
         int[] required = requiredCounts(input);
         return required.length > 0 && required.length == input.size();
@@ -91,7 +93,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
     private int[] requiredShapedCounts(RecipeInputInventory input, boolean enforceAmounts) {
         List<String> rows = shrinkPattern(definition.pattern);
         if (rows.isEmpty()) return new int[0];
-        int patternWidth = rows.getFirst().length();
+        int patternWidth = rows.get(0).length();
         int patternHeight = rows.size();
         if (patternWidth > input.getWidth() || patternHeight > input.getHeight()) return new int[0];
         for (int offsetY = 0; offsetY <= input.getHeight() - patternHeight; offsetY++) {
@@ -107,7 +109,7 @@ public final class CustomItemCraftingRecipe implements CraftingRecipe, CountedCr
 
     private int[] requiredRowCounts(RecipeInputInventory input, List<String> rows, int offsetX, int offsetY,
                                     boolean mirrored, boolean enforceAmounts) {
-        int patternWidth = rows.getFirst().length();
+        int patternWidth = rows.get(0).length();
         int[] required = new int[input.size()];
         Map<String, Set<String>> distinctItems = new HashMap<>();
         for (int y = 0; y < input.getHeight(); y++) for (int x = 0; x < input.getWidth(); x++) {
