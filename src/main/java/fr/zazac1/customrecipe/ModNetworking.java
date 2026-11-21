@@ -1,13 +1,16 @@
 package fr.zazac1.customrecipe;
 
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 /** Directed play channels, handled on the game thread by NeoForge. */
 public final class ModNetworking {
     public static void initialize(IEventBus modBus) { modBus.addListener(ModNetworking::register); }
     private static void register(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("1");
+        var registrar = event.registrar("1").optional();
         registrar.playToServer(SaveServerConfigPayload.ID, SaveServerConfigPayload.CODEC, ServerConfigNetworking::handleSave);
         registrar.playToServer(ValidateServerConfigPayload.ID, ValidateServerConfigPayload.CODEC, ServerConfigNetworking::handleValidate);
         registrar.playToServer(VanillaRecipeQueryPayload.ID, VanillaRecipeQueryPayload.CODEC, ServerConfigNetworking::handleVanillaQuery);
@@ -17,6 +20,11 @@ public final class ModNetworking {
         registrar.playToClient(ServerConfigSaveResultPayload.ID, ServerConfigSaveResultPayload.CODEC, (payload, context) -> fr.zazac1.customrecipe.client.ClientInit.receiveSaveResult(payload));
         registrar.playToClient(VanillaRecipePagePayload.ID, VanillaRecipePagePayload.CODEC, (payload, context) -> fr.zazac1.customrecipe.client.ClientInit.receiveVanillaRecipePage(payload));
         registrar.playToClient(VanillaRecipeDetailsPayload.ID, VanillaRecipeDetailsPayload.CODEC, (payload, context) -> fr.zazac1.customrecipe.client.ClientInit.receiveVanillaRecipeDetails(payload));
+    }
+    public static void send(ServerPlayer player, CustomPacketPayload payload) {
+        if (player != null && player.connection.hasChannel(payload.type())) {
+            PacketDistributor.sendToPlayer(player, payload);
+        }
     }
     private ModNetworking() {}
 }

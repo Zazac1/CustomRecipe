@@ -19,6 +19,17 @@ public final class CustomRecipeMod {
         WorldRecipeAssignments.initialize();
         ServerConfigNetworking.initialize();
         if (FMLEnvironment.getDist() == Dist.CLIENT) fr.zazac1.customrecipe.client.ClientInit.initialize(modBus, container);
+        installClientStartupValidationIfRequested();
         LOGGER.info("[CustomRecipe] NeoForge 26.1.2 initialized.");
+    }
+
+    private static void installClientStartupValidationIfRequested() {
+        if (!Boolean.getBoolean("customrecipe.clientStartupValidation")) return;
+        try {
+            Class.forName("fr.zazac1.customrecipe.validation.MenuSmokeValidation")
+                    .getMethod("install").invoke(null);
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Could not initialize the client menu smoke test", error);
+        }
     }
 }
